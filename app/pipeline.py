@@ -306,9 +306,14 @@ def _maintenance() -> None:
 
 def _recover() -> None:
     """After a restart, re-queue unfinished work. Publishing resumes with the platforms not yet done."""
+    lead = timedelta(minutes=settings.render_lead_minutes)
     for job in sorted(store.list_jobs(200), key=lambda j: j.get("created_at", "")):
         if job["status"] in ("queued", "rendering"):
-            _queue.put(("render", job["id"]))
+            if job.get("publish_at") and datetime.fromisoformat(job["publish_at"]) - lead > now():
+                job["status"] = "booked"  # not due yet: the scheduler renders it nearer its slot
+                store.save_job(job)
+            else:
+                _queue.put(("render", job["id"]))
         elif job["status"] == "publishing":
             _queue.put(("publish", job["id"]))
 
