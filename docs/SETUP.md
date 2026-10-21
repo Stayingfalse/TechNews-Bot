@@ -142,9 +142,9 @@ curl -X POST "APP_URL/jobs?force=true" -H "Authorization: Bearer $API_TOKEN" \
 1. In the Claude Code cloud environment's settings (environment menu in the session's title
    bar → Edit), add `SHORTS_API_TOKEN` = the `API_TOKEN` value (or a network secret for the app's
    host that sends `Authorization: Bearer …`). Make sure the network policy allows the app's host.
-2. Once this version is deployed, change the existing Routine ("TechNews-Bot daily story") to
-   the prompt in [ROUTINE_PROMPT.md](ROUTINE_PROMPT.md), weekly on **Monday 19:05
-   Europe/London** (cron `CRON_TZ=Europe/London 5 19 * * 1`), fresh session each run. Don't
-   switch it before deploying: the old app has no `/schedule`.
+2. The Routine "Weekly quiz batch (TechNews-Bot)" runs the prompt in
+   [ROUTINE_PROMPT.md](ROUTINE_PROMPT.md) weekly on **Monday 19:05 Europe/London** (cron
+   `CRON_TZ=Europe/London 5 19 * * 1`), fresh session each run. If the old app is still deployed
+   it stops and reports that instead of submitting anything.
 3. First week: deploy on any day and fire the Routine once by hand; it fills the next 7 days,
    then each Monday run fills whatever is free from Tuesday to the following Monday.

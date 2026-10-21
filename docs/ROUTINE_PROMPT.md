@@ -1,7 +1,7 @@
 # Weekly quiz routine
 
-A Claude Code Routine runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud
-session. It writes the next 7 days of quizzes in one go and books them on the server; the server
+The Claude Code Routine "Weekly quiz batch (TechNews-Bot)" (`trig_01AXXtZJkcAtdC4iAk7T2cYm`)
+runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud session. It writes the next 7 days of quizzes in one go and books them on the server; the server
 renders them straight away (previews land in Discord) and posts one each day at `POST_TIME`
 (12:00) on its own. Claude is only involved once a week. Keep this file and the trigger in sync.
 
@@ -12,6 +12,7 @@ You write next week's daily quiz shorts for TikTok, YouTube Shorts and Instagram
 App: APP_URL = https://mcwales-techshorts.apysn4.easypanel.host
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header (a network secret may add it); if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment".
 Use curl from Bash for the app. Write the spec to a file and POST it with `-d @file`.
+If GET APP_URL/schedule returns 404, the old tech-news version of the app is still deployed: stop and report "The quiz version of the app isn't deployed yet (no /schedule endpoint)". Don't submit anything else.
 
 1. Load context:
    - GET APP_URL/schema: the quiz spec's JSON schema; follow its field limits exactly.
