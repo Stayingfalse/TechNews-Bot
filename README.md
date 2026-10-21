@@ -7,16 +7,18 @@ TikTok, YouTube Shorts and Instagram Reels with no manual steps.
 ```
 Claude Code Routine (Mondays 19:05)        Easypanel app (this repo)
   plan 7 themes, write 7 quizzes,    ──►  POST /schedule (7 dated quiz specs)
-  verify the facts                          │
-                                            ├─ render all 7 now → previews in Discord
+  verify the facts                          │  checked + stored (no video yet) → week summary in Discord
+                                            ├─ 45 min before each slot: render the video → preview in Discord
                                             │    intro → rounds (clue + countdown → reveal) → outro
                                             │    music: your library, or synthesised
-                                            └─ every day at POST_TIME (12:00 Europe/London):
+                                            └─ at the slot (12:00 Europe/London by default):
                                                  post to each platform in PLATFORMS
                                                  (TikTok, YouTube, Instagram) → result in Discord
+                                                 → delete the video file
 ```
 
-Claude only runs once a week; the server's own scheduler does the daily posting. Trending
+Claude only runs once a week; the server's own scheduler does the daily rendering and posting,
+and only ever keeps the next video or two on disk. Trending
 sounds can't be added through any platform's API, so the music is baked into the video: upload
 your own royalty-free tracks (`PUT /music/{name}`), or let the bot synthesise a game-show loop
 (different for every video, no licensing).

@@ -2,8 +2,8 @@
 
 The Claude Code Routine "Weekly quiz batch (TechNews-Bot)" (`trig_01AXXtZJkcAtdC4iAk7T2cYm`)
 runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud session. It writes the next 7 days of quizzes in one go and books them on the server; the server
-renders them straight away (previews land in Discord) and posts one each day at `POST_TIME`
-(12:00) on its own. Claude is only involved once a week. Keep this file and the trigger in sync.
+renders each one 45 minutes before its slot (preview in Discord), posts it at `POST_TIME`
+(12:00) and deletes the video. Claude is only involved once a week. Keep this file and the trigger in sync.
 
 ---
 
@@ -42,6 +42,6 @@ If GET APP_URL/schedule returns 404, the old tech-news version of the app is sti
 
 6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. Leave out `time` (each posts at the default time); only add `"time": "HH:MM"` if a human asked for extra posts on a day. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken date); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
 
-7. Confirm: GET APP_URL/schedule?days=7 and check every slot you sent shows `queued`, `rendering` or `scheduled` in its day's `bookings` (rendering all 7 takes 15-25 minutes; you don't need to wait for it). The server posts each one at its time and sends previews and results to Discord itself.
+7. Confirm: GET APP_URL/schedule?days=7 and check every slot you sent shows `booked` in its day's `bookings` (videos are made shortly before each post, not now). The server posts each one at its time and sends previews and results to Discord itself.
 
 8. Report in one short message: a table of date, time, theme and the answers, the sources for factual rounds, and anything that failed.

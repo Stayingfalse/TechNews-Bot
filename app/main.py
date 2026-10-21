@@ -13,10 +13,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import pipeline, store
+from . import notify, pipeline, store
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
+from .render.engine import Video
 from .spec import QuizSpec
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -191,6 +192,10 @@ def post_schedule(req: ScheduleRequest):
     replaced = {held[k]["id"] for k in keys if k in held} if req.replace else set()
     used = _used_answers(exclude_jobs=replaced)
     for n, (d, at, spec) in enumerate(plan):
+        try:  # lay out every scene now, so a quiz that can't render fails at booking, not at posting time
+            Video(spec)
+        except Exception as e:
+            errors.append(f"item {n} ({d} {at}): can't be rendered: {type(e).__name__}: {e}"[:300])
         if rep := _repeats(spec, used):
             errors.append(f"item {n} ({d} {at}): answers already used: " + "; ".join(rep))
         for a in spec.answer_keys():
@@ -204,7 +209,24 @@ def post_schedule(req: ScheduleRequest):
             pipeline.cancel(held[(d.isoformat(), at)], "replaced")
         job = pipeline.submit(spec, slot=d, at=at)
         out.append({"date": d.isoformat(), "time": at, "publish_at": job["publish_at"], "job_id": job["id"]})
+    _notify_booked(plan)
     return {"scheduled": out}
+
+
+def _notify_booked(plan) -> None:
+    lines = [f"**Booked {len(plan)} quiz{'zes' if len(plan) != 1 else ''}.** Each video is made "
+             f"{settings.render_lead_minutes} min before it posts, with a preview here then."]
+    for d, at, spec in sorted(plan, key=lambda p: (p[0], p[1])):
+        answers = "; ".join(r.answer_text() for r in spec.rounds)
+        lines.append(f"`{d:%a %d %b} {at}` **{spec.theme or 'General mix'}**: {spec.title.replace('*', '')}\n> {answers}")
+    lines.append("To pull one: `DELETE /schedule/YYYY-MM-DD?time=HH:MM`")
+    chunk = ""
+    for line in lines:  # Discord caps a message at 2000 characters
+        if chunk and len(chunk) + len(line) > 1900:
+            notify.send(chunk)
+            chunk = ""
+        chunk += line[:1900] + "\n"
+    notify.send(chunk)
 
 
 @app.delete("/schedule/{day}", dependencies=[Depends(require_token)])

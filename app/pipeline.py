@@ -1,8 +1,10 @@
-"""Render → (wait for the slot) → publish → notify.
+"""Book → render shortly before the slot → publish → delete the video.
 
-One worker thread runs renders and publishes in order. A scheduler thread hands each scheduled
-job to the worker when its slot arrives. Job state lives in jobs.json, so a restart picks up
-where it left off.
+Booked quizzes are stored as specs only. A scheduler thread queues each one's render
+RENDER_LEAD_MINUTES before its slot and its publish when the slot arrives; one worker thread runs
+renders and publishes in order. Once every platform has the post, the video file is deleted, so
+the disk only ever holds the next video or two. Job state lives in jobs.json, so a restart picks
+up where it left off.
 """
 from __future__ import annotations
 
@@ -23,7 +25,9 @@ from .spec import QuizSpec
 log = logging.getLogger(__name__)
 _queue: "queue.Queue[tuple[str, str]]" = queue.Queue()  # (action, job_id); action: render | publish
 
-ACTIVE = ("queued", "rendering", "scheduled", "publishing")  # still going to post
+# booked: spec stored, not rendered yet; queued/rendering: render in progress;
+# scheduled: rendered, waiting for its slot; publishing: going out now
+ACTIVE = ("booked", "queued", "rendering", "scheduled", "publishing")  # still going to post
 MISSED_AFTER = timedelta(hours=6)  # a slot more than this late (e.g. server was down) is skipped
 
 
@@ -55,7 +59,7 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: 
         "id": f"{spec.id}-{secrets.token_hex(3)}",
         "spec": spec.model_dump(),
         "dry_run": dry_run,
-        "status": "queued",
+        "status": "booked" if slot else "queued",
         "created_at": store.now_iso(),
         "slot": slot.isoformat() if slot else None,
         "slot_time": (at or settings.post_time) if slot else None,
@@ -63,7 +67,8 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: 
         "results": {},
     }
     store.save_job(job)
-    _queue.put(("render", job["id"]))
+    if not slot:  # booked jobs are rendered by the scheduler shortly before their slot
+        _queue.put(("render", job["id"]))
     return job
 
 
@@ -93,6 +98,10 @@ def _render(job: dict) -> None:
     job["status"] = "rendering"
     store.save_job(job)
     info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir)
+    if (store.get_job(job["id"]) or {}).get("status") == "cancelled":  # cancelled while rendering
+        video.unlink(missing_ok=True)
+        cover.unlink(missing_ok=True)
+        return
     job.update(render=info, video=video.name, video_url=media_url(video.name), cover_url=media_url(cover.name))
 
     publish_at = datetime.fromisoformat(job["publish_at"]) if job.get("publish_at") else None
@@ -148,6 +157,11 @@ def _publish(job: dict) -> None:
             "job_id": job["id"],
         })
     job.update(status="done", published_at=store.now_iso())
+    if results and all(r.get("ok") for r in results.values()):
+        # every platform has its copy; keep the file only when something needs a retry
+        video.unlink(missing_ok=True)
+        (settings.videos_dir / f"{video.stem}.jpg").unlink(missing_ok=True)
+        job["video_deleted"] = True
     store.save_job(job)
     _notify_published(job, spec, video)
 
@@ -227,10 +241,21 @@ _warned: set[str] = set()
 def tick() -> None:
     """Hand due jobs to the worker; warn about an empty day and a short runway."""
     t = now()
+    lead = timedelta(minutes=settings.render_lead_minutes)
     for job in scheduled_jobs():
+        due = datetime.fromisoformat(job["publish_at"])
+        if job["status"] == "booked" and t >= due - lead:
+            if t - due > MISSED_AFTER:
+                job.update(status="missed", error=f"server was not running at {due.isoformat()}")
+                store.save_job(job)
+                notify.error(f"skipped the {job['slot']} quiz `{job['id']}`: its slot passed while the server was down")
+            else:
+                job["status"] = "queued"
+                store.save_job(job)
+                _queue.put(("render", job["id"]))
+            continue
         if job["status"] != "scheduled":
             continue
-        due = datetime.fromisoformat(job["publish_at"])
         if due > t:
             continue
         if t - due > MISSED_AFTER:

@@ -52,7 +52,10 @@ class Settings:
         self.youtube_privacy = os.environ.get("YOUTUBE_PRIVACY", "public")
 
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
-        self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "14"))
+        # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
+        self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))
+        # Booked quizzes are rendered this long before their slot (a render takes 2-4 minutes).
+        self.render_lead_minutes = int(os.environ.get("RENDER_LEAD_MINUTES", "45"))
         # A quiz is rejected (409) if any of its answers was used within this many days.
         self.repeat_days = int(os.environ.get("REPEAT_DAYS", "365"))
         self._music_dir = os.environ.get("MUSIC_DIR", "")

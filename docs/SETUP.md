@@ -10,8 +10,9 @@ YouTube, Instagram) → switch publishing on → switch the Routine to the weekl
 - Service `mcwales/techshorts`. Source: GitHub `Stayingfalse/TechNews-Bot`, branch `main`, build: Dockerfile.
 - Port 8000, domain → `APP_URL` (HTTPS).
 - Volume: mount `/data` (videos, history, tokens, music library).
-- Resources: the weekly batch renders 7 videos back to back on Monday evening, each using up to
-  `RENDER_WORKERS` CPU cores for 1–2 minutes. Daily posting is just uploads.
+- Resources: each video is rendered 45 minutes before it posts (2–4 minutes on up to
+  `RENDER_WORKERS` CPU cores) and deleted once every platform has it, so disk use stays at one or
+  two videos (~15 MB each).
 - Keep the service running all the time: the scheduler inside it posts each day. If it's down at
   posting time it catches up when it comes back (up to 6 hours late; after that the day is
   skipped and Discord says so).
@@ -39,16 +40,18 @@ Environment variables:
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |
 | `LOUDNESS_LUFS` | default `-15`: loudness of the final mix |
 | `RENDER_WORKERS` | default `4` |
-| `KEEP_VIDEOS_DAYS` | default `14` |
+| `RENDER_LEAD_MINUTES` | default `45`: how long before its slot each video is rendered |
+| `KEEP_VIDEOS_DAYS` | default `3`: leftovers (failed posts, dry runs) are deleted after this; posted videos go straight away |
 
 Check: `curl APP_URL/health` → `{"ok":true}`, and `APP_URL/status?token=API_TOKEN` in a browser.
 
 ## 2. Discord notifications
 
 Discord channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL →
-`DISCORD_WEBHOOK_URL`. On Monday evening you get a preview of each of the week's 7 videos with
-its answers and posting time (pull one with `DELETE APP_URL/schedule/YYYY-MM-DD`); each day at
-posting time you get the results per platform. Discord also warns if a day has nothing booked
+`DISCORD_WEBHOOK_URL`. On Monday evening you get the week's line-up (times, themes, answers);
+45 minutes before each post you get its video preview (pull it with
+`DELETE APP_URL/schedule/YYYY-MM-DD?time=HH:MM`); at posting time you get the results per
+platform with links. Discord also warns if a day has nothing booked
 or fewer than two days are left in the schedule.
 
 ## 3. Music
