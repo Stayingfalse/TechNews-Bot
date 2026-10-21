@@ -136,3 +136,11 @@ def upload(video_path: Path, caption: str = "") -> dict:
     if direct:
         out["privacy"] = body["post_info"]["privacy_level"]
     return out
+
+
+def configured() -> bool:
+    return settings.tiktok_enabled
+
+
+def publish(video: Path, spec, job: dict) -> dict:
+    return upload(video, spec.full_caption())

@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 from .theme import font
 
@@ -170,11 +170,65 @@ def fit_size(text: str, weight: str, start: int, max_w: int, max_lines: int, min
     return min_size
 
 
-def glow(layer: Image.Image, radius: int = 18, strength: float = 1.0, factor: int = 4) -> Image.Image:
-    """Cheap bloom: downscale, blur, upscale."""
-    small = layer.resize((layer.width // factor, layer.height // factor), Image.BILINEAR)
-    small = small.filter(ImageFilter.GaussianBlur(radius / factor))
-    g = small.resize(layer.size, Image.BILINEAR)
-    if strength != 1.0:
-        g = with_alpha(g, min(1.0, strength))
-    return g
+# ---------------------------------------------------------------- set pieces (ink outline + hard shadow)
+
+@lru_cache(maxsize=512)
+def ink_text(text: str, style: str, size: int, color: RGB, ink: RGB, stroke: int = 0, shadow: int = 0,
+             tracking: int = 0) -> Image.Image:
+    """Sign-painted text: fill, ink outline and a hard ink drop shadow (down-right).
+
+    The sprite is padded by `shadow` on every side so its centre is the centre of the lettering."""
+    f = font(style, size)
+    ascent, descent = f.getmetrics()
+    pad = stroke + shadow + 2
+    if tracking:
+        widths = [f.getlength(ch) + tracking for ch in text]
+        w = int(math.ceil(sum(widths) - tracking))
+    else:
+        w = int(math.ceil(f.getlength(text)))
+    img = Image.new("RGBA", (max(1, w) + pad * 2, ascent + descent + pad * 2), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    def draw_at(x0, y0, fill, stroke_fill):
+        kw = {"stroke_width": stroke, "stroke_fill": stroke_fill + (255,)} if stroke else {}
+        if tracking:
+            x = x0
+            for ch, cw in zip(text, widths):
+                d.text((x, y0), ch, font=f, fill=fill + (255,), **kw)
+                x += cw
+        else:
+            d.text((x0, y0), text, font=f, fill=fill + (255,), **kw)
+
+    if shadow:
+        draw_at(pad + shadow, pad + shadow, ink, ink)
+    draw_at(pad, pad, color, ink)
+    return img
+
+
+@lru_cache(maxsize=256)
+def slab(w: int, h: int, fill: tuple, ink: RGB, radius: int = 22, border: int = 6, shadow: int = 10,
+         shadow_col: tuple | None = None) -> Image.Image:
+    """A card with an ink outline and a hard offset shadow. Padded by `shadow` on every side so the
+    sprite's centre is the card face's centre."""
+    s = shadow
+    img = Image.new("RGBA", (w + 2 * s, h + 2 * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    if s:
+        d.rounded_rectangle((2 * s, 2 * s, w + 2 * s - 1, h + 2 * s - 1), radius=radius, fill=shadow_col or ink + (255,))
+    d.rounded_rectangle((s, s, s + w - 1, s + h - 1), radius=radius, fill=fill, outline=ink + (255,), width=border)
+    return img
+
+
+@lru_cache(maxsize=128)
+def disc(r: int, fill: tuple, ink: RGB, border: int = 6, shadow: int = 9) -> Image.Image:
+    s = shadow
+    img = Image.new("RGBA", (2 * r + 2 * s, 2 * r + 2 * s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((2 * s, 2 * s, 2 * s + 2 * r - 1, 2 * s + 2 * r - 1), fill=ink + (255,))
+    d.ellipse((s, s, s + 2 * r - 1, s + 2 * r - 1), fill=fill, outline=ink + (255,), width=border)
+    return img
+
+
+def place(sprite: Image.Image, face: Image.Image, x: float, y: float) -> None:
+    """Composite `face` onto `sprite` centred (helper for labels on slabs)."""
+    sprite.alpha_composite(face, (int(x - face.width / 2), int(y - face.height / 2)))

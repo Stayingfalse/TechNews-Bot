@@ -1,4 +1,9 @@
-"""Palettes, fonts and frame geometry."""
+"""Palettes, fonts and frame geometry.
+
+Look: a Saturday-night TV quiz set. Flat stage colours with a turning sunburst, marquee bulbs,
+sign-painted headings (Bungee) with hard ink drop shadows, clue text in condensed Bricolage
+Grotesque, and paper cards with thick ink outlines. No glows or gradients.
+"""
 from __future__ import annotations
 
 import os
@@ -11,7 +16,7 @@ from PIL import ImageFont
 W, H = 1080, 1920
 FPS = 30
 
-# Areas covered by TikTok / Instagram UI (captions, buttons, tabs). Keep text inside SAFE.
+# Areas covered by TikTok / Instagram / YouTube UI (captions, buttons, tabs). Keep text inside SAFE.
 SAFE_TOP = 270
 SAFE_BOTTOM = 1450
 SAFE_LEFT = 90
@@ -19,53 +24,60 @@ SAFE_RIGHT = W - 150
 SAFE_W = SAFE_RIGHT - SAFE_LEFT
 SAFE_CX = (SAFE_LEFT + SAFE_RIGHT) // 2
 
+RGB = tuple[int, int, int]
 
-def hex_rgb(h: str) -> tuple[int, int, int]:
+
+def hex_rgb(h: str) -> RGB:
     h = h.lstrip("#")
     return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
 @dataclass(frozen=True)
 class Palette:
-    bg: tuple[int, int, int]
-    blob1: tuple[int, int, int]
-    blob2: tuple[int, int, int]
-    accent: tuple[int, int, int]
-    accent2: tuple[int, int, int]
-    text: tuple[int, int, int]
-    muted: tuple[int, int, int]
-    on_accent: tuple[int, int, int]
+    stage: RGB  # the set's base colour
+    ray: RGB  # alternate sunburst ray
+    ink: RGB  # outlines, drop shadows, text on paper
+    paper: RGB  # cards and clue text
+    sign: RGB  # headings, highlights, the correct answer
+    hot: RGB  # answer podium, ribbons
+    cool: RGB  # third colour for confetti and small details
+    bulb: RGB = (255, 226, 150)
+
+    @property
+    def muted(self) -> RGB:
+        return tuple(int(p * 0.62 + s * 0.38) for p, s in zip(self.paper, self.stage))  # type: ignore[return-value]
 
 
-def _p(bg, blob1, blob2, accent, accent2, text="#F5F7FF", muted="#9AA3B8", on_accent="#0A0A12") -> Palette:
-    return Palette(*(hex_rgb(c) for c in (bg, blob1, blob2, accent, accent2, text, muted, on_accent)))
+def _p(stage, ray, ink, paper, sign, hot, cool) -> Palette:
+    return Palette(*(hex_rgb(c) for c in (stage, ray, ink, paper, sign, hot, cool)))
 
 
 PALETTES: dict[str, Palette] = {
-    "neon_dark": _p("#06060C", "#3B1D8F", "#00566B", "#8B6CFF", "#00E5FF"),
-    "sunset": _p("#0C0608", "#7A1838", "#7A4A00", "#FF5C7A", "#FFB547"),
-    "mint": _p("#04100C", "#0A5C43", "#0B3A6B", "#2EF2A6", "#3DA9FC"),
-    "mono": _p("#080808", "#2A2A2A", "#3A1010", "#FFFFFF", "#FF3B30", muted="#8A8A8A"),
-    "electric": _p("#05070F", "#0B2A8F", "#5A0B6B", "#3D7BFF", "#FF3DCB"),
-    "candy": _p("#0E0614", "#7A1B6E", "#1B3F8F", "#FF5FD2", "#FFD23F"),
-    "arcade": _p("#060B0A", "#0F5A2E", "#6B3A00", "#7CFF4F", "#FFB000"),
+    # teal studio with marigold signs and tomato podium
+    "teatime": _p("#0D5C6B", "#12707F", "#06262C", "#FFF7E8", "#FFC22E", "#FF5A3C", "#8FE6D6"),
+    # cobalt prime-time set, bubblegum podium
+    "primetime": _p("#1C3DB8", "#2850D2", "#0A1546", "#FFF8EE", "#FFD43B", "#FF4F9A", "#7FE6FF"),
+    # tomato-red jackpot set with a teal podium
+    "jackpot": _p("#BF2F28", "#D2413A", "#370A08", "#FFF4E2", "#FFD23F", "#138F82", "#FFB4A3"),
+    # plum late-night set
+    "bingo": _p("#55287F", "#643294", "#1C0A2B", "#FFF5EA", "#FFC93C", "#FF6B4A", "#7CE6BC"),
+    # bottle-green sports-quiz set
+    "pitch": _p("#1B6638", "#227B45", "#082313", "#FFFBEA", "#FFE04A", "#FF7A3D", "#B9F0FF"),
 }
 
 _FONT_DIRS = [
     os.environ.get("FONT_DIR", ""),
     str(Path(__file__).resolve().parents[2] / "assets" / "fonts"),
-    "/usr/share/fonts/opentype/inter",
-    "/usr/share/fonts/truetype/inter",
 ]
 
-# Weight name -> (display file, text file)
-_WEIGHTS = {
-    "black": ("InterDisplay-Black", "Inter-Black"),
-    "xbold": ("InterDisplay-ExtraBold", "Inter-ExtraBold"),
-    "bold": ("InterDisplay-Bold", "Inter-Bold"),
-    "semi": ("InterDisplay-SemiBold", "Inter-SemiBold"),
-    "medium": ("InterDisplay-Medium", "Inter-Medium"),
-    "regular": ("InterDisplay-Regular", "Inter-Regular"),
+# style -> (file, variable axes (wght, wdth) or None)
+_STYLES = {
+    "sign": ("Bungee-Regular", None),  # headings, labels, answers
+    "shade": ("BungeeShade-Regular", None),  # inline-shaded sign face, big numbers
+    "cond": ("BricolageGrotesque-VF", (800, 75)),  # clue text
+    "bold": ("BricolageGrotesque-VF", (800, 100)),
+    "semi": ("BricolageGrotesque-VF", (620, 100)),
+    "medium": ("BricolageGrotesque-VF", (500, 100)),
 }
 
 
@@ -74,7 +86,7 @@ def _font_path(name: str) -> str:
     for d in _FONT_DIRS:
         if not d:
             continue
-        for ext in (".otf", ".ttf"):
+        for ext in (".ttf", ".otf"):
             p = Path(d) / f"{name}{ext}"
             if p.exists():
                 return str(p)
@@ -82,10 +94,10 @@ def _font_path(name: str) -> str:
 
 
 @lru_cache(maxsize=256)
-def font(weight: str, size: int) -> ImageFont.FreeTypeFont:
-    display, text = _WEIGHTS[weight]
-    try:
-        path = _font_path(display if size >= 48 else text)
-    except FileNotFoundError:
-        path = _font_path(text)
-    return ImageFont.truetype(path, size)
+def font(style: str, size: int) -> ImageFont.FreeTypeFont:
+    name, axes = _STYLES[style]
+    f = ImageFont.truetype(_font_path(name), size)
+    if axes:
+        # axis order in the file: optical size, weight, width
+        f.set_variation_by_axes([max(12, min(96, size)), *axes])
+    return f

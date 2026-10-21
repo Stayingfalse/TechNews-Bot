@@ -138,7 +138,7 @@ Round = Annotated[
     Field(discriminator="type"),
 ]
 
-PALETTES = ("neon_dark", "sunset", "mint", "mono", "electric", "candy", "arcade")
+PALETTES = ("teatime", "primetime", "jackpot", "bingo", "pitch")
 
 
 class QuizSpec(BaseModel):
@@ -149,7 +149,7 @@ class QuizSpec(BaseModel):
     theme: str = Field(default="", max_length=40, description="Optional theme, e.g. '90s movies', 'Disney'")
     title: str = Field(max_length=60, description="Intro hook, e.g. 'Only *real* film fans get 5/5'. One *highlighted* word.")
     subtitle: str = Field(default="", max_length=40, description="Small line under the title, e.g. 'Guess before the timer ends'")
-    palette: Literal["neon_dark", "sunset", "mint", "mono", "electric", "candy", "arcade"] = "candy"
+    palette: Literal["teatime", "primetime", "jackpot", "bingo", "pitch"] = "teatime"
     rounds: list[Round] = Field(min_length=3, max_length=5)
     outro: str = Field(default="How many did you *get*?", max_length=50)
     follow: str = Field(default="Follow for a daily quiz", max_length=32)

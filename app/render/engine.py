@@ -15,9 +15,9 @@ from ..spec import QuizSpec
 from . import music
 from .audio import write_sfx_track
 from .background import Background
-from .draw import blit, clamp, ease_in_cubic, glow, prog, rounded_rect, text_sprite
+from .draw import blit, clamp, disc, ease_in_cubic, ink_text, prog
 from .scenes import build_scenes
-from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_TOP, SAFE_W, W
+from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, W
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,9 @@ class Video:
             acc += s.duration
         self.duration = acc
         self.n_frames = int(round(acc * FPS))
-        self.brand = text_sprite(brand, "bold", 30, self.pal.text, 2) if brand else None
+        self.brand = ink_text(brand, "sign", 28, self.pal.paper, self.pal.ink, 0, 3, 1) if brand else None
+        self.lamp_on = disc(11, self.pal.sign + (255,), self.pal.ink, 4, 3)
+        self.lamp_off = disc(11, self.pal.stage + (255,), self.pal.ink, 4, 3)
 
     def sfx_events(self) -> list[tuple[float, str]]:
         ev = []
@@ -71,7 +73,6 @@ class Video:
 
         fg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         scene.render(fg, t)
-        frame.alpha_composite(glow(fg, 22, 0.6 * (1 - out_p)))
         if out_p > 0:
             blit(frame, fg, 0, -90 * out_p, anchor="lt", alpha=1 - out_p)
         else:
@@ -81,20 +82,16 @@ class Video:
         return frame
 
     def _chrome(self, frame: Image.Image, T: float) -> None:
-        # Story-style progress segments, one per round
-        rounds = range(1, len(self.scenes) - 1)
-        n = len(rounds)
-        gap = 10
-        seg_w = (SAFE_W - gap * (n - 1)) / n
-        y = SAFE_TOP - 50
-        for k, si in enumerate(rounds):
-            x = SAFE_LEFT + k * (seg_w + gap)
-            frame.alpha_composite(rounded_rect(int(seg_w), 6, 3, self.pal.text + (50,)), (int(x), y))
-            fill = clamp((T - self.starts[si]) / self.scenes[si].duration)
-            if fill > 0:
-                frame.alpha_composite(rounded_rect(max(6, int(seg_w * fill)), 6, 3, self.pal.accent + (255,)), (int(x), y))
+        # Brand top-left; one lamp per round top-right, lit once that round has started
+        y = SAFE_TOP - 70
         if self.brand:
-            blit(frame, self.brand, SAFE_LEFT, y + 30, anchor="lt", alpha=0.8)
+            blit(frame, self.brand, SAFE_LEFT - 6, y, anchor="lm")
+        rounds = range(1, len(self.scenes) - 1)
+        step = 34
+        x0 = SAFE_RIGHT - (len(rounds) - 1) * step - 10
+        for k, si in enumerate(rounds):
+            lamp = self.lamp_on if T >= self.starts[si] else self.lamp_off
+            blit(frame, lamp, x0 + k * step, y)
 
 
 # ---------------------------------------------------------------- parallel render

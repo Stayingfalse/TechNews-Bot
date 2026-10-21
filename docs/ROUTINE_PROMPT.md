@@ -1,40 +1,46 @@
-# Daily quiz routine
+# Weekly quiz routine
 
-The scheduled Claude Code Routine runs this prompt every day in a fresh cloud session
-(trigger "TechNews-Bot daily story", 07:41 Europe/London; rename it to "Daily quiz" when you switch
-it over). Keep this file and the trigger in sync.
+A Claude Code Routine runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud
+session. It writes the next 7 days of quizzes in one go and books them on the server; the server
+renders them straight away (previews land in Discord) and posts one each day at `POST_TIME`
+(12:00) on its own. Claude is only involved once a week. Keep this file and the trigger in sync.
 
 ---
 
-You write a daily quiz short for TikTok and Instagram Reels. The video is rendered by code from a JSON "quiz spec" you write: an intro, 3-5 rounds (each shows a clue with a countdown, then reveals the answer) and an outro asking viewers to comment their score. You do not make the video yourself, and you do not need any repository.
+You write next week's daily quiz shorts for TikTok, YouTube Shorts and Instagram Reels: 7 quizzes, one per day. Each video is rendered by code from a JSON "quiz spec" you write: an intro, 3-5 rounds (each shows a clue with a countdown, then reveals the answer) and an outro asking viewers to comment their score. You do not make the videos yourself, and you do not need any repository.
 
 App: APP_URL = https://mcwales-techshorts.apysn4.easypanel.host
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header (a network secret may add it); if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment".
 Use curl from Bash for the app. Write the spec to a file and POST it with `-d @file`.
 
-1. Load context: GET APP_URL/schema (the spec's JSON schema; follow its field limits exactly) and GET APP_URL/history?limit=60 (past quizzes with their theme, palette, round types and answers). Never reuse an answer from the history.
+1. Load context:
+   - GET APP_URL/schema: the quiz spec's JSON schema; follow its field limits exactly.
+   - GET APP_URL/schedule?days=7: the posting slots. `free_dates` are the days to fill (on a Monday evening: Tuesday to next Monday). Days already booked are left alone.
+   - GET APP_URL/history?limit=60: past quizzes with their theme, palette, round types and answers. Never reuse an answer from the history or from quizzes already booked.
 
-2. Pick today's theme. Rotate so consecutive days feel different, e.g. 90s movies, Disney/Pixar, sitcoms, 2000s pop songs, video games, cartoons, animals, food, world landmarks, Christmas films (in season), horror films (October), sport, famous brands, books. Use what's topical: a big film release, a holiday, an anniversary. Or leave the theme blank for a general-knowledge mix. Don't repeat the theme of either of the last two history entries.
+2. Plan the week: one theme per free date, all different and none repeating the last few history entries. Mix broad themes (e.g. 90s movies, Disney/Pixar, sitcoms, 2000s pop songs, video games, cartoons, animals, food, world landmarks, sport, famous brands, books) with what's topical in that week: a big film release, a holiday or anniversary on that date, the season (horror in October, Christmas films in December). One day a week can be a general-knowledge mix with no theme. Give weekends the easier, broader themes. Rotate the 5 palettes so neighbouring days differ.
 
-3. Write 4-5 rounds (3 is allowed for long clues). Mix the types; every quiz should have at least one `emoji` and one `bad_description` round, then add others:
+3. For each quiz write 4-5 rounds (3 is allowed for long clues). Mix the types; every quiz should have at least one `emoji` and one `bad_description` round, then add others:
    - `emoji`: 2-7 emojis that spell out a famous title. Make it solvable: literal pieces of the title or the most iconic plot elements, in order. Only use common emojis (no flags of obscure regions, no new-release emojis).
    - `bad_description`: a famous movie/show/book/song described badly: technically accurate but hilariously unhelpful, literal, or from the villain's point of view ("A man refuses to share a door and it costs him everything" = Titanic). Max 120 chars, one *highlighted* word.
    - `true_false` (shown as "Real or fake?"): a surprising statement plus a one-line explanation. About half should be fake, but fakes must be plausible.
    - `choice`: a question with 3-4 short options ("Which came out first?", "What year…?", "Who voiced…?").
    - `odd_one_out`: four items, one doesn't belong for a clear, checkable reason.
    - `unscramble`: just give the answer (4-22 letters); the renderer scrambles it. Best for short, well-known titles.
-   Order rounds from easiest to hardest, with the most fun one last. Answers must be famous enough that most viewers know them; aim for a typical score of 3/5.
+   Order rounds from easiest to hardest, with the most fun one last. Answers must be famous enough that most viewers know them; aim for a typical score of 3/5. No answer may appear twice in the week.
 
 4. Verify: every fact used in a `true_false`, `choice`, `odd_one_out` or a `note` (years, names, records) must be confirmed by at least one reputable source (two for anything surprising). If you can't confirm it, replace the round. Nothing rude, political, tragic or about private individuals.
 
-5. Write the spec (validate against the schema):
-   - id: YYYY-MM-DD-short-slug (today's date).
+5. Write each spec (validate against the schema):
+   - id: YYYY-MM-DD-short-slug (the date it posts).
    - title: a hook of max ~8 words with exactly one *highlighted* word, e.g. "Only *real* 90s kids get 5/5", "Guess the Disney film from *emojis*". subtitle: short, e.g. "Guess before the timer runs out".
    - think: 5 s by default; 6-7 s for long descriptions or statements, 4 s for easy emoji rounds. reveal: leave the default.
-   - palette: different from the last two history entries.
+   - palette: one of the schema's palettes, different from the day before.
    - music: "auto" (picks from the uploaded library, else built-in synth music).
    - caption: 1-2 short friendly lines ending with a question ("How many did you get? 👇"), no answers in the caption. 3-6 hashtags (#quiz plus theme tags).
 
-6. Submit: POST APP_URL/jobs with the spec as JSON (Content-Type: application/json). On 409 the response lists answers already used: replace those rounds and resubmit. On 422 fix the spec and resubmit. Then poll GET APP_URL/jobs/{job_id} every 20 s until status is done or failed (about 2 minutes). The app publishes and sends the video to Discord itself.
+6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken date); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
 
-7. Report in one short message: the theme, each round with its answer and (for factual rounds) the source, the music used, the publish results and the video_url. If anything failed, say exactly what.
+7. Confirm: GET APP_URL/schedule?days=7 and check every date you sent shows `queued`, `rendering` or `scheduled` (rendering all 7 takes 10-15 minutes; you don't need to wait for it). The server posts each one at its time and sends previews and results to Discord itself.
+
+8. Report in one short message: a table of date, theme and the answers, the sources for factual rounds, and anything that failed.

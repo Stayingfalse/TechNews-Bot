@@ -1,7 +1,7 @@
 # Setup
 
-Order: deploy the app with publishing off → Discord → music → TikTok → Instagram → switch
-publishing on → point the daily Routine at the quiz prompt. You can stop after any step; everything before it keeps working.
+Order: deploy the app with publishing off → Discord → music → the platforms you want (TikTok,
+YouTube, Instagram) → switch publishing on → switch the Routine to the weekly quiz prompt. You can stop after any step; everything before it keeps working.
 
 `APP_URL` below is the app's public URL, `https://mcwales-techshorts.apysn4.easypanel.host`.
 
@@ -10,7 +10,11 @@ publishing on → point the daily Routine at the quiz prompt. You can stop after
 - Service `mcwales/techshorts`. Source: GitHub `Stayingfalse/TechNews-Bot`, branch `main`, build: Dockerfile.
 - Port 8000, domain → `APP_URL` (HTTPS).
 - Volume: mount `/data` (videos, history, tokens, music library).
-- Resources: rendering uses up to `RENDER_WORKERS` CPU cores for ~40–90 s a day.
+- Resources: the weekly batch renders 7 videos back to back on Monday evening, each using up to
+  `RENDER_WORKERS` CPU cores for 1–2 minutes. Daily posting is just uploads.
+- Keep the service running all the time: the scheduler inside it posts each day. If it's down at
+  posting time it catches up when it comes back (up to 6 hours late; after that the day is
+  skipped and Discord says so).
 
 Environment variables:
 
@@ -19,13 +23,17 @@ Environment variables:
 | `API_TOKEN` | long random string (`openssl rand -hex 32`); the routine uses it too |
 | `PUBLIC_BASE_URL` | `APP_URL` |
 | `BRAND_HANDLE` | e.g. `@yourhandle` (shown top-left; blank to hide) |
-| `PUBLISH_ENABLED` | `false` until TikTok/Instagram are connected and tested |
+| `PUBLISH_ENABLED` | `false` until the platforms are connected and tested |
+| `PLATFORMS` | where to post, comma-separated: any of `tiktok,youtube,instagram` (default all three) |
+| `TIMEZONE` | default `Europe/London` |
+| `POST_TIME` | default `12:00`: daily posting time in `TIMEZONE` |
 | `DISCORD_WEBHOOK_URL` | see step 2 |
-| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | step 3 |
-| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 4 |
-| `INSTAGRAM_MODE` | `auto` (publish via API, default) or `notify` (Discord only, post by hand) |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | step 4 |
 | `TIKTOK_MODE` | `draft` (inbox, you tap post; default) or `direct` (posts itself; see step 4) |
 | `TIKTOK_PRIVACY` | for `direct`: `PUBLIC_TO_EVERYONE` (default), `MUTUAL_FOLLOW_FRIENDS`, `SELF_ONLY` |
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | step 5 |
+| `YOUTUBE_PRIVACY` | `public` (default), `unlisted` or `private` |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 6 |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |
@@ -38,8 +46,10 @@ Check: `curl APP_URL/health` → `{"ok":true}`, and `APP_URL/status?token=API_TO
 ## 2. Discord notifications
 
 Discord channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL →
-`DISCORD_WEBHOOK_URL`. Each day you get the video (attached when under 10 MB, otherwise a link),
-the caption and the answers.
+`DISCORD_WEBHOOK_URL`. On Monday evening you get a preview of each of the week's 7 videos with
+its answers and posting time (pull one with `DELETE APP_URL/schedule/YYYY-MM-DD`); each day at
+posting time you get the results per platform. Discord also warns if a day has nothing booked
+or fewer than two days are left in the schedule.
 
 ## 3. Music
 
@@ -81,9 +91,30 @@ for the audit in the developer portal (Content Posting API → Direct Post → r
 demo video is a screen recording of the app posting a quiz), then switch to `direct` and
 reconnect via `/oauth/tiktok/start` so the token includes `video.publish`.
 
-## 5. Instagram
+## 5. YouTube Shorts
 
-Default mode is `auto`: the Reel is published through the API with the built-in music.
+Vertical videos under 3 minutes are filed as Shorts automatically.
+
+1. https://console.cloud.google.com → create a project → **APIs & Services → Library** → enable
+   **YouTube Data API v3**.
+2. **OAuth consent screen**: External, app name, your email; add scope
+   `https://www.googleapis.com/auth/youtube.upload`. Then **Publish app** (to "In production").
+   Leave it unverified; you'll click through an "unverified app" warning once. Don't leave it in
+   "Testing": refresh tokens of testing apps expire after 7 days and posting would stop.
+3. **Credentials → Create credentials → OAuth client ID** → Web application → Authorised redirect
+   URI: `APP_URL/oauth/youtube/callback`.
+4. Copy the client ID / secret → `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`, redeploy.
+5. `APP_URL/oauth/youtube/start?token=API_TOKEN` → pick the channel's Google account → approve.
+
+**Public uploads need YouTube's API audit.** Videos uploaded through a project that hasn't passed
+the [YouTube API Services audit](https://support.google.com/youtube/contact/yt_api_form) are
+locked to private. Submit the audit form (use case: posting your own channel's videos); until it's
+approved, uploads stay private and you can make them public in YouTube Studio. The default quota
+(10,000 units a day; an upload costs 1,600) is plenty for one video a day.
+
+## 6. Instagram
+
+The Reel is published through the API with the video's own music.
 
 1. Instagram app → Settings → Account type → switch to **Professional** (Creator or Business).
 2. https://developers.facebook.com → **Create app** → use case "Manage messaging & content on
@@ -97,20 +128,23 @@ Default mode is `auto`: the Reel is published through the API with the built-in 
 The app stays in development mode (posting to your own account doesn't need Meta App Review).
 Long-lived tokens last 60 days and are refreshed automatically.
 
-## 6. Turn on publishing
+## 7. Turn on publishing
 
-Set `PUBLISH_ENABLED=true`, redeploy, then test:
+Set `PUBLISH_ENABLED=true`, redeploy, then test (posts immediately to every platform in `PLATFORMS`):
 ```bash
 curl -X POST "APP_URL/jobs?force=true" -H "Authorization: Bearer $API_TOKEN" \
      -H 'content-type: application/json' -d @examples/sample_quiz.json
 ```
 (Delete the sample post afterwards.)
 
-## 7. Daily quiz Routine (Claude Code)
+## 8. Weekly quiz Routine (Claude Code)
 
 1. In the Claude Code cloud environment's settings (environment menu in the session's title
    bar → Edit), add `SHORTS_API_TOKEN` = the `API_TOKEN` value (or a network secret for the app's
    host that sends `Authorization: Bearer …`). Make sure the network policy allows the app's host.
-2. Once this version is deployed, update the existing Routine ("TechNews-Bot daily story") to the
-   prompt in [ROUTINE_PROMPT.md](ROUTINE_PROMPT.md), e.g. daily at 07:41 Europe/London, fresh
-   session each run. Don't switch it before deploying: the old app rejects quiz specs.
+2. Once this version is deployed, change the existing Routine ("TechNews-Bot daily story") to
+   the prompt in [ROUTINE_PROMPT.md](ROUTINE_PROMPT.md), weekly on **Monday 19:05
+   Europe/London** (cron `CRON_TZ=Europe/London 5 19 * * 1`), fresh session each run. Don't
+   switch it before deploying: the old app has no `/schedule`.
+3. First week: deploy on any day and fire the Routine once by hand; it fills the next 7 days,
+   then each Monday run fills whatever is free from Tuesday to the following Monday.

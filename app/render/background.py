@@ -1,4 +1,4 @@
-"""Animated background: drifting colour blobs, a scrolling grid, particles and a vignette.
+"""The set: a flat stage colour, a slowly turning sunburst and a frame of chasing marquee bulbs.
 
 Everything is a pure function of time so frames can be rendered in parallel.
 """
@@ -7,82 +7,86 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from .theme import H, W, Palette
 
-LOW_W, LOW_H = W // 5, H // 5
-GRID = 90
+LOW = 2  # sunburst is computed at half resolution
+RAYS = 22
+BURST_CENTER = (W * 0.46, 860)
+BULB_STEP = 66
+BULB_INSET = 30
+
+
+def _mix(a, b, x):
+    return tuple(int(p + (q - p) * x) for p, q in zip(a, b))
 
 
 class Background:
     def __init__(self, pal: Palette, seed: int = 7):
         self.pal = pal
-        rng = np.random.default_rng(seed)
-        yy, xx = np.mgrid[0:LOW_H, 0:LOW_W].astype(np.float32)
-        self.xx, self.yy = xx / LOW_W, yy / LOW_H
-        self.phase = rng.uniform(0, 2 * math.pi, size=6)
-        n = 46
-        self.p_xy = rng.uniform(0, 1, size=(n, 2))
-        self.p_v = rng.uniform(-0.012, 0.012, size=(n, 2)) + np.array([0, -0.02])
-        self.p_r = rng.uniform(1.5, 4.0, size=n)
-        self.p_a = rng.uniform(40, 140, size=n)
-        self.p_tw = rng.uniform(0, 2 * math.pi, size=n)
-        self._grid = self._make_grid()
-        self._vignette = self._make_vignette()
+        self.spin = 3.0 + (seed % 5) * 0.4  # degrees per second
+        self.phase = (seed % 360) * math.pi / 180
+        lw, lh = W // LOW, H // LOW
+        yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32)
+        dx, dy = xx * LOW - BURST_CENTER[0], yy * LOW - BURST_CENTER[1]
+        self.angle = np.arctan2(dy, dx)
+        dist = np.sqrt(dx * dx + dy * dy)
+        # rays fade into the stage near the centre and darken a touch towards the corners
+        self.core = np.clip((dist - 120) / 260, 0, 1)
+        self.shade = 1 - 0.22 * np.clip((dist - 700) / 900, 0, 1)
+        self.bulbs = self._bulb_positions()
+        self.bulb_on, self.bulb_off = self._bulb_sprites()
 
-    def _make_grid(self) -> Image.Image:
-        img = Image.new("RGBA", (W + GRID, H + GRID), (0, 0, 0, 0))
-        d = ImageDraw.Draw(img)
-        c = self.pal.text + (14,)
-        for x in range(0, W + GRID, GRID):
-            d.line((x, 0, x, H + GRID), fill=c, width=1)
-        for y in range(0, H + GRID, GRID):
-            d.line((0, y, W + GRID, y), fill=c, width=1)
-        return img
+    def _bulb_positions(self) -> list[tuple[float, float]]:
+        x0, y0, x1, y1 = BULB_INSET, BULB_INSET, W - BULB_INSET, H - BULB_INSET
+        pts = []
+        nx, ny = round((x1 - x0) / BULB_STEP), round((y1 - y0) / BULB_STEP)
+        for i in range(nx):
+            pts.append((x0 + (x1 - x0) * i / nx, y0))
+        for i in range(ny):
+            pts.append((x1, y0 + (y1 - y0) * i / ny))
+        for i in range(nx):
+            pts.append((x1 - (x1 - x0) * i / nx, y1))
+        for i in range(ny):
+            pts.append((x0, y1 - (y1 - y0) * i / ny))
+        return pts
 
-    def _make_vignette(self) -> Image.Image:
-        yy, xx = np.mgrid[0:LOW_H, 0:LOW_W].astype(np.float32)
-        dx, dy = (xx / LOW_W - 0.5) * 1.3, (yy / LOW_H - 0.5)
-        d = np.sqrt(dx * dx + dy * dy)
-        a = np.clip((d - 0.35) / 0.45, 0, 1) ** 1.6 * 200
-        small = Image.fromarray(a.astype(np.uint8), "L").resize((W, H), Image.BICUBIC)
-        v = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        v.putalpha(small)
-        return v
+    def _bulb_sprites(self) -> tuple[Image.Image, Image.Image]:
+        s = 64
+        on = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        d = ImageDraw.Draw(on)
+        d.ellipse((s / 2 - 22, s / 2 - 22, s / 2 + 22, s / 2 + 22), fill=self.pal.bulb + (90,))
+        on = on.filter(ImageFilter.GaussianBlur(7))
+        d = ImageDraw.Draw(on)
+        d.ellipse((s / 2 - 13, s / 2 - 13, s / 2 + 13, s / 2 + 13), fill=self.pal.ink + (255,))
+        d.ellipse((s / 2 - 10, s / 2 - 10, s / 2 + 10, s / 2 + 10), fill=self.pal.bulb + (255,))
+        d.ellipse((s / 2 - 6, s / 2 - 7, s / 2 - 1, s / 2 - 2), fill=(255, 255, 255, 220))
+        off = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        d = ImageDraw.Draw(off)
+        d.ellipse((s / 2 - 13, s / 2 - 13, s / 2 + 13, s / 2 + 13), fill=self.pal.ink + (255,))
+        d.ellipse((s / 2 - 10, s / 2 - 10, s / 2 + 10, s / 2 + 10), fill=_mix(self.pal.ink, self.pal.bulb, 0.28) + (255,))
+        return on, off
 
     def render(self, t: float, energy: float = 0.0) -> Image.Image:
-        """energy 0..1 briefly brightens the blobs (used on scene cuts)."""
-        ph = self.phase
-        bg = np.array(self.pal.bg, np.float32)
-        out = np.broadcast_to(bg, (LOW_H, LOW_W, 3)).copy()
-        blobs = [
-            (0.30 + 0.22 * math.sin(t * 0.37 + ph[0]), 0.28 + 0.12 * math.sin(t * 0.29 + ph[1]), 0.42, self.pal.blob1),
-            (0.72 + 0.20 * math.sin(t * 0.31 + ph[2]), 0.70 + 0.14 * math.sin(t * 0.23 + ph[3]), 0.46, self.pal.blob2),
-            (0.50 + 0.30 * math.sin(t * 0.19 + ph[4]), 0.50 + 0.25 * math.sin(t * 0.27 + ph[5]), 0.30, self.pal.accent),
-        ]
-        boost = 1.0 + 0.6 * energy
-        for i, (cx, cy, r, col) in enumerate(blobs):
-            dx = (self.xx - cx) * 0.5625  # aspect correct (W/H)
-            dy = self.yy - cy
-            g = np.exp(-(dx * dx + dy * dy) / (r * r * 0.18))
-            k = (0.85 if i < 2 else 0.22) * boost
-            out += g[..., None] * (np.array(col, np.float32) * k)
-        out = np.clip(out, 0, 255).astype(np.uint8)
-        frame = Image.fromarray(out, "RGB").resize((W, H), Image.BICUBIC).convert("RGBA")
+        """energy 0..1 brightens the rays and lights every bulb (used on cuts and reveals)."""
+        rot = self.phase + math.radians(self.spin * t)
+        x = ((self.angle + rot) * RAYS / (2 * math.pi)) % 2.0
+        # anti-aliased stripe: 1 inside a ray, 0 between rays
+        edge = 0.06
+        ray = np.clip((x - 0) / edge, 0, 1) * np.clip((1 - x) / edge, 0, 1)
+        ray *= self.core
+        stage = np.array(self.pal.stage, np.float32)
+        ray_col = np.array(_mix(self.pal.ray, self.pal.sign, 0.18 * energy), np.float32)
+        img = stage + (ray_col - stage) * ray[..., None]
+        img *= self.shade[..., None]
+        small = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGB")
+        frame = small.resize((W, H), Image.BILINEAR).convert("RGBA")
 
-        off = int((t * 18) % GRID)
-        frame.alpha_composite(self._grid.crop((0, off, W, off + H)))
-
-        dots = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        d = ImageDraw.Draw(dots)
-        pos = (self.p_xy + self.p_v * t) % 1.0
-        tw = 0.6 + 0.4 * np.sin(t * 2.2 + self.p_tw)
-        for (px, py), r, a, k in zip(pos, self.p_r, self.p_a, tw):
-            x, y = px * W, py * H
-            col = self.pal.accent2 + (int(a * k),)
-            d.ellipse((x - r, y - r, x + r, y + r), fill=col)
-        frame.alpha_composite(dots)
-
-        frame.alpha_composite(self._vignette)
+        chase = int(t * 7)
+        all_on = energy > 0.35
+        for k, (bx, by) in enumerate(self.bulbs):
+            lit = all_on or (k + chase) % 3 == 0
+            spr = self.bulb_on if lit else self.bulb_off
+            frame.alpha_composite(spr, (int(bx - spr.width / 2), int(by - spr.height / 2)))
         return frame

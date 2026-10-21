@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+PLATFORMS = ("tiktok", "youtube", "instagram")
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -18,6 +21,18 @@ class Settings:
 
         # Master switch: when false, videos are rendered and you're notified, but nothing is uploaded.
         self.publish_enabled = _bool("PUBLISH_ENABLED", False)
+        # Where to post, comma-separated: any of tiktok, youtube, instagram.
+        self.platforms = [p.strip().lower() for p in os.environ.get("PLATFORMS", "tiktok,youtube,instagram").split(",") if p.strip()]
+        unknown = set(self.platforms) - set(PLATFORMS)
+        if unknown:
+            raise ValueError(f"PLATFORMS has unknown entries {sorted(unknown)}; use any of {PLATFORMS}")
+
+        # Scheduled quizzes go out at POST_TIME (24h, local to TIMEZONE) on their day.
+        self.tz = ZoneInfo(os.environ.get("TIMEZONE", "Europe/London"))
+        self.post_time = os.environ.get("POST_TIME", "12:00")
+        h, m = (int(x) for x in self.post_time.split(":"))
+        if not (0 <= h < 24 and 0 <= m < 60):
+            raise ValueError("POST_TIME must be HH:MM")
 
         self.tiktok_client_key = os.environ.get("TIKTOK_CLIENT_KEY", "")
         self.tiktok_client_secret = os.environ.get("TIKTOK_CLIENT_SECRET", "")
@@ -29,10 +44,12 @@ class Settings:
 
         self.instagram_app_id = os.environ.get("INSTAGRAM_APP_ID", "")
         self.instagram_app_secret = os.environ.get("INSTAGRAM_APP_SECRET", "")
-        # auto   = publish the Reel via the API with the built-in music (default)
-        # notify = only send the video to Discord for manual posting
-        self.instagram_mode = os.environ.get("INSTAGRAM_MODE", "auto")
         self.graph_version = os.environ.get("GRAPH_API_VERSION", "v23.0")
+
+        self.youtube_client_id = os.environ.get("YOUTUBE_CLIENT_ID", "")
+        self.youtube_client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
+        # public | unlisted | private. Uploads from an unaudited Google API project are locked to private.
+        self.youtube_privacy = os.environ.get("YOUTUBE_PRIVACY", "public")
 
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "14"))
@@ -55,6 +72,10 @@ class Settings:
     @property
     def instagram_enabled(self) -> bool:
         return bool(self.instagram_app_id and self.instagram_app_secret)
+
+    @property
+    def youtube_enabled(self) -> bool:
+        return bool(self.youtube_client_id and self.youtube_client_secret)
 
 
 settings = Settings()

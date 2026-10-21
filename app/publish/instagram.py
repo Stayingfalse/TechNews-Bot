@@ -1,12 +1,11 @@
-"""Instagram API with Instagram Login: publish a Reel.
+"""Instagram API with Instagram Login: publish a Reel (with the video's own music).
 
-Only used when INSTAGRAM_MODE=auto. In the default `notify` mode you post manually so you can add
-a trending sound (the API cannot attach one).
 Docs: https://developers.facebook.com/docs/instagram-platform/content-publishing
 """
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
@@ -124,3 +123,12 @@ def publish_reel(video_url: str, caption: str, cover_url: str | None = None) -> 
     if r.status_code >= 400:
         raise RuntimeError(f"Instagram publish error: {r.text}")
     return {"media_id": r.json()["id"]}
+
+
+def configured() -> bool:
+    return settings.instagram_enabled
+
+
+def publish(video: Path, spec, job: dict) -> dict:
+    # Instagram fetches the file itself from our public /media URL
+    return publish_reel(job["video_url"], spec.full_caption(), job.get("cover_url"))

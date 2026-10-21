@@ -3,7 +3,7 @@
   "theme": "Movie night",
   "title": "Only *real* film fans get 5/5",
   "subtitle": "Guess before the timer runs out",
-  "palette": "candy",
+  "palette": "teatime",
   "rounds": [
     {"type": "emoji", "category": "Movie", "emojis": "🦁👑🌅", "answer": "The Lion King", "note": "1994"},
     {"type": "bad_description", "category": "Movie", "description": "A man refuses to share a *door* and it costs him everything", "answer": "Titanic"},
