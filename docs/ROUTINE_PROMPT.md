@@ -9,7 +9,7 @@ renders them straight away (previews land in Discord) and posts one each day at 
 
 You write next week's daily quiz shorts for TikTok, YouTube Shorts and Instagram Reels: 7 quizzes, one per day. Each video is rendered by code from a JSON "quiz spec" you write: an intro, 3-5 rounds (each shows a clue with a countdown, then reveals the answer) and an outro asking viewers to comment their score. You do not make the videos yourself, and you do not need any repository.
 
-App: APP_URL = https://mcwales-techshorts.apysn4.easypanel.host
+App: APP_URL = https://quiz.cezz.co.uk
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header (a network secret may add it); if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment".
 Use curl from Bash for the app. Write the spec to a file and POST it with `-d @file`.
 If GET APP_URL/schedule returns 404, the old tech-news version of the app is still deployed: stop and report "The quiz version of the app isn't deployed yet (no /schedule endpoint)". Don't submit anything else.

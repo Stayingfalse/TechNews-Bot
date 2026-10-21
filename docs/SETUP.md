@@ -3,7 +3,7 @@
 Order: deploy the app with publishing off → Discord → music → the platforms you want (TikTok,
 YouTube, Instagram) → switch publishing on → switch the Routine to the weekly quiz prompt. You can stop after any step; everything before it keeps working.
 
-`APP_URL` below is the app's public URL, `https://mcwales-techshorts.apysn4.easypanel.host`.
+`APP_URL` below is the app's public URL, `https://quiz.cezz.co.uk`.
 
 ## 1. Easypanel app
 
