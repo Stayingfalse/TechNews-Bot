@@ -58,6 +58,14 @@ class CompareBeat(BaseModel):
     rows: list[tuple[str, str, str]] = Field(min_length=1, max_length=4)  # (label, a_value, b_value)
     duration: float | None = None
 
+    @field_validator("rows")
+    @classmethod
+    def _filled(cls, v: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+        for row in v:
+            if any(not cell.strip() for cell in row):
+                raise ValueError("compare rows need a label and a value for both sides; compare two products, not a timeline")
+        return v
+
 
 class CtaBeat(BaseModel):
     type: Literal["cta"] = "cta"

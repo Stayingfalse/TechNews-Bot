@@ -30,6 +30,9 @@ if that variable is empty; the network proxy then adds it).
    - 5–7 beats, 15–25 seconds total. Start with a `hook` (curiosity, ≤ 8 words, one *highlighted*
      word), then `title`, then the most interesting `stat` / `spec_list` / `compare` / `price`
      beats, end with a `cta` question that invites comments.
+   - Beat usage: `stat` = one striking number; `spec_list` = 3–5 short facts (dates/availability
+     too); `compare` = only two products/models side by side with a value on both sides of every
+     row (skip it if there's no fair comparison); `price` = launch price.
    - Keep on-screen text punchy; respect the max lengths in the schema.
    - Rotate `palette` so consecutive days look different (check yesterday's in history if
      unsure; pick something else).
