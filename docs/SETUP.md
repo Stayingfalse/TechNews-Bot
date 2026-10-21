@@ -3,11 +3,11 @@
 Order: deploy the app with publishing off → Discord → TikTok → Instagram → switch publishing on
 → create the daily Routine. You can stop after any step; everything before it keeps working.
 
-`APP_URL` below is the app's public URL, e.g. `https://techshorts-app.apysn4.easypanel.host`.
+`APP_URL` below is the app's public URL, `https://mcwales-techshorts.apysn4.easypanel.host`.
 
 ## 1. Easypanel app
 
-- Source: GitHub `Stayingfalse/tech-shorts-bot`, branch `main`, build: Dockerfile.
+- Service `mcwales/techshorts`. Source: GitHub `Stayingfalse/tech-shorts-bot`, branch `main`, build: Dockerfile.
 - Port 8000, domain → `APP_URL` (HTTPS).
 - Volume: mount `/data` (videos, history, tokens).
 - Resources: rendering uses up to `RENDER_WORKERS` CPU cores for ~40–90 s a day.

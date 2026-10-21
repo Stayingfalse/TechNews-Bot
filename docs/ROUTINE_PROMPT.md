@@ -1,7 +1,7 @@
 # Daily research routine
 
 This is the prompt the scheduled Claude Code Routine runs every day, in a fresh cloud session.
-`APP_URL` is the Easypanel app's public URL. The API token is in the cloud environment as
+`APP_URL` = https://mcwales-techshorts.apysn4.easypanel.host (the Easypanel app). The API token is in the cloud environment as
 `SHORTS_API_TOKEN` (an environment variable) or as a network secret for the app's host.
 
 ---
