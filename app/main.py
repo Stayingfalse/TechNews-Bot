@@ -54,7 +54,8 @@ def status():
 
     return {
         "publish_enabled": settings.publish_enabled,
-        "platforms": {name: {"configured": PUBLISHERS[name].configured(), "token": tok(name)} for name in settings.platforms},
+        "platforms": {name: {"configured": PUBLISHERS[name].configured(), "token": tok(name), **_account(name)}
+                      for name in settings.platforms},
         "tiktok_mode": settings.tiktok_mode,
         "post_time": f"{settings.post_time} {settings.tz.key}",
         "scheduled": [{k: j.get(k) for k in ("slot", "status", "id")} for j in pipeline.scheduled_jobs()],
@@ -62,6 +63,26 @@ def status():
         "discord": bool(settings.discord_webhook_url),
         "recent_jobs": [{k: j.get(k) for k in ("id", "status", "created_at", "video_url", "error")} for j in store.list_jobs(5)],
     }
+
+
+def _account(name: str) -> dict:
+    """Which account a platform's token posts to, where the platform can say."""
+    mod = PUBLISHERS[name]
+    if not hasattr(mod, "account") or not store.get_tokens(name):
+        return {}
+    try:
+        return {"account": mod.account()}
+    except Exception as e:
+        return {"account_error": str(e)[:200]}
+
+
+@app.get("/instagram/media/{media_id}", dependencies=[Depends(require_token)])
+def instagram_media(media_id: str):
+    """Where a published Reel ended up (link, account, time)."""
+    try:
+        return PUBLISHERS["instagram"].media_info(media_id)
+    except RuntimeError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.get("/schema", dependencies=[Depends(require_token)])

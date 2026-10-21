@@ -122,7 +122,32 @@ def publish_reel(video_url: str, caption: str, cover_url: str | None = None) -> 
     r = httpx.post(f"{graph()}/{uid}/media_publish", data={"creation_id": container, "access_token": token}, timeout=60)
     if r.status_code >= 400:
         raise RuntimeError(f"Instagram publish error: {r.text}")
-    return {"media_id": r.json()["id"]}
+    media_id = r.json()["id"]
+    out = {"media_id": media_id}
+    try:
+        out["url"] = media_info(media_id).get("permalink")
+    except Exception:  # the post went out; a missing link isn't worth failing over
+        pass
+    return out
+
+
+def _get(path: str, fields: str) -> dict:
+    tok = store.get_tokens("instagram")
+    if not tok:
+        raise RuntimeError("Instagram not connected: visit /oauth/instagram/start")
+    r = httpx.get(f"{graph()}/{path}", params={"fields": fields, "access_token": tok["access_token"]}, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram API error: {r.text[:300]}")
+    return r.json()
+
+
+def account() -> dict:
+    """The account the stored token posts to."""
+    return _get("me", "user_id,username,account_type")
+
+
+def media_info(media_id: str) -> dict:
+    return _get(media_id, "permalink,username,timestamp,media_type,media_product_type")
 
 
 def configured() -> bool:

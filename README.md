@@ -73,7 +73,8 @@ All endpoints except `/health`, `/media/*` and the OAuth callbacks need
 | `GET /jobs/{id}` | Job status, video URL, publish results |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
 | `GET /schema` | Spec JSON schema |
-| `GET /status` | Platforms + tokens, posting time, schedule, music library, recent jobs |
+| `GET /instagram/media/{id}` | Link, account and time of a published Reel |
+| `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
 | `GET /oauth/{tiktok,youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
