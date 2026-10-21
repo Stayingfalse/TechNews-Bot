@@ -26,7 +26,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="tech-shorts-bot", lifespan=lifespan)
+app = FastAPI(title="TechNews-Bot", lifespan=lifespan)
 settings.videos_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.videos_dir), name="media")
 

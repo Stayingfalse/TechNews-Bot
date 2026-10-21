@@ -7,7 +7,7 @@ Order: deploy the app with publishing off → Discord → TikTok → Instagram �
 
 ## 1. Easypanel app
 
-- Service `mcwales/techshorts`. Source: GitHub `Stayingfalse/tech-shorts-bot`, branch `main`, build: Dockerfile.
+- Service `mcwales/techshorts`. Source: GitHub `Stayingfalse/TechNews-Bot`, branch `main`, build: Dockerfile.
 - Port 8000, domain → `APP_URL` (HTTPS).
 - Volume: mount `/data` (videos, history, tokens).
 - Resources: rendering uses up to `RENDER_WORKERS` CPU cores for ~40–90 s a day.

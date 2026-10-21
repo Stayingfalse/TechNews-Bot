@@ -1,4 +1,4 @@
-# tech-shorts-bot
+# TechNews-Bot
 
 Daily tech-news shorts, made entirely in code (no generative AI video) and sent to TikTok and
 Instagram Reels.
