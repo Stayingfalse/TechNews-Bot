@@ -31,9 +31,9 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def slot_time(day: date) -> datetime:
-    """The UTC publish time for a local calendar day."""
-    h, m = (int(x) for x in settings.post_time.split(":"))
+def slot_time(day: date, at: str | None = None) -> datetime:
+    """The UTC publish time for a local calendar day, at `at` (HH:MM, local) or POST_TIME."""
+    h, m = (int(x) for x in (at or settings.post_time).split(":"))
     return datetime(day.year, day.month, day.day, h, m, tzinfo=settings.tz).astimezone(timezone.utc)
 
 
@@ -45,7 +45,12 @@ def media_url(name: str) -> str:
     return f"{settings.public_base_url}/media/{name}"
 
 
-def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None) -> dict:
+def slot_key(job: dict) -> tuple[str, str]:
+    """(local date, local HH:MM) of a booked job."""
+    return job["slot"], job.get("slot_time") or settings.post_time
+
+
+def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: str | None = None) -> dict:
     job = {
         "id": f"{spec.id}-{secrets.token_hex(3)}",
         "spec": spec.model_dump(),
@@ -53,7 +58,8 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None) -> d
         "status": "queued",
         "created_at": store.now_iso(),
         "slot": slot.isoformat() if slot else None,
-        "publish_at": slot_time(slot).isoformat() if slot else None,
+        "slot_time": (at or settings.post_time) if slot else None,
+        "publish_at": slot_time(slot, at).isoformat() if slot else None,
         "results": {},
     }
     store.save_job(job)
@@ -64,7 +70,7 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None) -> d
 def scheduled_jobs() -> list[dict]:
     """Jobs holding a slot that hasn't been posted yet, earliest slot first."""
     jobs = [j for j in store.list_jobs(200) if j.get("slot") and j["status"] in ACTIVE]
-    return sorted(jobs, key=lambda j: j["slot"])
+    return sorted(jobs, key=lambda j: j["publish_at"])
 
 
 def booked_jobs() -> list[dict]:
@@ -167,7 +173,8 @@ def _notify_scheduled(job: dict, spec: QuizSpec, video: Path) -> None:
                    {"name": "Music", "value": job["render"].get("music", "?"), "inline": True},
                    {"name": "Platforms", "value": ", ".join(settings.platforms) or "(none)", "inline": True}],
     }
-    notify.send(f"Preview of the {_when(job)} quiz. To pull it: `DELETE /schedule/{job['slot']}`", embed, attach=video)
+    slot, at = slot_key(job)
+    notify.send(f"Preview of the {_when(job)} quiz. To pull it: `DELETE /schedule/{slot}?time={at}`", embed, attach=video)
 
 
 def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:

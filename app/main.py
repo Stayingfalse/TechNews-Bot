@@ -121,86 +121,107 @@ def _repeats(spec: QuizSpec, used: dict[str, str]) -> list[str]:
 
 class ScheduleItem(BaseModel):
     date: dt.date | None = Field(default=None, description="Local date to post on; omit to take the next free day")
+    time: str | None = Field(default=None, pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$",
+                             description="Local HH:MM; omit for POST_TIME. Use it for extra posts on a day.")
     spec: QuizSpec
 
 
 class ScheduleRequest(BaseModel):
     items: list[ScheduleItem] = Field(min_length=1, max_length=14)
-    replace: bool = Field(default=False, description="Replace quizzes already scheduled on those dates")
+    replace: bool = Field(default=False, description="Replace quizzes already booked in those slots")
+
+
+def _booking(j: dict) -> dict:
+    return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
+            "title": j["spec"]["title"], "theme": j["spec"].get("theme", ""), "video_url": j.get("video_url")}
 
 
 def _schedule_view(days: int = 14) -> dict:
+    """One entry per day. A day is free when nothing is booked at POST_TIME; `bookings` lists
+    everything that day, including extra posts at other times."""
     today = pipeline.today_local()
     first = today if datetime.now(timezone.utc) < pipeline.slot_time(today) else today + timedelta(days=1)
-    held = {j["slot"]: j for j in pipeline.booked_jobs()}
+    by_day: dict[str, list[dict]] = {}
+    for j in sorted(pipeline.booked_jobs(), key=lambda j: j["publish_at"]):
+        by_day.setdefault(j["slot"], []).append(j)
     slots = []
     for k in range(days):
-        d = (first + timedelta(days=k)).isoformat()
-        j = held.get(d)
-        slots.append({"date": d, "publish_at": pipeline.slot_time(first + timedelta(days=k)).isoformat(),
-                      **({"status": j["status"], "job_id": j["id"], "title": j["spec"]["title"],
-                          "theme": j["spec"].get("theme", ""), "video_url": j.get("video_url")} if j else {"status": "free"})})
+        day = first + timedelta(days=k)
+        jobs = by_day.get(day.isoformat(), [])
+        main_job = next((j for j in jobs if pipeline.slot_key(j)[1] == settings.post_time), None)
+        slots.append({"date": day.isoformat(), "publish_at": pipeline.slot_time(day).isoformat(),
+                      "status": main_job["status"] if main_job else "free",
+                      "bookings": [_booking(j) for j in jobs]})
     return {"timezone": settings.tz.key, "post_time": settings.post_time, "first_open_date": first.isoformat(),
             "free_dates": [s["date"] for s in slots if s["status"] == "free"], "slots": slots}
 
 
 @app.get("/schedule", dependencies=[Depends(require_token)])
 def get_schedule(days: int = 14):
-    """The next `days` posting slots, with what's booked in each and which are free."""
+    """The next `days` posting days, with what's booked on each and which are free."""
     return _schedule_view(min(max(days, 1), 60))
 
 
 @app.post("/schedule", status_code=202, dependencies=[Depends(require_token)])
 def post_schedule(req: ScheduleRequest):
-    """Book a batch of quizzes (e.g. next week's 7) into daily slots. All-or-nothing: nothing is
-    scheduled unless every item passes."""
+    """Book a batch of quizzes (e.g. next week's 7) into slots: one per day at POST_TIME by default,
+    or at an item's own `time`. All-or-nothing: nothing is scheduled unless every item passes."""
     view = _schedule_view(60)
     first = date.fromisoformat(view["first_open_date"])
-    held = {j["slot"]: j for j in pipeline.booked_jobs()}
-    free = iter(d for d in view["free_dates"] if not any(i.date and i.date.isoformat() == d for i in req.items))
+    now = datetime.now(timezone.utc)
+    held = {pipeline.slot_key(j): j for j in pipeline.booked_jobs()}
+    taken_dates = {i.date.isoformat() for i in req.items if i.date and not i.time}
+    free = iter(d for d in view["free_dates"] if d not in taken_dates)
     plan, errors = [], []
     for n, item in enumerate(req.items):
         d = item.date or date.fromisoformat(next(free, None) or "1970-01-01")
-        if d < first:
-            errors.append(f"item {n}: {d} has passed or its slot is already gone (first open date is {first})")
+        at = item.time or settings.post_time
+        key = (d.isoformat(), at)
+        if pipeline.slot_time(d, at) <= now:
+            errors.append(f"item {n}: {d} {at} has already passed")
         elif d > first + timedelta(days=59):
             errors.append(f"item {n}: {d} is more than 60 days ahead")
-        elif d.isoformat() in held and held[d.isoformat()]["status"] in ("done", "publishing"):
-            errors.append(f"item {n}: {d} has already been posted")
-        elif d.isoformat() in held and not req.replace:
-            errors.append(f"item {n}: {d} already has `{held[d.isoformat()]['id']}` (send replace=true to swap it)")
-        plan.append((d, item.spec))
-    dates = [d.isoformat() for d, _ in plan]
-    errors += [f"{d} appears more than once in this batch" for d in sorted({d for d in dates if dates.count(d) > 1})]
-    replaced = {held[d]["id"] for d in dates if d in held} if req.replace else set()
+        elif key in held and held[key]["status"] in ("done", "publishing"):
+            errors.append(f"item {n}: {d} {at} has already been posted")
+        elif key in held and not req.replace:
+            errors.append(f"item {n}: {d} {at} already has `{held[key]['id']}` (send replace=true to swap it)")
+        plan.append((d, at, item.spec))
+    keys = [(d.isoformat(), at) for d, at, _ in plan]
+    errors += [f"{d} {at} appears more than once in this batch" for d, at in sorted({k for k in keys if keys.count(k) > 1})]
+    replaced = {held[k]["id"] for k in keys if k in held} if req.replace else set()
     used = _used_answers(exclude_jobs=replaced)
-    for n, (d, spec) in enumerate(plan):
+    for n, (d, at, spec) in enumerate(plan):
         if rep := _repeats(spec, used):
-            errors.append(f"item {n} ({d}): answers already used: " + "; ".join(rep))
+            errors.append(f"item {n} ({d} {at}): answers already used: " + "; ".join(rep))
         for a in spec.answer_keys():
             used.setdefault(a, f"item {n} of this batch")
     if errors:
         raise HTTPException(409, {"errors": errors, "free_dates": view["free_dates"]})
 
     out = []
-    for d, spec in plan:
-        if d.isoformat() in held and req.replace:
-            pipeline.cancel(held[d.isoformat()], "replaced")
-        job = pipeline.submit(spec, slot=d)
-        out.append({"date": d.isoformat(), "publish_at": job["publish_at"], "job_id": job["id"]})
+    for d, at, spec in plan:
+        if (d.isoformat(), at) in held and req.replace:
+            pipeline.cancel(held[(d.isoformat(), at)], "replaced")
+        job = pipeline.submit(spec, slot=d, at=at)
+        out.append({"date": d.isoformat(), "time": at, "publish_at": job["publish_at"], "job_id": job["id"]})
     return {"scheduled": out}
 
 
 @app.delete("/schedule/{day}", dependencies=[Depends(require_token)])
-def delete_schedule(day: date):
-    """Cancel the quiz booked for a date (before it's posted)."""
-    job = next((j for j in pipeline.scheduled_jobs() if j["slot"] == day.isoformat()), None)
-    if not job:
-        raise HTTPException(404, f"nothing scheduled on {day}")
+def delete_schedule(day: date, time: str | None = None):
+    """Cancel a booked quiz (before it's posted). Pass ?time=HH:MM when the day has more than one."""
+    jobs = [j for j in pipeline.scheduled_jobs() if j["slot"] == day.isoformat()
+            and (time is None or pipeline.slot_key(j)[1] == time)]
+    if not jobs:
+        raise HTTPException(404, f"nothing scheduled on {day}" + (f" at {time}" if time else ""))
+    if len(jobs) > 1:
+        raise HTTPException(409, f"{len(jobs)} quizzes on {day}; pick one with ?time=" +
+                            " or ?time=".join(pipeline.slot_key(j)[1] for j in jobs))
+    job = jobs[0]
     if job["status"] == "publishing":
         raise HTTPException(409, "it's being posted right now")
     pipeline.cancel(job)
-    return {"cancelled": job["id"], "date": day.isoformat()}
+    return {"cancelled": job["id"], "date": day.isoformat(), "time": pipeline.slot_key(job)[1]}
 
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(require_token)])

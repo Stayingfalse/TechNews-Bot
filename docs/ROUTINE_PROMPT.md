@@ -40,7 +40,7 @@ If GET APP_URL/schedule returns 404, the old tech-news version of the app is sti
    - music: "auto" (picks from the uploaded library, else built-in synth music).
    - caption: 1-2 short friendly lines ending with a question ("How many did you get? 👇"), no answers in the caption. 3-6 hashtags (#quiz plus theme tags).
 
-6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken date); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
+6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. Leave out `time` (each posts at the default time); only add `"time": "HH:MM"` if a human asked for extra posts on a day. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken date); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
 
 7. Confirm: GET APP_URL/schedule?days=7 and check every date you sent shows `queued`, `rendering` or `scheduled` (rendering all 7 takes 10-15 minutes; you don't need to wait for it). The server posts each one at its time and sends previews and results to Discord itself.
 
