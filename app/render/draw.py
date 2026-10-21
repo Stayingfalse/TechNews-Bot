@@ -148,7 +148,7 @@ def wrap_words(text: str, weight: str, size: int, max_w: int) -> list[list[str]]
     lines: list[list[str]] = [[]]
     cur = 0.0
     for word in text.split():
-        ww = f.getlength(word.strip("*"))
+        ww = f.getlength(word.replace("*", ""))
         if lines[-1] and cur + space + ww > max_w:
             lines.append([word])
             cur = ww
@@ -163,7 +163,7 @@ def fit_size(text: str, weight: str, start: int, max_w: int, max_lines: int, min
     while size > min_size:
         lines = wrap_words(text, weight, size, max_w)
         if len(lines) <= max_lines and all(
-            font(weight, size).getlength(" ".join(w.strip("*") for w in ln)) <= max_w for ln in lines
+            font(weight, size).getlength(" ".join(w.replace("*", "") for w in ln)) <= max_w for ln in lines
         ):
             return size
         size -= 4

@@ -1,0 +1,22 @@
+{
+  "id": "sample-webb-images",
+  "topic_key": "sample-webb-telescope",
+  "palette": "electric",
+  "images": [
+    {"id": "cliffs", "url": "https://images-assets.nasa.gov/image/carina_nebula/carina_nebula~large.jpg", "credit": "Image: NASA, ESA, CSA, STScI", "license": "Public domain (NASA)"},
+    {"id": "mirror", "url": "https://images-assets.nasa.gov/image/GSFC_20161102_2016-21507_012/GSFC_20161102_2016-21507_012~large.jpg", "credit": "Image: NASA / Chris Gunn", "license": "Public domain (NASA)"}
+  ],
+  "beats": [
+    {"type": "hook", "text": "This telescope sees the *first* galaxies", "image": "cliffs"},
+    {"type": "title", "kicker": "Space", "text": "James Webb Space Telescope", "image": "mirror"},
+    {"type": "stat", "label": "Mirror width", "value": "6.5 m"},
+    {"type": "fact", "kicker": "How it works", "text": "18 gold-coated mirror segments unfold in space and act as *one* giant mirror."},
+    {"type": "image", "image": "cliffs", "caption": "The 'Cosmic Cliffs' of the Carina Nebula"},
+    {"type": "cta", "text": "What should Webb look at *next*?"}
+  ],
+  "caption": "SAMPLE (test spec): how the James Webb Space Telescope sees the early universe.",
+  "hashtags": ["#space", "#JWST", "#science"],
+  "sources": ["https://science.nasa.gov/mission/webb/"],
+  "source_label": "Sample spec — via NASA",
+  "suggested_sound": "Any cinematic trending sound"
+}

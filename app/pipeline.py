@@ -4,12 +4,14 @@ from __future__ import annotations
 import logging
 import queue
 import secrets
+import tempfile
 import threading
 import time
 from pathlib import Path
 
 from . import notify, store
 from .config import settings
+from .images import fetch_images
 from .publish import instagram, tiktok
 from .render.engine import render_video
 from .spec import StorySpec
@@ -45,9 +47,13 @@ def _run(job_id: str) -> None:
     video = settings.videos_dir / f"{stem}.mp4"
     cover = settings.videos_dir / f"{stem}.jpg"
 
-    job["status"] = "rendering"
+    job["status"] = "fetching_images"
     store.save_job(job)
-    info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover)
+    with tempfile.TemporaryDirectory() as tmp:
+        image_paths, image_errors = fetch_images(spec, Path(tmp))
+        job.update(status="rendering", image_errors=image_errors)
+        store.save_job(job)
+        info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, image_paths=image_paths)
     job.update(status="rendered", render=info, video=video.name, video_url=media_url(video.name),
                cover_url=media_url(cover.name))
     store.save_job(job)
@@ -72,6 +78,8 @@ def _run(job_id: str) -> None:
             "date": store.now_iso(),
             "id": spec.id,
             "topic_key": spec.topic_key,
+            "category": spec.category,
+            "palette": spec.palette,
             "title": next((b.text for b in spec.beats if b.type in ("title", "hook")), spec.id),
             "sources": spec.sources,
             "job_id": job_id,
@@ -91,6 +99,8 @@ def _notify(job: dict, spec: StorySpec, video: Path) -> None:
         lines.append("**Instagram:** " + ("published" if r["instagram"]["ok"] else f"failed: {r['instagram']['error']}"))
     if settings.instagram_mode != "auto" or "instagram" not in r:
         lines.append("**Instagram:** save the video below, post it as a Reel and add the sound")
+    if job.get("image_errors"):
+        lines.append("**Images skipped:** " + ", ".join(f"`{k}` ({v})" for k, v in job["image_errors"].items()))
     if not settings.publish_enabled or job["dry_run"]:
         lines.insert(0, "_Publishing is off; nothing was uploaded._")
 
@@ -102,6 +112,9 @@ def _notify(job: dict, spec: StorySpec, video: Path) -> None:
             {"name": "Suggested sound", "value": spec.suggested_sound or "(none)", "inline": False},
             {"name": "Sources", "value": "\n".join(spec.sources)[:1000], "inline": False},
             {"name": "Length", "value": f"{job['render']['duration']} s", "inline": True},
+            *([{"name": "Image credits", "inline": False, "value": "\n".join(
+                f"{i.credit} ({i.license or 'licence not stated'}): {i.url}" for i in spec.images)[:1000]}]
+              if spec.images else []),
         ],
     }
     content = "\n".join(lines) + f"\n\n**Caption** (copy):\n```\n{spec.full_caption()[:1500]}\n```"

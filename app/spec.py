@@ -4,13 +4,20 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+class ImageRef(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9_-]{1,24}$")
+    url: str = Field(pattern=r"^https://", description="Direct link to a JPEG/PNG/WebP file")
+    credit: str = Field(max_length=48, description="Shown on screen, e.g. 'Image: NASA' or 'Photo: J. Smith / CC BY 4.0'")
+    license: str = Field(default="", max_length=60, description="e.g. 'Apple Newsroom press image', 'CC BY-SA 4.0', 'Public domain (NASA)'")
 
 
 class HookBeat(BaseModel):
     type: Literal["hook"] = "hook"
     # Wrap a word in *asterisks* to highlight it in the accent colour.
     text: str = Field(max_length=90)
+    image: str | None = Field(default=None, description="Optional image id shown as a darkened full-screen background")
     duration: float | None = None
 
 
@@ -18,6 +25,22 @@ class TitleBeat(BaseModel):
     type: Literal["title"] = "title"
     kicker: str = Field(default="NEW", max_length=24)
     text: str = Field(max_length=70)
+    image: str | None = Field(default=None, description="Optional image id shown as a card above the title")
+    duration: float | None = None
+
+
+class ImageBeat(BaseModel):
+    type: Literal["image"] = "image"
+    image: str = Field(description="image id")
+    caption: str = Field(default="", max_length=60)
+    duration: float | None = None
+
+
+class FactBeat(BaseModel):
+    type: Literal["fact"] = "fact"
+    kicker: str = Field(default="WHY IT MATTERS", max_length=24)
+    # One punchy sentence; *highlight* one word.
+    text: str = Field(max_length=110)
     duration: float | None = None
 
 
@@ -75,7 +98,7 @@ class CtaBeat(BaseModel):
 
 
 Beat = Annotated[
-    Union[HookBeat, TitleBeat, StatBeat, SpecListBeat, PriceBeat, CompareBeat, CtaBeat],
+    Union[HookBeat, TitleBeat, ImageBeat, FactBeat, StatBeat, SpecListBeat, PriceBeat, CompareBeat, CtaBeat],
     Field(discriminator="type"),
 ]
 
@@ -83,13 +106,23 @@ PALETTES = ("neon_dark", "sunset", "mint", "mono", "electric")
 
 
 class StorySpec(BaseModel):
+    """Beat types: hook, title, image, fact, stat, spec_list, compare, price, cta.
+    Images are downloaded at render time; a beat whose image fails to load is shown without it
+    (an `image` beat is skipped)."""
+
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,80}$")
     topic_key: str = Field(
         default="",
         description="Short stable key for the story (e.g. 'samsung-trifold-launch') used to avoid repeats.",
     )
+    category: str = Field(
+        default="",
+        max_length=24,
+        description="gadgets | space | ai | science | robotics | transport | energy | computing | gaming | internet",
+    )
     template: str = "gadget_reveal"
     palette: Literal["neon_dark", "sunset", "mint", "mono", "electric"] = "neon_dark"
+    images: list[ImageRef] = Field(default_factory=list, max_length=4)
     beats: list[Beat] = Field(min_length=2, max_length=9)
     caption: str = Field(max_length=2000)
     hashtags: list[str] = Field(default_factory=list, max_length=8)
@@ -110,6 +143,15 @@ class StorySpec(BaseModel):
                 raise ValueError(f"invalid hashtag: {tag!r}")
             out.append(tag)
         return out
+
+    @model_validator(mode="after")
+    def _image_refs(self) -> "StorySpec":
+        ids = {i.id for i in self.images}
+        for b in self.beats:
+            ref = getattr(b, "image", None)
+            if ref and ref not in ids:
+                raise ValueError(f"beat {b.type!r} references unknown image id {ref!r}")
+        return self
 
     def full_caption(self) -> str:
         tags = " ".join(self.hashtags)

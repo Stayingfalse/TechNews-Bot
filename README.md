@@ -22,6 +22,7 @@ add the suggested trending sound and post. About a minute a day.
 ```bash
 pip install -r requirements.txt          # also needs ffmpeg
 python render_cli.py examples/sample_spec.json out/sample.mp4
+python render_cli.py examples/sample_news_images.json out/webb.mp4   # with images
 
 API_TOKEN=dev DATA_DIR=./data uvicorn app.main:app --reload
 curl -X POST localhost:8000/jobs -H 'Authorization: Bearer dev' \
@@ -30,8 +31,10 @@ curl -X POST localhost:8000/jobs -H 'Authorization: Bearer dev' \
 
 ## Story spec
 
-See `app/spec.py` (or `GET /schema`). Beat types: `hook`, `title`, `stat`, `spec_list`,
-`compare`, `price`, `cta`. Palettes: `neon_dark`, `sunset`, `mint`, `mono`, `electric`.
+See `app/spec.py` (or `GET /schema`). Beat types: `hook`, `title`, `image`, `fact`, `stat`,
+`spec_list`, `compare`, `price`, `cta`. Optional `images` (url + on-screen credit + licence) are
+downloaded at render time and used as a hook background, a card above the title, or a full photo
+beat; any that fail to download are skipped and reported in Discord. Palettes: `neon_dark`, `sunset`, `mint`, `mono`, `electric`.
 Wrap a word in `*asterisks*` in hook/cta text to highlight it.
 
 ## API
