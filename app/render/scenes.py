@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageDraw
 
 from .draw import (
     blit,
@@ -14,35 +15,39 @@ from .draw import (
     ease_out_cubic,
     ease_out_expo,
     fit_size,
-    glow,
     lerp,
     prog,
     rounded_rect,
     text_sprite,
     wrap_words,
 )
-from .theme import H, SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W, W, Palette, font
+from .emoji import clusters, emoji_sprite
+from .theme import SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_TOP, SAFE_W, Palette, font
 
 CENTER_Y = (SAFE_TOP + SAFE_BOTTOM) // 2
+CLUE_Y = 840  # centre of the clue area
+TIMER_Y = 1300  # countdown ring; the answer card replaces it on reveal
+WRONG = (255, 77, 94)
 
 
 class Scene:
     default_duration = 3.0
 
-    def __init__(self, beat, pal: Palette, imgs: dict | None = None):
-        self.beat = beat
+    def __init__(self, item, pal: Palette, index: int = 0, total: int = 0, seed: int = 0):
+        self.item = item
         self.pal = pal
-        self.imgs = imgs or {}  # image id -> (PIL image, credit)
-        self.duration = beat.duration or self.default_duration
+        self.index, self.total, self.seed = index, total, seed
+        self.duration = self.default_duration
 
     def render(self, fg: Image.Image, t: float) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def backdrop(self, frame: Image.Image, t: float, alpha: float) -> None:
-        """Optional layer drawn straight onto the frame, under the glowing foreground."""
-
     def sfx(self) -> list[tuple[float, str]]:
         return [(0.0, "whoosh")]
+
+    def pulses(self) -> list[float]:
+        """Moments (local time) when the background flashes."""
+        return [0.0]
 
 
 # --------------------------------------------------------------------------- helpers
@@ -84,446 +89,574 @@ def _pill(text: str, pal: Palette, size: int = 34, fill=None, color=None, pad_x=
     return bg
 
 
-def cover(img: Image.Image, w: int, h: int) -> Image.Image:
-    """Scale to fill w×h and centre-crop."""
-    k = max(w / img.width, h / img.height)
-    r = img.resize((max(w, round(img.width * k)), max(h, round(img.height * k))), Image.LANCZOS)
-    x, y = (r.width - w) // 2, (r.height - h) // 2
-    return r.crop((x, y, x + w, y + h))
+def _lines(text: str, weight: str, size: int, max_w: int, color) -> list[Image.Image]:
+    return [text_sprite(" ".join(w.replace("*", "") for w in ln), weight, size, color)
+            for ln in wrap_words(text, weight, size, max_w)]
 
 
-class KenBurns:
-    """Slow zoom-and-pan over a photo, optionally as a rounded card."""
-
-    def __init__(self, img: Image.Image, w: int, h: int, zoom=1.14, pan=(0.025, -0.02), radius=0, border=True):
-        self.w, self.h, self.zoom, self.pan = w, h, zoom, pan
-        self.big = cover(img, int(w * zoom), int(h * zoom))
-        self.mask = None
-        self.border = None
-        if radius:
-            self.mask = Image.new("L", (w, h), 0)
-            ImageDraw.Draw(self.mask).rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=255)
-            if border:
-                self.border = rounded_rect(w, h, radius, (0, 0, 0, 0), (255, 255, 255, 70), 3)
-
-    def frame(self, p: float) -> Image.Image:
-        p = clamp(p)
-        f = lerp(1.0, 1 / self.zoom, ease_in_out_cubic(p) * 0.6 + p * 0.4)
-        ww, wh = self.big.width * f, self.big.height * f
-        cx = self.big.width / 2 + self.pan[0] * self.big.width * (p - 0.5)
-        cy = self.big.height / 2 + self.pan[1] * self.big.height * (p - 0.5)
-        x0 = min(max(0.0, cx - ww / 2), self.big.width - ww)
-        y0 = min(max(0.0, cy - wh / 2), self.big.height - wh)
-        out = self.big.resize((self.w, self.h), Image.BILINEAR, box=(x0, y0, x0 + ww, y0 + wh)).convert("RGBA")
-        if self.mask:
-            out.putalpha(self.mask)
-        if self.border:
-            out.alpha_composite(self.border)
-        return out
+def _card(w: int, h: int, label: Image.Image | None, fill, outline=None, radius=30) -> Image.Image:
+    c = rounded_rect(w, h, radius, fill, outline, 3 if outline else 0).copy()
+    if label is not None:
+        c.alpha_composite(label, ((w - label.width) // 2, (h - label.height) // 2 + 2))
+    return c
 
 
-def _credit(text: str, pal: Palette):
-    return text_sprite(text, "medium", 26, pal.muted) if text else None
+def _words_in(fg, words, t, start, step=0.05, rise=36, size=0, pal=None):
+    for i, (sprite, cx, cy, hl) in enumerate(words):
+        p = prog(t, start + step * i, 0.32)
+        if p <= 0:
+            continue
+        blit(fg, sprite, cx, cy + (1 - ease_out_cubic(p)) * rise, alpha=ease_out_cubic(p))
+        if hl and pal:
+            up = ease_out_cubic(prog(t, start + 0.25 + step * i, 0.4))
+            if up > 0:
+                bar = rounded_rect(max(int(sprite.width * up), 8), 12, 6, pal.accent + (255,))
+                blit(fg, bar, cx - sprite.width / 2, cy + size * 0.6, anchor="lm")
 
 
-def _parse_number(value: str):
-    m = re.fullmatch(r"(\D*?)(\d[\d,]*(?:\.\d+)?)(.*)", value.strip())
-    if not m:
-        return None
-    prefix, num, suffix = m.groups()
-    decimals = len(num.split(".")[1]) if "." in num else 0
-    return prefix, float(num.replace(",", "")), suffix, decimals, "," in num
+class Confetti:
+    """A deterministic burst of paper bits from (x, y)."""
+
+    def __init__(self, pal: Palette, seed: int, x: float, y: float, n: int = 46):
+        rng = random.Random(seed)
+        cols = [pal.accent, pal.accent2, pal.text, (255, 214, 64)]
+        self.x, self.y = x, y
+        self.bits = []
+        for _ in range(n):
+            a = rng.uniform(-math.pi * 0.95, -math.pi * 0.05)
+            v = rng.uniform(700, 1500)
+            self.bits.append((math.cos(a) * v, math.sin(a) * v, rng.uniform(0, 6.28), rng.uniform(-9, 9),
+                              rng.uniform(10, 18), rng.choice(cols)))
+
+    def draw(self, fg: Image.Image, t: float) -> None:
+        if t <= 0 or t > 1.6:
+            return
+        d = ImageDraw.Draw(fg)
+        fade = clamp((1.6 - t) / 0.5)
+        drag = (1 - math.exp(-2.2 * t)) / 2.2
+        for vx, vy, rot, spin, s, col in self.bits:
+            x = self.x + vx * drag
+            y = self.y + vy * drag + 900 * t * t
+            r = rot + spin * t
+            hw, hh = s, s * 0.45 * abs(math.cos(r * 1.7)) + 2
+            c, sn = math.cos(r), math.sin(r)
+            pts = [(x + px * c - py * sn, y + px * sn + py * c) for px, py in ((-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh))]
+            d.polygon(pts, fill=col + (int(255 * fade),))
 
 
-def _fmt(n: float, decimals: int, commas: bool) -> str:
-    return f"{n:,.{decimals}f}" if commas else f"{n:.{decimals}f}"
+# --------------------------------------------------------------------------- intro / outro
 
-
-# --------------------------------------------------------------------------- scenes
-
-def _shade(pal: Palette) -> Image.Image:
-    """Darkening overlay so text stays readable over a photo."""
-    import numpy as np
-
-    y = np.linspace(0, 1, H, dtype=np.float32)[:, None]
-    a = 168 + 60 * (np.abs(y - 0.45) * 2) ** 1.5
-    a = np.broadcast_to(np.clip(a, 0, 235), (H, W)).astype(np.uint8)
-    img = Image.new("RGBA", (W, H), pal.bg + (0,))
-    img.putalpha(Image.fromarray(a, "L"))
-    return img
-
-
-class HookScene(Scene):
+class IntroScene(Scene):
     default_duration = 2.8
 
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        clean = beat.text.replace("*", "")
-        self.size = fit_size(clean, "black", 132, SAFE_W, 4, min_size=72)
-        self.words = _word_layout(beat.text, "black", self.size, SAFE_W, pal, CENTER_Y - 40)
-        self.kb = None
-        if beat.image and beat.image in self.imgs:
-            img, credit = self.imgs[beat.image]
-            self.kb = KenBurns(img, W, H, zoom=1.18, pan=(0.04, 0.03))
-            self.shade = _shade(pal)
-            self.credit = _credit(credit, pal)
-
-    def backdrop(self, frame, t, alpha):
-        if not self.kb:
-            return
-        a = ease_out_cubic(prog(t, 0.0, 0.4)) * alpha
-        blit(frame, self.kb.frame(t / self.duration), 0, 0, anchor="lt", alpha=a)
-        blit(frame, self.shade, 0, 0, anchor="lt", alpha=a)
-        if self.credit:
-            blit(frame, self.credit, SAFE_RIGHT, SAFE_BOTTOM - 40, anchor="rt", alpha=a * 0.9)
+    def __init__(self, spec, pal, **kw):
+        super().__init__(spec, pal, **kw)
+        clean = spec.title.replace("*", "")
+        self.size = fit_size(clean, "black", 128, SAFE_W, 4, min_size=72)
+        self.words = _word_layout(spec.title, "black", self.size, SAFE_W, pal, CENTER_Y - 60)
+        n_lines = len({round(cy) for _, _, cy, _ in self.words})
+        self.block_top = CENTER_Y - 60 - n_lines * self.size * 1.08 / 2
+        self.block_bottom = CENTER_Y - 60 + n_lines * self.size * 1.08 / 2
+        self.theme = _pill(spec.theme.upper(), pal, 34, fill=pal.accent2) if spec.theme else None
+        n = len(spec.rounds)
+        label = text_sprite(f"{n} ROUNDS", "bold", 36, pal.text, 4)
+        self.info = _card(label.width + 60, 77, label, (255, 255, 255, 26), (255, 255, 255, 80), 38)
+        self.sub = text_sprite(spec.subtitle, "semi", 46, pal.muted) if spec.subtitle else None
 
     def render(self, fg, t):
+        if self.theme:
+            p = ease_out_back(prog(t, 0.0, 0.45))
+            blit(fg, self.theme, SAFE_CX, self.block_top - 90, scale=p, alpha=clamp(p))
         for i, (sprite, cx, cy, hl) in enumerate(self.words):
             p = prog(t, 0.12 + 0.085 * i, 0.38)
             if p <= 0:
                 continue
             scale = lerp(0.35, 1.0, ease_out_back(p, 2.2))
-            blit(fg, sprite, cx, cy + (1 - ease_out_cubic(p)) * 50, scale=scale, alpha=ease_out_cubic(p))
-            if hl:
-                up = ease_out_cubic(prog(t, 0.35 + 0.085 * i, 0.4))
-                if up > 0:
-                    bw = int(sprite.width * up)
-                    bar = rounded_rect(max(bw, 8), 14, 7, self.pal.accent + (255,))
-                    blit(fg, bar, cx - sprite.width / 2, cy + self.size * 0.62, anchor="lm")
-
-    def sfx(self):
-        return [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))]
-
-
-class TitleScene(Scene):
-    default_duration = 2.8
-
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        self.kicker = _pill(beat.kicker.upper(), pal)
-        self.size = fit_size(beat.text, "black", 118, SAFE_W, 3, min_size=64)
-        lines = wrap_words(beat.text, "black", self.size, SAFE_W)
-        self.lines = [text_sprite(" ".join(w.replace("*", "") for w in ln), "black", self.size, pal.text) for ln in lines]
-        self.line_h = int(self.size * 1.06)
-        self.card = None
-        self.card_h = 0
-        if beat.image and beat.image in self.imgs:
-            img, credit = self.imgs[beat.image]
-            self.card_h = 500
-            self.card = KenBurns(img, SAFE_W, self.card_h, zoom=1.1, radius=34)
-            self.credit = _credit(credit, pal)
-            self.default_duration = 3.4
-            self.duration = beat.duration or self.default_duration
-        img_block = self.card_h + 70 if self.card else 0
-        block = img_block + self.kicker.height + 40 + self.line_h * len(self.lines)
-        self.top = CENTER_Y - block // 2 - 30
-        self.delay = 0.3 if self.card else 0.0
-
-    def render(self, fg, t):
-        top = self.top
-        if self.card:
-            pc = ease_out_cubic(prog(t, 0.0, 0.5))
-            card = self.card.frame(t / self.duration)
-            blit(fg, card, SAFE_CX, top + self.card_h / 2 + (1 - pc) * 60, scale=lerp(0.94, 1, pc), alpha=pc)
-            if self.credit:
-                blit(fg, self.credit, SAFE_RIGHT, top + self.card_h + 14, anchor="rt", alpha=pc * 0.9)
-            top += self.card_h + 70
-        t = t - self.delay
-        p = ease_out_cubic(prog(t, 0.05, 0.45))
-        blit(fg, self.kicker, lerp(-self.kicker.width, SAFE_LEFT, p), top, anchor="lt", alpha=p)
-        y0 = top + self.kicker.height + 40
-        for i, s in enumerate(self.lines):
-            e = ease_out_expo(prog(t, 0.25 + 0.12 * i, 0.7))
-            if e <= 0:
-                continue
-            off = int((1 - e) * s.height)
-            if off < s.height:
-                fg.alpha_composite(s.crop((0, 0, s.width, s.height - off)), (SAFE_LEFT, y0 + i * self.line_h + off))
-        g = ease_in_out_cubic(prog(t, 0.6, 0.8))
-        if g > 0:
-            bar = rounded_rect(max(8, int(SAFE_W * 0.42 * g)), 10, 5, self.pal.accent2 + (255,))
-            blit(fg, bar, SAFE_LEFT, y0 + len(self.lines) * self.line_h + 30, anchor="lt")
-
-    def sfx(self):
-        return [(0.05, "whoosh"), (0.3, "impact")]
-
-
-class StatScene(Scene):
-    default_duration = 3.0
-    RING_R = 300
-
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        self.parsed = _parse_number(beat.value) if beat.count_up else None
-        self.vsize = fit_size(beat.value, "black", 210, self.RING_R * 2 - 120, 1, min_size=90)
-        self.label = text_sprite(beat.label.upper(), "bold", 44, pal.muted, 4)
-        if self.label.width > SAFE_W:
-            self.label = text_sprite(beat.label.upper(), "bold", int(44 * SAFE_W / self.label.width), pal.muted, 3)
-        self.cy = CENTER_Y - 80
-
-    def _value_text(self, x: float) -> str:
-        if not self.parsed:
-            return self.beat.value
-        prefix, n, suffix, dec, commas = self.parsed
-        return f"{prefix}{_fmt(n * x, dec, commas)}{suffix}"
-
-    def render(self, fg, t):
-        appear = ease_out_back(prog(t, 0.0, 0.5), 1.6)
-        count = ease_out_expo(prog(t, 0.2, 1.4))
-        r = self.RING_R
-        size = r * 2 + 60
-        ring = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        d = ImageDraw.Draw(ring)
-        box = (30, 30, size - 30, size - 30)
-        d.ellipse(box, outline=self.pal.text + (34,), width=16)
-        if count > 0:
-            d.arc(box, -90, -90 + 360 * count, fill=self.pal.accent + (255,), width=16)
-            a = math.radians(-90 + 360 * count)
-            hx, hy = size / 2 + (r) * math.cos(a), size / 2 + (r) * math.sin(a)
-            d.ellipse((hx - 16, hy - 16, hx + 16, hy + 16), fill=self.pal.accent2 + (255,))
-        ring.alpha_composite(glow(ring, 24, 1.0, 2))
-        blit(fg, ring, SAFE_CX, self.cy, scale=lerp(0.6, 1.0, appear), alpha=clamp(appear))
-
-        val = text_sprite(self._value_text(count if self.parsed else 1), "black", self.vsize, self.pal.text)
-        pv = ease_out_cubic(prog(t, 0.1, 0.4))
-        blit(fg, val, SAFE_CX, self.cy - 6, scale=lerp(0.8, 1.0, pv), alpha=pv)
-
-        pl = ease_out_cubic(prog(t, 0.5, 0.5))
-        blit(fg, self.label, SAFE_CX, self.cy + r + 110 + (1 - pl) * 30, alpha=pl)
-
-    def sfx(self):
-        ticks = [(0.2 + 1.4 * (1 - (1 - k / 12) ** 0.3), "tick") for k in range(12)]
-        return [(0.0, "whoosh")] + ticks + [(1.3, "ding")]
-
-
-class SpecListScene(Scene):
-    CARD_H = 128
-    GAP = 26
-
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        n = len(beat.items)
-        self.default_duration = 1.3 + 0.45 * n
-        self.duration = beat.duration or self.default_duration
-        self.title = text_sprite(beat.title, "black", 76, pal.text)
-        tsize = min(fit_size(it, "semi", 54, SAFE_W - 170, 1, min_size=34) for it in beat.items)
-        self.items = [text_sprite(it, "semi", tsize, pal.text) for it in beat.items]
-        self.nums = [text_sprite(f"{i + 1:02d}", "black", 40, pal.accent) for i in range(n)]
-        total = self.title.height + 60 + n * self.CARD_H + (n - 1) * self.GAP
-        self.top = CENTER_Y - total // 2 - 20
-        card = rounded_rect(SAFE_W, self.CARD_H, 26, (255, 255, 255, 20), (255, 255, 255, 46), 2).copy()
-        ImageDraw.Draw(card).rounded_rectangle((0, 0, 9, self.CARD_H - 1), radius=4, fill=pal.accent + (255,))
-        self.card = card
-
-    def render(self, fg, t):
-        p = ease_out_cubic(prog(t, 0.0, 0.45))
-        blit(fg, self.title, SAFE_LEFT, self.top + (1 - p) * 40, anchor="lt", alpha=p)
-        y = self.top + self.title.height + 60
-        for i, (num, txt) in enumerate(zip(self.nums, self.items)):
-            e = ease_out_expo(prog(t, 0.35 + 0.3 * i, 0.6))
-            if e > 0:
-                x = SAFE_LEFT + (1 - e) * 420
-                blit(fg, self.card, x, y, anchor="lt", alpha=e)
-                cy = y + self.CARD_H / 2
-                blit(fg, num, x + 44, cy, anchor="lm", alpha=e)
-                blit(fg, txt, x + 128, cy, anchor="lm", alpha=e)
-            y += self.CARD_H + self.GAP
-
-    def sfx(self):
-        return [(0.0, "whoosh")] + [(0.35 + 0.3 * i, "swipe") for i in range(len(self.items))]
-
-
-class PriceScene(Scene):
-    default_duration = 2.8
-
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        self.kicker = text_sprite("PRICE", "bold", 40, pal.muted, 10)
-        self.vsize = fit_size(beat.value, "black", 240, SAFE_W, 1, min_size=100)
-        self.value = text_sprite(beat.value, "black", self.vsize, pal.text)
-        self.sub = text_sprite(beat.subtext, "semi", 46, pal.accent2) if beat.subtext else None
-        self.cy = CENTER_Y - 60
-
-    def _shine(self, s: Image.Image, x: float) -> Image.Image:
-        band = Image.new("L", s.size, 0)
-        d = ImageDraw.Draw(band)
-        h = s.height
-        for k, a in ((70, 70), (40, 160), (18, 230)):
-            d.polygon([(x - k, 0), (x + k, 0), (x + k - h * 0.4, h), (x - k - h * 0.4, h)], fill=a)
-        mask = ImageChops.multiply(band, s.getchannel("A"))
-        tint = Image.new("RGBA", s.size, self.pal.accent2 + (0,))
-        tint.putalpha(mask)
-        out = s.copy()
-        out.alpha_composite(tint)
-        return out
-
-    def render(self, fg, t):
-        pk = ease_out_cubic(prog(t, 0.0, 0.4))
-        blit(fg, self.kicker, SAFE_CX, self.cy - self.vsize * 0.75, alpha=pk)
-        p = prog(t, 0.15, 0.55)
-        s = self.value
-        sp = prog(t, 0.85, 0.7)
-        if 0 < sp < 1:
-            s = self._shine(s, lerp(-150, s.width + 250, ease_in_out_cubic(sp)))
-        blit(fg, s, SAFE_CX, self.cy, scale=lerp(1.8, 1.0, ease_out_cubic(p)), alpha=clamp(p * 2.5))
+            wob = 1 + 0.03 * math.sin(t * 5 + i) if hl else 1
+            blit(fg, sprite, cx, cy + (1 - ease_out_cubic(p)) * 50, scale=scale * wob, alpha=ease_out_cubic(p))
+        y = self.block_bottom + 70
         if self.sub:
-            ps = ease_out_cubic(prog(t, 0.7, 0.5))
-            blit(fg, self.sub, SAFE_CX, self.cy + self.vsize * 0.72 + (1 - ps) * 30, alpha=ps)
+            ps = ease_out_cubic(prog(t, 0.8, 0.4))
+            blit(fg, self.sub, SAFE_CX, y + (1 - ps) * 20, anchor="mt", alpha=ps)
+            y += 100
+        pi = ease_out_back(prog(t, 1.0, 0.45))
+        blit(fg, self.info, SAFE_CX, y + 40, scale=pi, alpha=clamp(pi))
 
     def sfx(self):
-        return [(0.15, "impact"), (0.85, "shimmer")]
+        return [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))] + [(1.0, "swipe")]
 
 
-class CompareScene(Scene):
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        self.default_duration = 1.6 + 0.6 * len(beat.rows)
-        self.duration = beat.duration or self.default_duration
-        self.a = _pill(beat.a, pal, 40, tracking=1)
-        self.b = _pill(beat.b, pal, 40, fill=pal.accent2, tracking=1)
-        self.vs = text_sprite("VS", "black", 56, pal.text)
-        col_w = SAFE_W // 2 - 40
-        self.rows = []
-        for label, av, bv in beat.rows:
-            vs = min(fit_size(av, "black", 76, col_w, 1, 40), fit_size(bv, "black", 76, col_w, 1, 40))
-            self.rows.append(
-                (
-                    text_sprite(label.upper(), "bold", 34, pal.muted, 4),
-                    text_sprite(av, "black", vs, pal.text),
-                    text_sprite(bv, "black", vs, pal.text),
-                )
-            )
-        self.row_h = 210
-        total = 140 + len(self.rows) * self.row_h
-        self.top = CENTER_Y - total // 2
+class OutroScene(Scene):
+    default_duration = 3.4
 
-    def render(self, fg, t):
-        lx, rx = SAFE_LEFT + SAFE_W * 0.25, SAFE_LEFT + SAFE_W * 0.75
-        p = ease_out_back(prog(t, 0.0, 0.5))
-        y = self.top + 50
-        blit(fg, self.a, lerp(-300, lx, p), y, alpha=clamp(p))
-        blit(fg, self.b, lerp(W + 300, rx, p), y, alpha=clamp(p))
-        pv = ease_out_back(prog(t, 0.3, 0.4), 3)
-        blit(fg, self.vs, SAFE_CX, y, scale=pv, alpha=clamp(pv))
-        y += 150
-        for i, (lab, av, bv) in enumerate(self.rows):
-            e = ease_out_cubic(prog(t, 0.6 + 0.45 * i, 0.5))
-            if e > 0:
-                line = rounded_rect(SAFE_W, 3, 1, self.pal.text + (40,))
-                blit(fg, line, SAFE_LEFT, y, anchor="lt", alpha=e)
-                blit(fg, lab, SAFE_CX, y + 50, alpha=e)
-                blit(fg, av, lx, y + 130 + (1 - e) * 30, alpha=e)
-                blit(fg, bv, rx, y + 130 + (1 - e) * 30, alpha=e)
-            y += self.row_h
-
-    def sfx(self):
-        return [(0.0, "whoosh"), (0.3, "impact")] + [(0.6 + 0.45 * i, "pop") for i in range(len(self.rows))]
-
-
-class CtaScene(Scene):
-    default_duration = 3.0
-
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        clean = beat.text.replace("*", "")
-        self.size = fit_size(clean, "black", 110, SAFE_W, 3, min_size=64)
-        self.words = _word_layout(beat.text, "black", self.size, SAFE_W, pal, CENTER_Y - 120)
-        self.follow = _pill(beat.follow.upper(), pal, 38, fill=pal.accent2, tracking=2)
-        self.n_lines = len({round(cy) for _, _, cy, _ in self.words})
+    def __init__(self, spec, pal, **kw):
+        super().__init__(spec, pal, **kw)
+        clean = spec.outro.replace("*", "")
+        self.size = fit_size(clean, "black", 112, SAFE_W, 3, min_size=64)
+        self.words = _word_layout(spec.outro, "black", self.size, SAFE_W, pal, CENTER_Y - 200)
+        n_lines = len({round(cy) for _, _, cy, _ in self.words})
+        self.chips_y = CENTER_Y - 200 + self.size * 1.08 * n_lines / 2 + 110
+        n = len(spec.rounds)
+        cw = min(140, (SAFE_W - 20 * n) // (n + 1))
+        self.chips = [_card(cw, cw, text_sprite(str(k), "black", int(cw * 0.5), pal.text),
+                            (255, 255, 255, 24), (255, 255, 255, 70), 24) for k in range(n + 1)]
+        self.chip_w = cw
+        self.comment = text_sprite("Comment your score", "semi", 50, pal.muted)
+        self.follow = _pill(spec.follow.upper(), pal, 38, fill=pal.accent2, tracking=2)
+        self.confetti = Confetti(pal, self.seed + 99, SAFE_CX, self.chips_y)
 
     def render(self, fg, t):
         for i, (sprite, cx, cy, _) in enumerate(self.words):
             p = prog(t, 0.05 + 0.07 * i, 0.35)
             if p > 0:
                 blit(fg, sprite, cx, cy, scale=lerp(0.5, 1, ease_out_back(p, 2)), alpha=ease_out_cubic(p))
-        pf = prog(t, 0.6, 0.5)
+        n = len(self.chips)
+        gap = (SAFE_W - n * self.chip_w) / max(1, n - 1)
+        for k, chip in enumerate(self.chips):
+            p = ease_out_back(prog(t, 0.5 + 0.08 * k, 0.4), 2.4)
+            x = SAFE_LEFT + k * (self.chip_w + gap) + self.chip_w / 2
+            bob = 8 * math.sin(t * 4 + k * 0.9) * clamp(t - 1.2)
+            blit(fg, chip, x, self.chips_y + bob, scale=p, alpha=clamp(p))
+        pc = ease_out_cubic(prog(t, 0.9, 0.4))
+        blit(fg, self.comment, SAFE_CX, self.chips_y + self.chip_w / 2 + 40 + (1 - pc) * 20, anchor="mt", alpha=pc)
+        pf = prog(t, 1.2, 0.5)
         if pf > 0:
-            pulse = 1 + 0.045 * math.sin((t - 1.1) * 6) * clamp((t - 1.1) * 2)
-            y = CENTER_Y - 120 + self.size * 1.08 * self.n_lines / 2 + 140
+            pulse = 1 + 0.045 * math.sin((t - 1.7) * 6) * clamp((t - 1.7) * 2)
+            y = self.chips_y + self.chip_w / 2 + 230
             blit(fg, self.follow, SAFE_CX, y, scale=ease_out_back(pf) * pulse, alpha=clamp(pf * 2))
+        self.confetti.draw(fg, t - 0.5)
 
     def sfx(self):
-        return [(0.0, "whoosh"), (0.6, "ding")]
+        return [(0.0, "whoosh"), (0.5, "chime")] + [(0.5 + 0.08 * k, "pop") for k in range(len(self.chips))] + [(1.2, "ding")]
 
 
-class ImageScene(Scene):
-    default_duration = 3.2
+# --------------------------------------------------------------------------- rounds
 
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        img, credit = self.imgs[beat.image]
-        self.cap_lines = []
-        cap_h = 0
-        if beat.caption:
-            size = fit_size(beat.caption, "bold", 64, SAFE_W, 2, min_size=40)
-            self.cap_lines = [
-                text_sprite(" ".join(w.replace("*", "") for w in ln), "bold", size, pal.text)
-                for ln in wrap_words(beat.caption, "bold", size, SAFE_W)
-            ]
-            cap_h = 50 + len(self.cap_lines) * int(size * 1.15)
-            self.cap_step = int(size * 1.15)
-        self.card_h = 880 if not self.cap_lines else 760
-        self.card = KenBurns(img, SAFE_W, self.card_h, zoom=1.16, pan=(0.03, -0.03), radius=40)
-        self.credit = _credit(credit, pal)
-        self.top = CENTER_Y - (self.card_h + cap_h) // 2 - 20
+class RoundScene(Scene):
+    """Header + clue, a countdown for `think` seconds, then the reveal."""
+
+    CLUE_IN = 0.8  # countdown starts once the clue is mostly on screen
+    heading = "Guess it"
+
+    def __init__(self, rnd, pal, **kw):
+        super().__init__(rnd, pal, **kw)
+        self.reveal_at = self.CLUE_IN + rnd.think
+        self.duration = self.reveal_at + rnd.reveal
+        self.round_label = text_sprite(f"ROUND {self.index} / {self.total}", "bold", 32, pal.muted, 5)
+        hsize = fit_size(self.heading.upper(), "black", 78, SAFE_W, 1, min_size=48)
+        self.head = text_sprite(self.heading.upper(), "black", hsize, pal.text, 2)
+        self.ring = {}
+        self.confetti = Confetti(pal, self.seed + 7 * self.index, SAFE_CX, TIMER_Y)
+
+    # -- shared pieces
+    def _header(self, fg, t):
+        p = ease_out_cubic(prog(t, 0.0, 0.4))
+        blit(fg, self.round_label, SAFE_CX, SAFE_TOP + 30 + (1 - p) * 20, anchor="mt", alpha=p)
+        ph = ease_out_back(prog(t, 0.08, 0.45), 1.8)
+        blit(fg, self.head, SAFE_CX, SAFE_TOP + 120, anchor="mm", scale=lerp(0.6, 1, ph), alpha=clamp(ph))
+
+    def _timer(self, fg, t):
+        think = self.item.think
+        el = t - self.CLUE_IN
+        appear = ease_out_back(prog(t, self.CLUE_IN - 0.3, 0.35))
+        gone = ease_out_cubic(prog(t, self.reveal_at, 0.25))
+        if appear <= 0 or gone >= 1:
+            return
+        left = clamp(1 - el / think)
+        secs = max(0, math.ceil(think - el - 1e-6)) if el > 0 else math.ceil(think)
+        urgent = el > think - 3
+        r = 92
+        size = r * 2 + 40
+        key = (round(left * 240), urgent)
+        ring = self.ring.get(key)
+        if ring is None:
+            ring = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            d = ImageDraw.Draw(ring)
+            box = (20, 20, size - 20, size - 20)
+            d.ellipse(box, fill=(0, 0, 0, 90), outline=self.pal.text + (40,), width=14)
+            col = WRONG if urgent else self.pal.accent
+            if left > 0:
+                d.arc(box, -90, -90 + 360 * left, fill=col + (255,), width=14)
+            self.ring[key] = ring
+        num = text_sprite(str(secs), "black", 96, WRONG if urgent else self.pal.text)
+        frac = (think - el) % 1 if el > 0 else 0
+        beat = 1 + (0.12 if urgent else 0.06) * ease_out_cubic(clamp((frac - 0.75) / 0.25)) if el > 0 else 1
+        sc = appear * (1 - gone) * beat
+        blit(fg, ring, SAFE_CX, TIMER_Y, scale=sc, alpha=clamp(appear) * (1 - gone))
+        blit(fg, num, SAFE_CX, TIMER_Y - 4, scale=sc, alpha=clamp(appear) * (1 - gone))
+
+    def _answer_card(self, answer: str, note: str = ""):
+        size = fit_size(answer, "black", 84, SAFE_W - 80, 2, min_size=48)
+        lines = _lines(answer, "black", size, SAFE_W - 80, self.pal.on_accent)
+        lh = int(size * 1.08)
+        h = 70 + lh * len(lines)
+        card = rounded_rect(SAFE_W, h, 36, self.pal.accent + (255,)).copy()
+        y = 35
+        for ln in lines:
+            card.alpha_composite(ln, ((SAFE_W - ln.width) // 2, y))
+            y += lh
+        note_s = None
+        if note:
+            ns = fit_size(note, "semi", 44, SAFE_W, 1, min_size=30)
+            note_s = text_sprite(note, "semi", ns, self.pal.text)
+        return card, note_s
+
+    def _draw_answer(self, fg, t, card, note_s, y=TIMER_Y):
+        p = prog(t, self.reveal_at, 0.45)
+        if p <= 0:
+            return
+        e = ease_out_back(p, 2.0)
+        blit(fg, card, SAFE_CX, y, scale=lerp(0.4, 1, e), alpha=clamp(p * 3))
+        if note_s:
+            pn = ease_out_cubic(prog(t, self.reveal_at + 0.3, 0.4))
+            blit(fg, note_s, SAFE_CX, y + card.height / 2 + 26 + (1 - pn) * 20, anchor="mt", alpha=pn)
+
+    def revealed(self, t) -> float:
+        return ease_out_cubic(prog(t, self.reveal_at, 0.35))
 
     def render(self, fg, t):
-        pc = ease_out_cubic(prog(t, 0.0, 0.55))
-        cy = self.top + self.card_h / 2 + (1 - pc) * 90
-        blit(fg, self.card.frame(t / self.duration), SAFE_CX, cy, scale=lerp(0.9, 1, pc), alpha=pc)
-        if self.credit:
-            blit(fg, self.credit, SAFE_RIGHT - 20, self.top + self.card_h - 20, anchor="rb", alpha=pc * 0.9)
-        y = self.top + self.card_h + 50
-        for i, line in enumerate(self.cap_lines):
-            e = ease_out_cubic(prog(t, 0.35 + 0.12 * i, 0.5))
-            blit(fg, line, SAFE_CX, y + (1 - e) * 30, anchor="mt", alpha=e)
-            y += self.cap_step
+        self._header(fg, t)
+        self.clue(fg, t)
+        self._timer(fg, t)
+        self.answer(fg, t)
+        self.confetti.draw(fg, t - self.reveal_at)
+
+    def clue(self, fg, t):  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def answer(self, fg, t):  # pragma: no cover - interface
+        raise NotImplementedError
+
+    def clue_sfx(self) -> list[tuple[float, str]]:
+        return []
 
     def sfx(self):
-        return [(0.0, "whoosh"), (0.1, "shimmer")]
+        ev = [(0.0, "whoosh"), (0.1, "impact")] + self.clue_sfx()
+        think = self.item.think
+        for m in range(int(think), 0, -1):  # one tick each time the number changes
+            ev.append((self.CLUE_IN + think - m, "tock" if m <= 3 else "clock"))
+        ev += [(self.reveal_at, "reveal"), (self.reveal_at + 0.05, "chime")]
+        return ev
+
+    def pulses(self):
+        return [0.0, self.reveal_at]
 
 
-class FactScene(Scene):
-    default_duration = 3.6
+class EmojiScene(RoundScene):
+    def __init__(self, rnd, pal, **kw):
+        self.heading = f"Guess the {rnd.category}"
+        super().__init__(rnd, pal, **kw)
+        self.glyphs = clusters(rnd.emojis)
+        n = len(self.glyphs)
+        per_row = n if n <= 4 else math.ceil(n / 2)
+        self.size = min(210, int((SAFE_W - 30 * (per_row - 1)) / per_row))
+        rows = [self.glyphs[:per_row], self.glyphs[per_row:]] if n > per_row else [self.glyphs]
+        step = self.size + 30
+        self.pos = []
+        for ri, row in enumerate(rows):
+            cy = CLUE_Y - (len(rows) - 1) * step / 2 + ri * step - 40
+            x0 = SAFE_CX - (len(row) - 1) * step / 2
+            for k, g in enumerate(row):
+                self.pos.append((g, x0 + k * step, cy))
+        self.card, self.note = self._answer_card(rnd.answer, rnd.note)
 
-    def __init__(self, beat, pal, imgs=None):
-        super().__init__(beat, pal, imgs)
-        clean = beat.text.replace("*", "")
-        self.size = fit_size(clean, "black", 100, SAFE_W, 5, min_size=60)
-        self.kicker = _pill(beat.kicker.upper(), pal, 32, fill=pal.accent2)
-        n_lines = len(wrap_words(beat.text, "black", self.size, SAFE_W))
-        block_h = self.kicker.height + 60 + n_lines * self.size * 1.08
-        top = CENTER_Y - block_h / 2
-        self.kicker_y = top
-        self.words = _word_layout(beat.text, "black", self.size, SAFE_W, pal,
-                                  top + self.kicker.height + 60 + n_lines * self.size * 1.08 / 2)
-
-    def render(self, fg, t):
-        pk = ease_out_back(prog(t, 0.0, 0.45))
-        blit(fg, self.kicker, SAFE_CX, self.kicker_y, anchor="mt", scale=pk, alpha=clamp(pk))
-        for i, (sprite, cx, cy, hl) in enumerate(self.words):
-            p = prog(t, 0.25 + 0.06 * i, 0.35)
+    def clue(self, fg, t):
+        rv = self.revealed(t)
+        for i, (g, x, y) in enumerate(self.pos):
+            p = prog(t, 0.25 + 0.14 * i, 0.4)
             if p <= 0:
                 continue
-            blit(fg, sprite, cx, cy + (1 - ease_out_cubic(p)) * 40, alpha=ease_out_cubic(p))
-            if hl:
-                up = ease_out_cubic(prog(t, 0.5 + 0.06 * i, 0.4))
-                if up > 0:
-                    bar = rounded_rect(max(int(sprite.width * up), 8), 12, 6, self.pal.accent + (255,))
-                    blit(fg, bar, cx - sprite.width / 2, cy + self.size * 0.6, anchor="lm")
+            bob = 10 * math.sin(t * 3.2 + i * 1.3) * clamp((t - 1.0) * 2)
+            sprite = emoji_sprite(g, self.size)
+            scale = ease_out_back(p, 2.6) * lerp(1, 0.82, rv)
+            blit(fg, sprite, x, y + bob - 60 * rv, scale=scale, alpha=clamp(p * 2))
 
-    def sfx(self):
-        return [(0.0, "whoosh"), (0.05, "pop")]
+    def answer(self, fg, t):
+        self._draw_answer(fg, t, self.card, self.note)
+
+    def clue_sfx(self):
+        return [(0.25 + 0.14 * i, "pop") for i in range(len(self.pos))]
 
 
-SCENES = {
-    "image": ImageScene,
-    "fact": FactScene,
-    "hook": HookScene,
-    "title": TitleScene,
-    "stat": StatScene,
-    "spec_list": SpecListScene,
-    "price": PriceScene,
-    "compare": CompareScene,
-    "cta": CtaScene,
+class BadDescriptionScene(RoundScene):
+    def __init__(self, rnd, pal, **kw):
+        self.heading = f"Badly described {rnd.category}"
+        super().__init__(rnd, pal, **kw)
+        clean = rnd.description.replace("*", "")
+        self.size = fit_size(clean, "black", 84, SAFE_W - 40, 6, min_size=50)
+        n_lines = len(wrap_words(rnd.description, "black", self.size, SAFE_W - 40))
+        self.words = _word_layout(rnd.description, "black", self.size, SAFE_W - 40, pal, CLUE_Y - 30)
+        self.quote_y = CLUE_Y - 30 - n_lines * self.size * 1.08 / 2 - 70
+        self.quote = text_sprite("“", "black", 220, pal.accent)
+        self.card, self.note = self._answer_card(rnd.answer, rnd.note)
+
+    def clue(self, fg, t):
+        rv = self.revealed(t)
+        pq = ease_out_back(prog(t, 0.15, 0.4))
+        blit(fg, self.quote, SAFE_LEFT + 40, self.quote_y, scale=pq, alpha=clamp(pq) * 0.9)
+        layer = Image.new("RGBA", fg.size, (0, 0, 0, 0)) if rv > 0 else fg
+        _words_in(layer, self.words, t, 0.3, step=0.035, size=self.size, pal=self.pal)
+        if rv > 0:
+            blit(fg, layer, 0, -50 * rv, anchor="lt", alpha=lerp(1, 0.55, rv))
+
+    def answer(self, fg, t):
+        self._draw_answer(fg, t, self.card, self.note)
+
+    def clue_sfx(self):
+        return [(0.15, "pop")]
+
+
+class TrueFalseScene(RoundScene):
+    heading = "Real or fake?"
+
+    def __init__(self, rnd, pal, **kw):
+        super().__init__(rnd, pal, **kw)
+        clean = rnd.statement.replace("*", "")
+        self.size = fit_size(clean, "black", 88, SAFE_W, 5, min_size=52)
+        self.words = _word_layout(rnd.statement, "black", self.size, SAFE_W, pal, CLUE_Y - 120)
+        n_lines = len(wrap_words(rnd.statement, "black", self.size, SAFE_W))
+        self.btn_y = CLUE_Y - 120 + n_lines * self.size * 1.08 / 2 + 130
+        bw, bh = SAFE_W // 2 - 20, 130
+        self.btns = []
+        for k, label in enumerate(("REAL", "FAKE")):
+            right = (k == 0) == rnd.answer
+            plain = _card(bw, bh, text_sprite(label, "black", 64, pal.text, 3), (255, 255, 255, 24), (255, 255, 255, 80))
+            col = (46, 204, 113) if right else WRONG
+            lit = _card(bw, bh, text_sprite(label, "black", 64, (255, 255, 255), 3), col + (255,))
+            x = SAFE_LEFT + bw / 2 + k * (bw + 40)
+            self.btns.append((plain, lit, x, right))
+        size = fit_size(rnd.explanation, "semi", 50, SAFE_W, 2, min_size=34)
+        self.expl = _lines(rnd.explanation, "semi", size, SAFE_W, pal.text)
+        self.expl_h = int(size * 1.15)
+
+    def clue(self, fg, t):
+        _words_in(fg, self.words, t, 0.25, size=self.size, pal=self.pal)
+        rv = self.revealed(t)
+        for k, (plain, lit, x, right) in enumerate(self.btns):
+            p = ease_out_back(prog(t, 0.5 + 0.12 * k, 0.4))
+            if p <= 0:
+                continue
+            if rv > 0:
+                img = lit if right else plain
+                sc = p * (lerp(1, 1.08, rv) if right else lerp(1, 0.9, rv))
+                a = 1 if right else lerp(1, 0.35, rv)
+                blit(fg, img, x, self.btn_y, scale=sc, alpha=a)
+            else:
+                blit(fg, plain, x, self.btn_y, scale=p, alpha=clamp(p))
+
+    def answer(self, fg, t):
+        y = TIMER_Y - (len(self.expl) - 1) * self.expl_h / 2
+        for i, ln in enumerate(self.expl):
+            p = ease_out_cubic(prog(t, self.reveal_at + 0.25 + 0.1 * i, 0.4))
+            blit(fg, ln, SAFE_CX, y + i * self.expl_h + (1 - p) * 24, alpha=p)
+
+    def clue_sfx(self):
+        return [(0.5, "pop"), (0.62, "pop")]
+
+
+class _OptionsScene(RoundScene):
+    """Shared by multiple choice and odd-one-out: a list or grid of option cards, one gets lit."""
+
+    def _build(self, options: list[str], correct: int, grid: bool, top: float):
+        n = len(options)
+        cols = 2 if grid else 1
+        gap = 26
+        cw = (SAFE_W - gap * (cols - 1)) // cols
+        ch = 170 if grid else 104
+        prefix = "" if grid else "ABCD"
+        tsize = min(fit_size(o, "bold", 56 if grid else 52, cw - (60 if grid else 150), 2 if grid else 1, min_size=32)
+                    for o in options)
+        self.opts = []
+        for k, o in enumerate(options):
+            r, c = divmod(k, cols)
+            x = SAFE_LEFT + c * (cw + gap) + cw / 2
+            y = top + r * (ch + gap) + ch / 2
+            lines = _lines(o, "bold", tsize, cw - (60 if grid else 150), self.pal.text)
+            lit_lines = _lines(o, "bold", tsize, cw - (60 if grid else 150), self.pal.on_accent)
+            plain = self._opt_card(cw, ch, lines, prefix[k] if prefix else "", (255, 255, 255, 22), (255, 255, 255, 70), self.pal.accent)
+            lit = self._opt_card(cw, ch, lit_lines, prefix[k] if prefix else "", self.pal.accent + (255,), None, self.pal.on_accent)
+            self.opts.append((plain, lit, x, y, k == correct))
+        self.opts_bottom = top + math.ceil(n / cols) * (ch + gap) - gap
+
+    def _opt_card(self, w, h, lines, letter, fill, outline, letter_col):
+        c = rounded_rect(w, h, 28, fill, outline, 3 if outline else 0).copy()
+        lh = lines[0].height * 0.92
+        x0 = 120 if letter else None
+        if letter:
+            ls = text_sprite(letter, "black", 52, letter_col)
+            c.alpha_composite(ls, (44, (h - ls.height) // 2 + 2))
+        y = (h - lh * len(lines)) / 2
+        for ln in lines:
+            x = x0 if x0 is not None else (w - ln.width) // 2
+            c.alpha_composite(ln, (int(x), int(y) + 2))
+            y += lh
+        return c
+
+    def clue_opts(self, fg, t, start):
+        rv = self.revealed(t)
+        for k, (plain, lit, x, y, right) in enumerate(self.opts):
+            e = ease_out_expo(prog(t, start + 0.12 * k, 0.5))
+            if e <= 0:
+                continue
+            if rv > 0:
+                if right:
+                    blit(fg, lit, x, y, scale=lerp(1, 1.05, rv))
+                else:
+                    blit(fg, plain, x, y, scale=lerp(1, 0.95, rv), alpha=lerp(1, 0.35, rv))
+            else:
+                blit(fg, plain, x + (1 - e) * 380, y, alpha=e)
+
+    def opts_sfx(self, start):
+        return [(start + 0.12 * k, "swipe") for k in range(len(self.opts))]
+
+
+class ChoiceScene(_OptionsScene):
+    heading = "Quick quiz"
+
+    def __init__(self, rnd, pal, **kw):
+        super().__init__(rnd, pal, **kw)
+        clean = rnd.question.replace("*", "")
+        self.size = fit_size(clean, "black", 76, SAFE_W, 3, min_size=48)
+        n_lines = len(wrap_words(rnd.question, "black", self.size, SAFE_W))
+        q_h = n_lines * self.size * 1.08
+        opts_h = len(rnd.options) * 130 - 26
+        top = max(SAFE_TOP + 200, CLUE_Y - 30 - (q_h + 50 + opts_h) / 2)
+        self.words = _word_layout(rnd.question, "black", self.size, SAFE_W, pal, top + q_h / 2)
+        self._build(rnd.options, rnd.correct, False, top + q_h + 50)
+        self.note = None
+        if rnd.note:
+            ns = fit_size(rnd.note, "semi", 48, SAFE_W, 1, min_size=30)
+            self.note = text_sprite(rnd.note, "semi", ns, pal.text)
+
+    def clue(self, fg, t):
+        _words_in(fg, self.words, t, 0.2, size=self.size, pal=self.pal)
+        self.clue_opts(fg, t, 0.45)
+
+    def answer(self, fg, t):
+        if self.note:
+            p = ease_out_cubic(prog(t, self.reveal_at + 0.25, 0.4))
+            blit(fg, self.note, SAFE_CX, TIMER_Y + (1 - p) * 24, alpha=p)
+
+    def clue_sfx(self):
+        return self.opts_sfx(0.45)
+
+
+class OddOneOutScene(_OptionsScene):
+    heading = "Odd one out"
+
+    def __init__(self, rnd, pal, **kw):
+        super().__init__(rnd, pal, **kw)
+        self._build(rnd.items, rnd.odd, True, CLUE_Y - 40 - 183)
+        size = fit_size(rnd.reason, "semi", 50, SAFE_W, 2, min_size=34)
+        self.reason = _lines(rnd.reason, "semi", size, SAFE_W, pal.text)
+        self.reason_h = int(size * 1.15)
+
+    def clue(self, fg, t):
+        self.clue_opts(fg, t, 0.25)
+
+    def answer(self, fg, t):
+        y = TIMER_Y - (len(self.reason) - 1) * self.reason_h / 2
+        for i, ln in enumerate(self.reason):
+            p = ease_out_cubic(prog(t, self.reveal_at + 0.25 + 0.1 * i, 0.4))
+            blit(fg, ln, SAFE_CX, y + i * self.reason_h + (1 - p) * 24, alpha=p)
+
+    def clue_sfx(self):
+        return self.opts_sfx(0.25)
+
+
+def scramble(word: str, seed: int) -> list[int]:
+    """A permutation of range(len(word)) that never leaves the word unchanged (when possible)."""
+    rng = random.Random(seed)
+    idx = list(range(len(word)))
+    if len(set(word.lower())) < 2:
+        return idx
+    for _ in range(50):
+        rng.shuffle(idx)
+        if "".join(word[i] for i in idx).lower() != word.lower():
+            break
+    return idx
+
+
+class UnscrambleScene(RoundScene):
+    def __init__(self, rnd, pal, **kw):
+        self.heading = f"Unscramble the {rnd.category}"
+        super().__init__(rnd, pal, **kw)
+        words = [w.replace("'", "") for w in rnd.answer.upper().split()]
+        n_letters = sum(len(w) for w in words)
+        one_row = n_letters + len(words) - 1
+        # one row if it fits at a decent size, else one word per row
+        if one_row * 70 <= SAFE_W:
+            rows = [" ".join(words)]
+        else:
+            rows = words
+            if len(rows) > 3:
+                rows = [" ".join(words[: len(words) // 2]), " ".join(words[len(words) // 2:])]
+        cols = max(len(r) for r in rows)
+        self.tile = min(150, int(SAFE_W / (cols * 1.12)))
+        step = self.tile * 1.12
+        lsize = int(self.tile * 0.62)
+        plain_bg = rounded_rect(self.tile, self.tile, self.tile // 5, (255, 255, 255, 30), (255, 255, 255, 90), 3)
+        lit_bg = rounded_rect(self.tile, self.tile, self.tile // 5, pal.accent + (255,))
+        self.tiles = []  # (plain, lit, (sx, sy), (ex, ey))
+        row_step = self.tile * 1.3
+        top = CLUE_Y - 30 - (len(rows) - 1) * row_step / 2
+        k = 0
+        for ri, row in enumerate(rows):
+            y = top + ri * row_step
+            x0 = SAFE_CX - (len(row) - 1) * step / 2
+            for wi, w in enumerate(row.split(" ")):
+                # position of this word in the row
+                offset = sum(len(p) + 1 for p in row.split(" ")[:wi])
+                perm = scramble(w, self.seed + k)
+                for j, ch in enumerate(w):
+                    end = (x0 + (offset + j) * step, y)
+                    src = perm.index(j)  # where letter j sits while scrambled
+                    begin = (x0 + (offset + src) * step, y)
+                    plain = plain_bg.copy()
+                    lit = lit_bg.copy()
+                    for bg, col in ((plain, pal.text), (lit, pal.on_accent)):
+                        s = text_sprite(ch, "black", lsize, col)
+                        bg.alpha_composite(s, ((self.tile - s.width) // 2, (self.tile - s.height) // 2 + 2))
+                    self.tiles.append((plain, lit, begin, end))
+                    k += 1
+        self.card, self.note = self._answer_card(rnd.answer, rnd.note)
+        self.card_y = TIMER_Y + 20
+
+    def clue(self, fg, t):
+        for i, (plain, lit, (sx, sy), (ex, ey)) in enumerate(self.tiles):
+            p = ease_out_back(prog(t, 0.25 + 0.05 * i, 0.35), 2.2)
+            if p <= 0:
+                continue
+            m = ease_in_out_cubic(prog(t, self.reveal_at + 0.02 * i, 0.5))
+            hop = -math.sin(math.pi * m) * self.tile * 0.7
+            x, y = lerp(sx, ex, m), lerp(sy, ey, m) + hop
+            wig = 0 if m > 0 else 3 * math.sin(t * 9 + i)
+            blit(fg, lit if m > 0.5 else plain, x + wig, y, scale=p, alpha=clamp(p * 2))
+
+    def answer(self, fg, t):
+        if self.note:
+            pn = ease_out_cubic(prog(t, self.reveal_at + 0.6, 0.4))
+            blit(fg, self.note, SAFE_CX, self.card_y + (1 - pn) * 20, alpha=pn)
+
+    def clue_sfx(self):
+        return [(0.25 + 0.05 * i, "tick") for i in range(len(self.tiles))]
+
+
+ROUNDS = {
+    "emoji": EmojiScene,
+    "bad_description": BadDescriptionScene,
+    "true_false": TrueFalseScene,
+    "choice": ChoiceScene,
+    "odd_one_out": OddOneOutScene,
+    "unscramble": UnscrambleScene,
 }
+
+
+def build_scenes(spec, pal: Palette, seed: int) -> list[Scene]:
+    n = len(spec.rounds)
+    scenes: list[Scene] = [IntroScene(spec, pal, total=n, seed=seed)]
+    for i, r in enumerate(spec.rounds, 1):
+        scenes.append(ROUNDS[r.type](r, pal, index=i, total=n, seed=seed))
+    scenes.append(OutroScene(spec, pal, total=n, seed=seed))
+    return scenes
+

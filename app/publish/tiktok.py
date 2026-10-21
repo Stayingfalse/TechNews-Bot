@@ -1,8 +1,9 @@
-"""TikTok Content Posting API: upload the video to the creator's inbox (drafts).
+"""TikTok Content Posting API.
 
-You then open TikTok, add a trending sound and post. Uses scope `video.upload`, which works
-without TikTok's app audit (the audit is only required for direct public posting).
-Docs: https://developers.tiktok.com/doc/content-posting-api-reference-upload-video
+TIKTOK_MODE=draft: upload to the creator's inbox (scope `video.upload`, no app audit needed); you
+tap post. TIKTOK_MODE=direct: post straight to the profile (scope `video.publish`); until TikTok
+audits the app, direct posts can only be private (SELF_ONLY).
+Docs: https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 """
 from __future__ import annotations
 
@@ -17,7 +18,10 @@ from ..config import settings
 
 AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
 API = "https://open.tiktokapis.com/v2"
-SCOPES = "user.info.basic,video.upload"
+
+
+def scopes() -> str:
+    return "user.info.basic,video.upload" + (",video.publish" if settings.tiktok_mode == "direct" else "")
 
 
 def redirect_uri() -> str:
@@ -27,7 +31,7 @@ def redirect_uri() -> str:
 def authorize_url(state: str) -> str:
     q = {
         "client_key": settings.tiktok_client_key,
-        "scope": SCOPES,
+        "scope": scopes(),
         "response_type": "code",
         "redirect_uri": redirect_uri(),
         "state": state,
@@ -79,13 +83,31 @@ def refresh_if_needed() -> None:
         _token_request({"grant_type": "refresh_token", "refresh_token": tok["refresh_token"]})
 
 
-def upload_draft(video_path: Path) -> dict:
+def _post_info(headers: dict, caption: str) -> dict:
+    r = httpx.post(f"{API}/post/publish/creator_info/query/", headers=headers, timeout=30)
+    r.raise_for_status()
+    options = r.json().get("data", {}).get("privacy_level_options", [])
+    privacy = settings.tiktok_privacy if settings.tiktok_privacy in options else "SELF_ONLY"
+    if privacy not in options and options:
+        privacy = options[0]
+    return {"title": caption[:2200], "privacy_level": privacy, "disable_comment": False,
+            "disable_duet": False, "disable_stitch": False, "video_cover_timestamp_ms": 1500}
+
+
+def upload(video_path: Path, caption: str = "") -> dict:
+    """Draft upload or direct post, per TIKTOK_MODE."""
     size = video_path.stat().st_size
     if size > 64 * 1024 * 1024:
         raise RuntimeError("video over 64MB; chunked upload not implemented")
     headers = {"Authorization": f"Bearer {access_token()}", "Content-Type": "application/json; charset=UTF-8"}
-    body = {"source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": size, "total_chunk_count": 1}}
-    r = httpx.post(f"{API}/post/publish/inbox/video/init/", json=body, headers=headers, timeout=30)
+    body: dict = {"source_info": {"source": "FILE_UPLOAD", "video_size": size, "chunk_size": size, "total_chunk_count": 1}}
+    direct = settings.tiktok_mode == "direct"
+    if direct:
+        body["post_info"] = _post_info(headers, caption)
+        url = f"{API}/post/publish/video/init/"
+    else:
+        url = f"{API}/post/publish/inbox/video/init/"
+    r = httpx.post(url, json=body, headers=headers, timeout=30)
     r.raise_for_status()
     res = r.json()
     if res.get("error", {}).get("code") not in (None, "ok"):
@@ -101,7 +123,7 @@ def upload_draft(video_path: Path) -> dict:
     put.raise_for_status()
 
     status = None
-    for _ in range(20):
+    for _ in range(40):
         time.sleep(3)
         s = httpx.post(f"{API}/post/publish/status/fetch/", json={"publish_id": publish_id}, headers=headers, timeout=30)
         if s.status_code == 200:
@@ -110,4 +132,7 @@ def upload_draft(video_path: Path) -> dict:
                 break
     if status == "FAILED":
         raise RuntimeError(f"TikTok processing failed: {s.json()}")
-    return {"publish_id": publish_id, "status": status}
+    out = {"publish_id": publish_id, "status": status, "mode": settings.tiktok_mode}
+    if direct:
+        out["privacy"] = body["post_info"]["privacy_level"]
+    return out

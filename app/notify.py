@@ -35,4 +35,4 @@ def send(content: str, embed: dict | None = None, attach: Path | None = None) ->
 
 
 def error(msg: str) -> None:
-    send(f":warning: **TechNews-Bot**: {msg}")
+    send(f":warning: **Quiz bot**: {msg}")

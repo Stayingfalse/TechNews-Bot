@@ -47,6 +47,8 @@ PALETTES: dict[str, Palette] = {
     "mint": _p("#04100C", "#0A5C43", "#0B3A6B", "#2EF2A6", "#3DA9FC"),
     "mono": _p("#080808", "#2A2A2A", "#3A1010", "#FFFFFF", "#FF3B30", muted="#8A8A8A"),
     "electric": _p("#05070F", "#0B2A8F", "#5A0B6B", "#3D7BFF", "#FF3DCB"),
+    "candy": _p("#0E0614", "#7A1B6E", "#1B3F8F", "#FF5FD2", "#FFD23F"),
+    "arcade": _p("#060B0A", "#0F5A2E", "#6B3A00", "#7CFF4F", "#FFB000"),
 }
 
 _FONT_DIRS = [

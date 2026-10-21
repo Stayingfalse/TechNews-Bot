@@ -1,5 +1,4 @@
-"""Synthesised sound effects (no samples, no licensing). The trending sound is added in-app later,
-so these are kept subtle; turn the original audio down in the app if they clash."""
+"""Synthesised sound effects (no samples, no licensing), mixed over the music bed."""
 from __future__ import annotations
 
 import wave
@@ -37,6 +36,26 @@ def _make(kind: str, rng: np.random.Generator) -> np.ndarray:
     if kind == "tick":
         s = _sine_sweep(2400, 2200, 0.018)
         return 0.06 * s * _env(len(s), 0.004)
+    if kind in ("clock", "tock"):
+        # woodblock: a damped resonance plus a click; "tock" is the higher, louder last-seconds version
+        f = 1250 if kind == "clock" else 1650
+        n = int(SR * 0.09)
+        tt = np.arange(n) / SR
+        s = np.sin(2 * np.pi * f * tt) + 0.4 * np.sin(2 * np.pi * f * 2.7 * tt)
+        click = rng.standard_normal(n) * _env(n, 0.002)
+        return (0.16 if kind == "clock" else 0.24) * (s * _env(n, 0.018) + 0.5 * click)
+    if kind == "chime":
+        n = int(SR * 0.9)
+        out = np.zeros(n)
+        for k, f in enumerate((1046.5, 1318.5, 1568.0, 2093.0)):
+            i = int(SR * 0.06 * k)
+            tt = np.arange(n - i) / SR
+            out[i:] += (np.sin(2 * np.pi * f * tt) + 0.3 * np.sin(4 * np.pi * f * tt)) * _env(n - i, 0.22)
+        return 0.06 * out
+    if kind == "reveal":
+        s = _sine_sweep(220, 880, 0.12)
+        n = len(s)
+        return 0.22 * s * np.sin(np.pi * np.arange(n) / n)
     if kind in ("whoosh", "swipe"):
         dur = 0.38 if kind == "whoosh" else 0.22
         n = int(SR * dur)
@@ -63,10 +82,15 @@ def _make(kind: str, rng: np.random.Generator) -> np.ndarray:
     raise ValueError(kind)
 
 
-def write_sfx_track(events: list[tuple[float, str]], duration: float, path: str, enabled: bool = True) -> None:
+def write_sfx_track(events: list[tuple[float, str]], duration: float, path: str, enabled: bool = True,
+                    bed: np.ndarray | None = None) -> None:
+    """Mix the effects (and an optional mono music bed at SR) into a stereo WAV."""
     rng = np.random.default_rng(3)
     n = int(SR * duration) + SR
     mix = np.zeros(n, np.float32)
+    if bed is not None:
+        m = min(n, len(bed))
+        mix[:m] += bed[:m]
     if enabled:
         cache: dict[str, np.ndarray] = {}
         for t, kind in events:

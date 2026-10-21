@@ -1,4 +1,8 @@
-"""Story spec: the contract between the daily research routine and the renderer."""
+"""Quiz spec: the contract between the daily writing routine and the renderer.
+
+A video is an intro, 3-5 rounds and an outro. Each round shows a clue with a countdown for
+`think` seconds, then reveals the answer for `reveal` seconds.
+"""
 from __future__ import annotations
 
 import re
@@ -6,129 +10,155 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-class ImageRef(BaseModel):
-    id: str = Field(pattern=r"^[a-z0-9_-]{1,24}$")
-    url: str = Field(pattern=r"^https://", description="Direct link to a JPEG/PNG/WebP file")
-    credit: str = Field(max_length=48, description="Shown on screen, e.g. 'Image: NASA' or 'Photo: J. Smith / CC BY 4.0'")
-    license: str = Field(default="", max_length=60, description="e.g. 'Apple Newsroom press image', 'CC BY-SA 4.0', 'Public domain (NASA)'")
+from .render.emoji import clusters, is_emoji_only
+
+MEDIA = ("Movie", "TV show", "Song", "Book", "Video game", "Cartoon", "Band", "Celebrity", "Brand", "Place", "Food", "Animal")
 
 
-class HookBeat(BaseModel):
-    type: Literal["hook"] = "hook"
-    # Wrap a word in *asterisks* to highlight it in the accent colour.
-    text: str = Field(max_length=90)
-    image: str | None = Field(default=None, description="Optional image id shown as a darkened full-screen background")
-    duration: float | None = None
+class _Round(BaseModel):
+    think: float = Field(default=5.0, ge=3.0, le=10.0, description="Seconds the clue is up with the countdown")
+    reveal: float = Field(default=2.6, ge=1.8, le=6.0, description="Seconds the answer stays on screen")
+
+    def answer_text(self) -> str:  # pragma: no cover - interface
+        raise NotImplementedError
 
 
-class TitleBeat(BaseModel):
-    type: Literal["title"] = "title"
-    kicker: str = Field(default="NEW", max_length=24)
-    text: str = Field(max_length=70)
-    image: str | None = Field(default=None, description="Optional image id shown as a card above the title")
-    duration: float | None = None
+class EmojiRound(_Round):
+    """Guess the thing from emojis. The emojis pop in one by one."""
+    type: Literal["emoji"] = "emoji"
+    category: str = Field(default="Movie", max_length=16, description="Shown as 'Guess the <category>'. " + ", ".join(MEDIA))
+    emojis: str = Field(description="2-7 emojis, nothing else (no letters or spaces needed)")
+    answer: str = Field(max_length=40)
+    note: str = Field(default="", max_length=60, description="Optional line under the answer, e.g. the year")
+
+    @field_validator("emojis")
+    @classmethod
+    def _emojis(cls, v: str) -> str:
+        v = "".join(v.split())
+        n = len(clusters(v))
+        if not is_emoji_only(v):
+            raise ValueError("emojis must contain only emoji characters")
+        if not 2 <= n <= 7:
+            raise ValueError(f"use 2-7 emojis (got {n})")
+        return v
+
+    def answer_text(self) -> str:
+        return self.answer
 
 
-class ImageBeat(BaseModel):
-    type: Literal["image"] = "image"
-    image: str = Field(description="image id")
-    caption: str = Field(default="", max_length=60)
-    duration: float | None = None
+class BadDescriptionRound(_Round):
+    """A famous movie/show/book/song described badly, literally or unhelpfully."""
+    type: Literal["bad_description"] = "bad_description"
+    category: str = Field(default="Movie", max_length=16, description=", ".join(MEDIA))
+    description: str = Field(max_length=120, description="The badly described plot. Wrap one word in *asterisks* to highlight it.")
+    answer: str = Field(max_length=40)
+    note: str = Field(default="", max_length=60)
+    think: float = Field(default=6.0, ge=3.0, le=10.0)
+
+    def answer_text(self) -> str:
+        return self.answer
 
 
-class FactBeat(BaseModel):
-    type: Literal["fact"] = "fact"
-    kicker: str = Field(default="WHY IT MATTERS", max_length=24)
-    # One punchy sentence; *highlight* one word.
-    text: str = Field(max_length=110)
-    duration: float | None = None
+class TrueFalseRound(_Round):
+    """Real or fake? A surprising statement; reveal says which and why."""
+    type: Literal["true_false"] = "true_false"
+    statement: str = Field(max_length=110, description="Wrap one word in *asterisks* to highlight it")
+    answer: bool
+    explanation: str = Field(max_length=70, description="One short line shown with the reveal")
+
+    def answer_text(self) -> str:
+        return f"{'TRUE' if self.answer else 'FALSE'}: {self.statement.replace('*', '')}"
 
 
-class StatBeat(BaseModel):
-    type: Literal["stat"] = "stat"
-    label: str = Field(max_length=40)
-    value: str = Field(max_length=14)  # e.g. "10.2\"", "$2,499", "48MP", "5x"
-    count_up: bool = True
-    duration: float | None = None
+class ChoiceRound(_Round):
+    """Multiple choice (3-4 options). Also covers 'which came first', 'guess the year', etc."""
+    type: Literal["choice"] = "choice"
+    question: str = Field(max_length=80)
+    options: list[str] = Field(min_length=3, max_length=4)
+    correct: int = Field(ge=0, le=3, description="Index into options")
+    note: str = Field(default="", max_length=60)
+
+    @field_validator("options")
+    @classmethod
+    def _short(cls, v: list[str]) -> list[str]:
+        for o in v:
+            if not o.strip() or len(o) > 28:
+                raise ValueError(f"options must be 1-28 chars: {o!r}")
+        return v
+
+    @model_validator(mode="after")
+    def _correct(self) -> "ChoiceRound":
+        if self.correct >= len(self.options):
+            raise ValueError("correct is out of range")
+        return self
+
+    def answer_text(self) -> str:
+        return f"{self.question} {self.options[self.correct]}"
 
 
-class SpecListBeat(BaseModel):
-    type: Literal["spec_list"] = "spec_list"
-    title: str = Field(default="Key specs", max_length=32)
-    items: list[str] = Field(min_length=1, max_length=5)
-    duration: float | None = None
+class OddOneOutRound(_Round):
+    """Four items, one doesn't belong."""
+    type: Literal["odd_one_out"] = "odd_one_out"
+    items: list[str] = Field(min_length=4, max_length=4)
+    odd: int = Field(ge=0, le=3, description="Index of the odd one out")
+    reason: str = Field(max_length=70, description="Why it's the odd one out")
 
     @field_validator("items")
     @classmethod
-    def _short_items(cls, v: list[str]) -> list[str]:
-        for item in v:
-            if len(item) > 34:
-                raise ValueError(f"spec item too long (max 34 chars): {item!r}")
+    def _short(cls, v: list[str]) -> list[str]:
+        for o in v:
+            if not o.strip() or len(o) > 28:
+                raise ValueError(f"items must be 1-28 chars: {o!r}")
         return v
 
-
-class PriceBeat(BaseModel):
-    type: Literal["price"] = "price"
-    value: str = Field(max_length=14)
-    subtext: str = Field(default="", max_length=40)
-    duration: float | None = None
+    def answer_text(self) -> str:
+        return f"odd one out {self.items[self.odd]} ({', '.join(self.items)})"
 
 
-class CompareBeat(BaseModel):
-    type: Literal["compare"] = "compare"
-    a: str = Field(max_length=16)
-    b: str = Field(max_length=16)
-    rows: list[tuple[str, str, str]] = Field(min_length=1, max_length=4)  # (label, a_value, b_value)
-    duration: float | None = None
+class UnscrambleRound(_Round):
+    """The answer's letters are shuffled by the renderer; viewers unscramble them."""
+    type: Literal["unscramble"] = "unscramble"
+    category: str = Field(default="Movie", max_length=16, description=", ".join(MEDIA))
+    answer: str = Field(max_length=22, description="Letters and spaces only; the renderer scrambles it")
+    note: str = Field(default="", max_length=60)
 
-    @field_validator("rows")
+    @field_validator("answer")
     @classmethod
-    def _filled(cls, v: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
-        for row in v:
-            if any(not cell.strip() for cell in row):
-                raise ValueError("compare rows need a label and a value for both sides; compare two products, not a timeline")
-        return v
+    def _letters(cls, v: str) -> str:
+        if not re.fullmatch(r"[A-Za-z][A-Za-z ']*[A-Za-z]", v.strip()) or len(v.replace(" ", "")) < 4:
+            raise ValueError("unscramble answer must be 4+ letters (letters, spaces, apostrophes)")
+        return v.strip()
+
+    def answer_text(self) -> str:
+        return self.answer
 
 
-class CtaBeat(BaseModel):
-    type: Literal["cta"] = "cta"
-    text: str = Field(max_length=60)
-    follow: str = Field(default="Follow for daily tech", max_length=32)
-    duration: float | None = None
-
-
-Beat = Annotated[
-    Union[HookBeat, TitleBeat, ImageBeat, FactBeat, StatBeat, SpecListBeat, PriceBeat, CompareBeat, CtaBeat],
+Round = Annotated[
+    Union[EmojiRound, BadDescriptionRound, TrueFalseRound, ChoiceRound, OddOneOutRound, UnscrambleRound],
     Field(discriminator="type"),
 ]
 
-PALETTES = ("neon_dark", "sunset", "mint", "mono", "electric")
+PALETTES = ("neon_dark", "sunset", "mint", "mono", "electric", "candy", "arcade")
 
 
-class StorySpec(BaseModel):
-    """Beat types: hook, title, image, fact, stat, spec_list, compare, price, cta.
-    Images are downloaded at render time; a beat whose image fails to load is shown without it
-    (an `image` beat is skipped)."""
+class QuizSpec(BaseModel):
+    """An intro, 3-5 rounds (any mix of: emoji, bad_description, true_false, choice, odd_one_out,
+    unscramble) and an outro asking viewers to comment their score."""
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,80}$")
-    topic_key: str = Field(
-        default="",
-        description="Short stable key for the story (e.g. 'samsung-trifold-launch') used to avoid repeats.",
-    )
-    category: str = Field(
-        default="",
-        max_length=24,
-        description="gadgets | space | ai | science | robotics | transport | energy | computing | gaming | internet",
-    )
-    template: str = "gadget_reveal"
-    palette: Literal["neon_dark", "sunset", "mint", "mono", "electric"] = "neon_dark"
-    images: list[ImageRef] = Field(default_factory=list, max_length=4)
-    beats: list[Beat] = Field(min_length=2, max_length=9)
+    theme: str = Field(default="", max_length=40, description="Optional theme, e.g. '90s movies', 'Disney'")
+    title: str = Field(max_length=60, description="Intro hook, e.g. 'Only *real* film fans get 5/5'. One *highlighted* word.")
+    subtitle: str = Field(default="", max_length=40, description="Small line under the title, e.g. 'Guess before the timer ends'")
+    palette: Literal["neon_dark", "sunset", "mint", "mono", "electric", "candy", "arcade"] = "candy"
+    rounds: list[Round] = Field(min_length=3, max_length=5)
+    outro: str = Field(default="How many did you *get*?", max_length=50)
+    follow: str = Field(default="Follow for a daily quiz", max_length=32)
     caption: str = Field(max_length=2000)
     hashtags: list[str] = Field(default_factory=list, max_length=8)
-    sources: list[str] = Field(min_length=1)
-    source_label: str = Field(default="", max_length=40, description="Shown on screen, e.g. 'via The Verge'")
-    suggested_sound: str = ""
+    music: str = Field(
+        default="auto",
+        description="'auto' (random track from the music library, else synth), 'synth', 'none', or a library file name",
+    )
     sfx: bool = True
 
     @field_validator("hashtags")
@@ -144,15 +174,16 @@ class StorySpec(BaseModel):
             out.append(tag)
         return out
 
-    @model_validator(mode="after")
-    def _image_refs(self) -> "StorySpec":
-        ids = {i.id for i in self.images}
-        for b in self.beats:
-            ref = getattr(b, "image", None)
-            if ref and ref not in ids:
-                raise ValueError(f"beat {b.type!r} references unknown image id {ref!r}")
-        return self
+    def answer_keys(self) -> list[str]:
+        """Normalised answers, used to avoid repeating a puzzle."""
+        return [normalise(r.answer_text()) for r in self.rounds]
 
     def full_caption(self) -> str:
         tags = " ".join(self.hashtags)
         return f"{self.caption}\n\n{tags}".strip()
+
+
+def normalise(text: str) -> str:
+    text = re.sub(r"[^a-z0-9 ]", "", text.lower())
+    text = re.sub(r"^(the|a|an) ", "", text)
+    return " ".join(text.split())

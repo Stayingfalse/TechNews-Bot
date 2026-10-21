@@ -11,39 +11,31 @@ from pathlib import Path
 
 from PIL import Image
 
-from ..spec import StorySpec
+from ..spec import QuizSpec
+from . import music
 from .audio import write_sfx_track
 from .background import Background
 from .draw import blit, clamp, ease_in_cubic, glow, prog, rounded_rect, text_sprite
-from .scenes import SCENES
-from .theme import FPS, H, PALETTES, SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_TOP, SAFE_W, W
+from .scenes import build_scenes
+from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_TOP, SAFE_W, W
 
 log = logging.getLogger(__name__)
 
 OUTRO = 0.22  # seconds each scene spends leaving
+MUSIC_GAIN = float(os.environ.get("MUSIC_GAIN", "0.32"))  # library tracks, after loudness normalisation
+LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-15"))  # final mix target, about what TikTok/Reels play at
 
 
-def _usable_beats(spec: StorySpec, imgs: dict) -> list:
-    """Drop image beats whose image failed to download; strip missing images from other beats."""
-    beats = []
-    for b in spec.beats:
-        ref = getattr(b, "image", None)
-        if ref and ref not in imgs:
-            if b.type == "image":
-                continue
-            b = b.model_copy(update={"image": None})
-        beats.append(b)
-    return beats
+def seed_of(spec: QuizSpec) -> int:
+    return sum(map(ord, spec.id))
 
 
 class Video:
-    def __init__(self, spec: StorySpec, brand: str = "", image_paths: dict[str, str] | None = None):
+    def __init__(self, spec: QuizSpec, brand: str = ""):
         self.spec = spec
         self.pal = PALETTES[spec.palette]
-        self.bg = Background(self.pal, seed=sum(map(ord, spec.id)))
-        credits = {i.id: i.credit for i in spec.images}
-        imgs = {k: (Image.open(p).convert("RGB"), credits.get(k, "")) for k, p in (image_paths or {}).items()}
-        self.scenes = [SCENES[b.type](b, self.pal, imgs) for b in _usable_beats(spec, imgs)]
+        self.bg = Background(self.pal, seed=seed_of(spec))
+        self.scenes = build_scenes(spec, self.pal, seed_of(spec))
         self.starts = []
         acc = 0.0
         for s in self.scenes:
@@ -52,7 +44,6 @@ class Video:
         self.duration = acc
         self.n_frames = int(round(acc * FPS))
         self.brand = text_sprite(brand, "bold", 30, self.pal.text, 2) if brand else None
-        self.source = text_sprite(spec.source_label, "medium", 30, self.pal.muted) if spec.source_label else None
 
     def sfx_events(self) -> list[tuple[float, str]]:
         ev = []
@@ -72,16 +63,15 @@ class Video:
         scene = self.scenes[i]
         t = T - self.starts[i]
 
-        energy = 0.0 if i == 0 else clamp(1 - t / 0.6) ** 2
+        energy = max((clamp(1 - (t - p) / 0.6) ** 2 for p in scene.pulses() if t >= p and (i or p)), default=0.0)
         frame = self.bg.render(T, energy)
 
         last = i == len(self.scenes) - 1
         out_p = 0.0 if last else ease_in_cubic(prog(t, scene.duration - OUTRO, OUTRO))
-        scene.backdrop(frame, t, 1 - out_p)
 
         fg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         scene.render(fg, t)
-        frame.alpha_composite(glow(fg, 22, 0.75 * (1 - out_p)))
+        frame.alpha_composite(glow(fg, 22, 0.6 * (1 - out_p)))
         if out_p > 0:
             blit(frame, fg, 0, -90 * out_p, anchor="lt", alpha=1 - out_p)
         else:
@@ -91,21 +81,20 @@ class Video:
         return frame
 
     def _chrome(self, frame: Image.Image, T: float) -> None:
-        # Story-style progress segments
-        n = len(self.scenes)
+        # Story-style progress segments, one per round
+        rounds = range(1, len(self.scenes) - 1)
+        n = len(rounds)
         gap = 10
         seg_w = (SAFE_W - gap * (n - 1)) / n
         y = SAFE_TOP - 50
-        for k in range(n):
+        for k, si in enumerate(rounds):
             x = SAFE_LEFT + k * (seg_w + gap)
             frame.alpha_composite(rounded_rect(int(seg_w), 6, 3, self.pal.text + (50,)), (int(x), y))
-            fill = clamp((T - self.starts[k]) / self.scenes[k].duration)
+            fill = clamp((T - self.starts[si]) / self.scenes[si].duration)
             if fill > 0:
                 frame.alpha_composite(rounded_rect(max(6, int(seg_w * fill)), 6, 3, self.pal.accent + (255,)), (int(x), y))
         if self.brand:
             blit(frame, self.brand, SAFE_LEFT, y + 30, anchor="lt", alpha=0.8)
-        if self.source:
-            blit(frame, self.source, SAFE_CX, SAFE_BOTTOM + 10, anchor="mt", alpha=0.75)
 
 
 # ---------------------------------------------------------------- parallel render
@@ -113,9 +102,9 @@ class Video:
 _WORKER: Video | None = None
 
 
-def _init_worker(spec_json: str, brand: str, image_paths: dict[str, str]) -> None:
+def _init_worker(spec_json: str, brand: str) -> None:
     global _WORKER
-    _WORKER = Video(StorySpec.model_validate_json(spec_json), brand, image_paths)
+    _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand)
 
 
 def _render_frame(idx: int) -> bytes:
@@ -123,22 +112,35 @@ def _render_frame(idx: int) -> bytes:
     return _WORKER.frame(idx).convert("RGB").tobytes()
 
 
-def render_video(spec: StorySpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
-                 cover_path: str | Path | None = None, image_paths: dict[str, str] | None = None) -> dict:
+def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
+                 cover_path: str | Path | None = None, music_dir: Path | None = None) -> dict:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    image_paths = image_paths or {}
-    video = Video(spec, brand, image_paths)
+    video = Video(spec, brand)
     workers = workers or max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4"))))
     t0 = time.time()
+    track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "sfx.wav")
-        write_sfx_track(video.sfx_events(), video.duration, wav, enabled=spec.sfx)
+        bed = music.synth(video.duration, seed_of(spec)) if track == "synth" else None
+        write_sfx_track(video.sfx_events(), video.duration, wav, enabled=spec.sfx, bed=bed)
+        audio_in = ["-i", wav]
+        master = f"loudnorm=I={LOUDNESS}:TP=-1.5:LRA=11,aresample=48000"
+        graph = f"[1:a]{master}[a]"
+        if isinstance(track, Path):
+            fade = max(0.0, video.duration - 1.5)
+            audio_in += ["-stream_loop", "-1", "-i", str(track)]
+            graph = (
+                f"[2:a]loudnorm=I=-16:TP=-1.5,aresample=48000,volume={MUSIC_GAIN},"
+                f"afade=t=in:d=0.3,afade=t=out:st={fade:.2f}:d=1.5[m];"
+                f"[1:a][m]amix=inputs=2:duration=first:normalize=0,{master}[a]"
+            )
+        audio_map = ["-filter_complex", graph, "-map", "0:v", "-map", "[a]"]
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
-            "-i", wav,
+            *audio_in, *audio_map,
             "-c:v", "libx264", "-preset", os.environ.get("X264_PRESET", "medium"), "-crf", "19",
             "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1", "-g", str(FPS * 2),
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
@@ -149,12 +151,12 @@ def render_video(spec: StorySpec, out_path: str | Path, *, brand: str = "", work
         assert proc.stdin
         try:
             if workers == 1:
-                _init_worker(spec.model_dump_json(), brand, image_paths)
+                _init_worker(spec.model_dump_json(), brand)
                 for i in range(video.n_frames):
                     proc.stdin.write(_render_frame(i))
             else:
                 ctx = mp.get_context("spawn")  # safe inside the threaded web server
-                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand, image_paths)) as pool:
+                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand)) as pool:
                     for buf in pool.imap(_render_frame, range(video.n_frames), chunksize=4):
                         proc.stdin.write(buf)
         finally:
@@ -164,7 +166,7 @@ def render_video(spec: StorySpec, out_path: str | Path, *, brand: str = "", work
             raise RuntimeError(f"ffmpeg exited with {rc}")
 
     if cover_path:
-        # Cover = end of the first scene, when the hook is fully on screen.
+        # Cover = end of the intro, when the title is fully on screen.
         cover_idx = min(video.n_frames - 1, int((video.scenes[0].duration - OUTRO - 0.1) * FPS))
         video.frame(cover_idx).convert("RGB").save(cover_path, quality=90)
 
@@ -173,6 +175,7 @@ def render_video(spec: StorySpec, out_path: str | Path, *, brand: str = "", work
         "frames": video.n_frames,
         "render_seconds": round(time.time() - t0, 1),
         "bytes": out_path.stat().st_size,
+        "music": track.name if isinstance(track, Path) else (track or "none"),
     }
     log.info("rendered %s %s", out_path.name, info)
     return info

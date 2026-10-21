@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import pipeline, store
 from .config import settings
 from .publish import instagram, tiktok
-from .spec import StorySpec
+from .render import music
+from .spec import QuizSpec
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -26,7 +28,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="TechNews-Bot", lifespan=lifespan)
+app = FastAPI(title="Quiz bot", lifespan=lifespan)
 settings.videos_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.videos_dir), name="media")
 
@@ -51,6 +53,8 @@ def status():
     return {
         "publish_enabled": settings.publish_enabled,
         "instagram_mode": settings.instagram_mode,
+        "tiktok_mode": settings.tiktok_mode,
+        "music_tracks": [p.name for p in music.library(settings.music_dir)],
         "tiktok": {"configured": settings.tiktok_enabled, "token": tok("tiktok")},
         "instagram": {"configured": settings.instagram_enabled, "token": tok("instagram")},
         "discord": bool(settings.discord_webhook_url),
@@ -60,17 +64,18 @@ def status():
 
 @app.get("/schema", dependencies=[Depends(require_token)])
 def schema():
-    """JSON schema of the story spec, so the research routine always targets the current format."""
-    return StorySpec.model_json_schema()
+    """JSON schema of the quiz spec, so the writing routine always targets the current format."""
+    return QuizSpec.model_json_schema()
 
 
 @app.post("/jobs", status_code=202, dependencies=[Depends(require_token)])
-def create_job(spec: StorySpec, dry_run: bool = False, force: bool = False):
-    if spec.topic_key and not force and not dry_run:
-        since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-        for h in store.history(200):
-            if h.get("topic_key") == spec.topic_key and h["date"] >= since:
-                raise HTTPException(409, f"topic_key {spec.topic_key!r} already covered on {h['date']}")
+def create_job(spec: QuizSpec, dry_run: bool = False, force: bool = False):
+    if not force and not dry_run:
+        since = (datetime.now(timezone.utc) - timedelta(days=settings.repeat_days)).isoformat()
+        used = {a: h["date"] for h in store.history(1000) if h["date"] >= since for a in h.get("answers", [])}
+        repeats = [f"{a!r} (used {used[a][:10]})" for a in spec.answer_keys() if a in used]
+        if repeats:
+            raise HTTPException(409, "answers already used recently, replace these rounds: " + "; ".join(repeats))
     job = pipeline.submit(spec, dry_run=dry_run)
     return {"job_id": job["id"], "status": job["status"]}
 
@@ -86,6 +91,50 @@ def get_job(job_id: str):
 @app.get("/history", dependencies=[Depends(require_token)])
 def get_history(limit: int = 60):
     return store.history(limit)
+
+
+# ------------------------------------------------------------------ music library
+
+MUSIC_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,100}$")
+MAX_TRACK = 40 * 1024 * 1024
+
+
+@app.get("/music", dependencies=[Depends(require_token)])
+def list_music():
+    return [{"name": p.name, "bytes": p.stat().st_size} for p in music.library(settings.music_dir)]
+
+
+@app.put("/music/{name}", status_code=201, dependencies=[Depends(require_token)])
+async def upload_music(name: str, request: Request):
+    """Upload a track as the raw request body: curl -T track.mp3 APP_URL/music/track.mp3"""
+    if not MUSIC_NAME.match(name) or "." not in name or f".{name.rsplit('.', 1)[1].lower()}" not in music.EXTS:
+        raise HTTPException(400, f"name must be a plain file name ending in one of {sorted(music.EXTS)}")
+    settings.music_dir.mkdir(parents=True, exist_ok=True)
+    path = settings.music_dir / name
+    tmp = path.with_suffix(path.suffix + ".part")
+    size = 0
+    with tmp.open("wb") as fh:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > MAX_TRACK:
+                fh.close()
+                tmp.unlink(missing_ok=True)
+                raise HTTPException(413, "track larger than 40MB")
+            fh.write(chunk)
+    if size == 0:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, "empty body")
+    tmp.replace(path)
+    return {"name": name, "bytes": size}
+
+
+@app.delete("/music/{name}", dependencies=[Depends(require_token)])
+def delete_music(name: str):
+    path = settings.music_dir / name
+    if not MUSIC_NAME.match(name) or not path.is_file():
+        raise HTTPException(404)
+    path.unlink()
+    return {"deleted": name}
 
 
 # ------------------------------------------------------------------ OAuth (one-time browser setup)

@@ -4,23 +4,21 @@ from __future__ import annotations
 import logging
 import queue
 import secrets
-import tempfile
 import threading
 import time
 from pathlib import Path
 
 from . import notify, store
 from .config import settings
-from .images import fetch_images
 from .publish import instagram, tiktok
 from .render.engine import render_video
-from .spec import StorySpec
+from .spec import QuizSpec
 
 log = logging.getLogger(__name__)
 _queue: "queue.Queue[str]" = queue.Queue()
 
 
-def submit(spec: StorySpec, dry_run: bool = False) -> dict:
+def submit(spec: QuizSpec, dry_run: bool = False) -> dict:
     job = {
         "id": f"{spec.id}-{secrets.token_hex(3)}",
         "spec": spec.model_dump(),
@@ -42,18 +40,14 @@ def _run(job_id: str) -> None:
     job = store.get_job(job_id)
     if not job:
         return
-    spec = StorySpec.model_validate(job["spec"])
+    spec = QuizSpec.model_validate(job["spec"])
     stem = f"{spec.id}-{secrets.token_urlsafe(8)}"  # unguessable public URL
     video = settings.videos_dir / f"{stem}.mp4"
     cover = settings.videos_dir / f"{stem}.jpg"
 
-    job["status"] = "fetching_images"
+    job["status"] = "rendering"
     store.save_job(job)
-    with tempfile.TemporaryDirectory() as tmp:
-        image_paths, image_errors = fetch_images(spec, Path(tmp))
-        job.update(status="rendering", image_errors=image_errors)
-        store.save_job(job)
-        info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, image_paths=image_paths)
+    info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir)
     job.update(status="rendered", render=info, video=video.name, video_url=media_url(video.name),
                cover_url=media_url(cover.name))
     store.save_job(job)
@@ -62,7 +56,7 @@ def _run(job_id: str) -> None:
     results = job["results"]
     if publish and settings.tiktok_enabled:
         try:
-            results["tiktok"] = {"ok": True, **tiktok.upload_draft(video)}
+            results["tiktok"] = {"ok": True, **tiktok.upload(video, spec.full_caption())}
         except Exception as e:
             log.exception("tiktok upload failed")
             results["tiktok"] = {"ok": False, "error": str(e)[:500]}
@@ -77,11 +71,12 @@ def _run(job_id: str) -> None:
         store.add_history({
             "date": store.now_iso(),
             "id": spec.id,
-            "topic_key": spec.topic_key,
-            "category": spec.category,
+            "theme": spec.theme,
             "palette": spec.palette,
-            "title": next((b.text for b in spec.beats if b.type in ("title", "hook")), spec.id),
-            "sources": spec.sources,
+            "title": spec.title.replace("*", ""),
+            "round_types": [r.type for r in spec.rounds],
+            "answers": spec.answer_keys(),
+            "music": info.get("music"),
             "job_id": job_id,
         })
 
@@ -90,31 +85,33 @@ def _run(job_id: str) -> None:
     _notify(job, spec, video)
 
 
-def _notify(job: dict, spec: StorySpec, video: Path) -> None:
+def _notify(job: dict, spec: QuizSpec, video: Path) -> None:
     r = job["results"]
     lines = []
     if "tiktok" in r:
-        lines.append("**TikTok:** " + ("in your drafts/inbox, add a sound and post" if r["tiktok"]["ok"] else f"failed: {r['tiktok']['error']}"))
+        t = r["tiktok"]
+        if not t["ok"]:
+            lines.append(f"**TikTok:** failed: {t['error']}")
+        elif t.get("mode") == "direct":
+            lines.append(f"**TikTok:** posted ({t.get('privacy')}, status {t.get('status')})")
+        else:
+            lines.append("**TikTok:** in your inbox; open it and tap post")
     if "instagram" in r:
         lines.append("**Instagram:** " + ("published" if r["instagram"]["ok"] else f"failed: {r['instagram']['error']}"))
     if settings.instagram_mode != "auto" or "instagram" not in r:
-        lines.append("**Instagram:** save the video below, post it as a Reel and add the sound")
-    if job.get("image_errors"):
-        lines.append("**Images skipped:** " + ", ".join(f"`{k}` ({v})" for k, v in job["image_errors"].items()))
+        lines.append("**Instagram:** save the video below and post it as a Reel")
     if not settings.publish_enabled or job["dry_run"]:
         lines.insert(0, "_Publishing is off; nothing was uploaded._")
 
     embed = {
-        "title": f"New short ready: {spec.id}",
+        "title": f"New quiz ready: {spec.id}",
         "url": job["video_url"],
         "color": 0x8B6CFF,
         "fields": [
-            {"name": "Suggested sound", "value": spec.suggested_sound or "(none)", "inline": False},
-            {"name": "Sources", "value": "\n".join(spec.sources)[:1000], "inline": False},
+            {"name": "Answers", "inline": False, "value": "\n".join(
+                f"{i}. {r.type}: {r.answer_text()}" for i, r in enumerate(spec.rounds, 1))[:1000]},
             {"name": "Length", "value": f"{job['render']['duration']} s", "inline": True},
-            *([{"name": "Image credits", "inline": False, "value": "\n".join(
-                f"{i.credit} ({i.license or 'licence not stated'}): {i.url}" for i in spec.images)[:1000]}]
-              if spec.images else []),
+            {"name": "Music", "value": job["render"].get("music", "?"), "inline": True},
         ],
     }
     content = "\n".join(lines) + f"\n\n**Caption** (copy):\n```\n{spec.full_caption()[:1500]}\n```"

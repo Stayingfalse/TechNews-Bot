@@ -1,0 +1,17 @@
+{
+  "id": "sample-movie-night",
+  "theme": "Movie night",
+  "title": "Only *real* film fans get 5/5",
+  "subtitle": "Guess before the timer runs out",
+  "palette": "candy",
+  "rounds": [
+    {"type": "emoji", "category": "Movie", "emojis": "🦁👑🌅", "answer": "The Lion King", "note": "1994"},
+    {"type": "bad_description", "category": "Movie", "description": "A man refuses to share a *door* and it costs him everything", "answer": "Titanic"},
+    {"type": "true_false", "statement": "The shark in Jaws was nicknamed *Bruce* by the crew", "answer": true, "explanation": "Named after Spielberg's lawyer, Bruce Raymer"},
+    {"type": "unscramble", "category": "Movie", "answer": "Frozen", "note": "Let it go..."},
+    {"type": "choice", "question": "Which came out first?", "options": ["Toy Story", "Shrek", "Finding Nemo", "Monsters, Inc."], "correct": 0, "note": "Toy Story, 1995"}
+  ],
+  "caption": "SAMPLE: how many did you get? Be honest 👀",
+  "hashtags": ["#quiz", "#movies", "#guessthemovie", "#emojichallenge"],
+  "music": "auto"
+}
