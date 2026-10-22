@@ -54,7 +54,8 @@ def slot_key(job: dict) -> tuple[str, str]:
     return job["slot"], job.get("slot_time") or settings.post_time
 
 
-def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: str | None = None) -> dict:
+def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: str | None = None,
+           platforms: list[str] | None = None) -> dict:
     job = {
         "id": f"{spec.id}-{secrets.token_hex(3)}",
         "spec": spec.model_dump(),
@@ -65,6 +66,7 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: 
         "slot_time": (at or settings.post_time) if slot else None,
         "publish_at": slot_time(slot, at).isoformat() if slot else None,
         "results": {},
+        **({"platforms": platforms} if platforms else {}),
     }
     store.save_job(job)
     if not slot:  # booked jobs are rendered by the scheduler shortly before their slot
@@ -128,7 +130,7 @@ def _publish(job: dict) -> None:
 
     results = job["results"]
     if settings.publish_enabled and not job["dry_run"]:
-        for name in settings.platforms:
+        for name in job.get("platforms") or settings.platforms:
             if results.get(name, {}).get("ok"):
                 continue  # already posted there (resuming after a restart)
             mod = PUBLISHERS[name]

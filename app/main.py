@@ -93,13 +93,16 @@ def schema():
 
 
 @app.post("/jobs", status_code=202, dependencies=[Depends(require_token)])
-def create_job(spec: QuizSpec, dry_run: bool = False, force: bool = False):
-    """Render and publish one quiz now."""
+def create_job(spec: QuizSpec, dry_run: bool = False, force: bool = False, only: str = ""):
+    """Render and publish one quiz now. `only` (e.g. "youtube") limits it to some platforms."""
+    platforms = [p.strip() for p in only.split(",") if p.strip()] or None
+    if platforms and set(platforms) - set(PUBLISHERS):
+        raise HTTPException(400, f"only: use any of {sorted(PUBLISHERS)}")
     if not force and not dry_run:
         repeats = _repeats(spec, _used_answers())
         if repeats:
             raise HTTPException(409, "answers already used recently, replace these rounds: " + "; ".join(repeats))
-    job = pipeline.submit(spec, dry_run=dry_run)
+    job = pipeline.submit(spec, dry_run=dry_run, platforms=platforms)
     return {"job_id": job["id"], "status": job["status"]}
 
 

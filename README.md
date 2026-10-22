@@ -71,7 +71,7 @@ All endpoints except `/health`, `/media/*` and the OAuth callbacks need
 | `GET /schedule?days=` | The next posting slots: what's booked, `free_dates` |
 | `POST /schedule` | Book a batch: `{"items": [{"date": "YYYY-MM-DD", "time": "HH:MM", "spec": {...}}], "replace": false}`. All-or-nothing; 409 lists every problem (taken slot, repeated answer). `date` may be omitted to take the next free day; `time` defaults to `POST_TIME` (give one for extra posts on a day). |
 | `DELETE /schedule/{date}?time=HH:MM` | Cancel a booked quiz (`time` needed when the day has more than one) |
-| `POST /jobs?dry_run=&force=` | Render and post one quiz now. 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
+| `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
 | `GET /jobs/{id}` | Job status, video URL, publish results |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
 | `GET /schema` | Spec JSON schema |
