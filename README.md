@@ -57,7 +57,18 @@ See `app/spec.py` (or `GET /schema`). A spec has a `title` (intro hook), 3-5 `ro
 | `odd_one_out` | 2×2 grid of items | odd one lights up + reason |
 | `unscramble` | shuffled letter tiles | tiles hop into place |
 
-Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6). Wrap a word in
+Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6).
+
+Engagement options:
+- `intro`: `card` (2.8 s title card), `quick` (1.2 s) or `banner` (no card; the title rides a banner over round 1).
+- **Cliffhanger** (`"cliffhanger": true` on the last round): the video asks viewers to comment their answer
+  instead of revealing it. Shortly before the next quiz is rendered, the server reads that post's Instagram
+  and YouTube comments, judges them (typos forgiven; `accept` lists other correct forms), and the next
+  video shows the answer plus a shout-out to the first 5 correct commenters. Once it's posted, each of
+  them gets a reply under their comment pointing at it (a link on YouTube; Instagram comments can't
+  carry clickable links). Needs the comments permissions (reconnect from the dashboard).
+- `ask_comment` (per round): a "Comment your guess!" sticker on that round's countdown; `pause_hint`: a
+  "Pause to answer" sticker. Wrap a word in
 `*asterisks*` in the title, outro, descriptions and statements to highlight it. `music`: `auto`
 (library, else synth), `synth`, `none`, or a library file name.
 

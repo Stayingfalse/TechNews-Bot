@@ -189,6 +189,7 @@ def _booking(j: dict) -> dict:
     spec = QuizSpec.model_validate(j["spec"])
     return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
             "title": spec.title, "theme": spec.theme, "video_url": j.get("video_url"), "tags": spec.tags,
+            "intro": spec.intro, "cliffhanger": spec.rounds[-1].cliffhanger,
             "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]}
 
 

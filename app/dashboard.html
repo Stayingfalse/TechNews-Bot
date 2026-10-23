@@ -529,8 +529,9 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     top.append(el("span", { class: "pill" + (b.status === "scheduled" ? " ready" : ""), title: hint }, label));
     if (b.tags && b.tags.special && b.tags.special !== "none")
       top.append(el("span", { class: "pill special" }, b.tags.special === "hard" ? "Hard mode" : "Format special"));
+    if (b.cliffhanger) top.append(el("span", { class: "pill special" }, "Cliffhanger"));
     card.append(top);
-    const meta = [b.theme || "General mix", ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
+    const meta = [b.theme || "General mix", `intro: ${b.intro || "card"}`, ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
     card.append(el("div", { class: "tags" }, meta.join(" · ")));
     const det = el("details");
     det.append(el("summary", {}, `${b.rounds.length} rounds and answers`));

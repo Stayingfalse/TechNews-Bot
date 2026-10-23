@@ -16,7 +16,7 @@ from . import music
 from .audio import write_sfx_track
 from .background import Background
 from .draw import blit, clamp, disc, ease_in_cubic, ink_text, prog
-from .scenes import build_scenes
+from .scenes import IntroScene, build_scenes
 from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, W
 
 log = logging.getLogger(__name__)
@@ -31,11 +31,11 @@ def seed_of(spec: QuizSpec) -> int:
 
 
 class Video:
-    def __init__(self, spec: QuizSpec, brand: str = ""):
+    def __init__(self, spec: QuizSpec, brand: str = "", reveal: dict | None = None):
         self.spec = spec
         self.pal = PALETTES[spec.palette]
         self.bg = Background(self.pal, seed=seed_of(spec))
-        self.scenes = build_scenes(spec, self.pal, seed_of(spec))
+        self.scenes = build_scenes(spec, self.pal, seed_of(spec), reveal)
         self.starts = []
         acc = 0.0
         for s in self.scenes:
@@ -99,9 +99,9 @@ class Video:
 _WORKER: Video | None = None
 
 
-def _init_worker(spec_json: str, brand: str) -> None:
+def _init_worker(spec_json: str, brand: str, reveal: dict | None = None) -> None:
     global _WORKER
-    _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand)
+    _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand, reveal)
 
 
 def _render_frame(idx: int) -> bytes:
@@ -110,10 +110,12 @@ def _render_frame(idx: int) -> bytes:
 
 
 def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
-                 cover_path: str | Path | None = None, music_dir: Path | None = None) -> dict:
+                 cover_path: str | Path | None = None, music_dir: Path | None = None,
+                 reveal: dict | None = None) -> dict:
+    """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    video = Video(spec, brand)
+    video = Video(spec, brand, reveal)
     workers = workers or max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4"))))
     t0 = time.time()
     track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
@@ -148,12 +150,12 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
         assert proc.stdin
         try:
             if workers == 1:
-                _init_worker(spec.model_dump_json(), brand)
+                _init_worker(spec.model_dump_json(), brand, reveal)
                 for i in range(video.n_frames):
                     proc.stdin.write(_render_frame(i))
             else:
                 ctx = mp.get_context("spawn")  # safe inside the threaded web server
-                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand)) as pool:
+                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand, reveal)) as pool:
                     for buf in pool.imap(_render_frame, range(video.n_frames), chunksize=4):
                         proc.stdin.write(buf)
         finally:
@@ -163,8 +165,10 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
             raise RuntimeError(f"ffmpeg exited with {rc}")
 
     if cover_path:
-        # Cover = end of the intro, when the title is fully on screen.
-        cover_idx = min(video.n_frames - 1, int((video.scenes[0].duration - OUTRO - 0.1) * FPS))
+        # Cover = end of the title card; with no card, round 1's clue under the title banner (never an answer).
+        first = video.scenes[0]
+        at = first.duration - OUTRO - 0.1 if isinstance(first, IntroScene) else 1.8
+        cover_idx = min(video.n_frames - 1, int(at * FPS))
         video.frame(cover_idx).convert("RGB").save(cover_path, quality=90)
 
     info = {

@@ -30,7 +30,7 @@ from .draw import (
     wrap_words,
 )
 from .emoji import clusters, emoji_sprite
-from .theme import SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_TOP, SAFE_W, Palette, font
+from .theme import SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W, Palette, font
 
 CENTER_Y = (SAFE_TOP + SAFE_BOTTOM) // 2
 CLUE_Y = 850  # centre of the clue area
@@ -108,6 +108,19 @@ def _ribbon(text: str, pal: Palette, size=30, fill=None, color=None, angle=-3.0)
         d.ellipse((nx - 12, 7 + h / 2 - 12, nx + 12, 7 + h / 2 + 12), fill=(0, 0, 0, 0))
     place(r, label, r.width / 2 - 3, r.height / 2 - 2)
     return r.rotate(angle, resample=Image.BICUBIC, expand=True)
+
+
+def _sticker(lines: list[str], pal: Palette, fill, color, angle: float) -> Image.Image:
+    """A small tilted two-line sticker that fits beside the countdown (≤ 200 px wide)."""
+    sprites = [ink_text(ln, "sign", 24, color, pal.ink, 0, 0, 1) for ln in lines]
+    w = max(s.width for s in sprites) + 32
+    h = sum(s.height for s in sprites) - 8 * (len(sprites) - 1) + 24
+    card = slab(w, h, fill + (255,), pal.ink, radius=10, border=4, shadow=6).copy()
+    y = 6 + 12
+    for sp in sprites:
+        card.alpha_composite(sp, ((card.width - sp.width) // 2 - 3, y))
+        y += sp.height - 8
+    return card.rotate(angle, resample=Image.BICUBIC, expand=True)
 
 
 def _lines(text: str, style: str, size: int, max_w: int, color) -> list[Image.Image]:
@@ -254,8 +267,10 @@ class FlapTimer:
 class IntroScene(Scene):
     default_duration = 2.8
 
-    def __init__(self, spec, pal, **kw):
+    def __init__(self, spec, pal, speed: float = 1.0, **kw):
         super().__init__(spec, pal, **kw)
+        self.speed = speed  # >1 plays the same title card faster (the "quick" intro)
+        self.duration = self.default_duration / speed
         clean = spec.title.replace("*", "")
         self.size = fit_size(clean, "cond", 150, SAFE_W, 4, min_size=80)
         self.cy = CENTER_Y - 70
@@ -268,6 +283,7 @@ class IntroScene(Scene):
         self.ticket = _ribbon(f"{n} ROUNDS", pal, 38, fill=pal.sign, color=pal.ink, angle=3)
 
     def render(self, fg, t):
+        t *= self.speed
         if self.theme:
             p = ease_out_back(prog(t, 0.0, 0.45))
             blit(fg, self.theme, SAFE_CX - 120, self.block_top - 80, scale=p, alpha=clamp(p))
@@ -287,7 +303,8 @@ class IntroScene(Scene):
         blit(fg, self.ticket, SAFE_CX, y + 50, scale=pi, alpha=clamp(pi))
 
     def sfx(self):
-        return [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))] + [(1.0, "swipe")]
+        ev = [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))] + [(1.0, "swipe")]
+        return [(t / self.speed, k) for t, k in ev]
 
 
 class OutroScene(Scene):
@@ -346,11 +363,24 @@ class RoundScene(Scene):
     CLUE_IN = 0.8  # countdown starts once the clue is mostly on screen
     heading = "Guess it"
 
-    def __init__(self, rnd, pal, **kw):
+    CLIFF_HOLD = 3.4  # seconds the "comment your answer" card stays up instead of a reveal
+    BANNER_FOR = 3.0  # seconds the quiz title rides above round 1 when there is no title card
+
+    def __init__(self, rnd, pal, banner: str = "", pause_hint: bool = False, **kw):
         super().__init__(rnd, pal, **kw)
+        self.cliff = getattr(rnd, "cliffhanger", False)
         self.reveal_at = self.CLUE_IN + rnd.think
-        self.duration = self.reveal_at + rnd.reveal
+        self.duration = self.reveal_at + (self.CLIFF_HOLD if self.cliff else rnd.reveal)
         self.ribbon = _ribbon(f"ROUND {self.index} OF {self.total}", pal, 28, angle=-3 if self.index % 2 else 3)
+        self.banner = None
+        if banner:  # the quiz title, sized to fit one line across the safe area
+            words = banner.replace("*", "").upper()
+            self.banner = _ribbon(words, pal, fit_size(words, "sign", 30, SAFE_W - 80, 1, 18), fill=pal.sign, color=pal.ink, angle=-2)
+        self.ask = _sticker(["COMMENT", "YOUR GUESS!"], pal, pal.hot, pal.paper, -8) if getattr(rnd, "ask_comment", False) and not self.cliff else None
+        self.pause = _sticker(["PAUSE TO", "ANSWER"], pal, pal.cool, pal.ink, 7) if pause_hint else None
+        if self.cliff:
+            self.cliff_card = podium_card("Comment your answer!", self.pal, tab="CLIFFHANGER")
+            self.cliff_note = _sign("Revealed tomorrow · right answers get a shout-out", 40, pal, pal.paper, "semi", shadow=3)
         hsize = fit_size(self.heading.upper(), "sign", 74, SAFE_W, 1, min_size=40)
         self.head = _sign(self.heading.upper(), hsize, pal)
         self.timer = FlapTimer(pal, rnd.think)
@@ -358,7 +388,12 @@ class RoundScene(Scene):
 
     # -- shared pieces
     def _header(self, fg, t):
-        p = ease_out_back(prog(t, 0.0, 0.4), 2.2)
+        if self.banner and t < self.BANNER_FOR + 0.4:  # the quiz title first, then this round's ribbon
+            pb = ease_out_back(prog(t, 0.0, 0.35), 2.2) * (1 - ease_out_cubic(prog(t, self.BANNER_FOR, 0.3)))
+            blit(fg, self.banner, SAFE_CX, SAFE_TOP + 40, scale=pb, alpha=clamp(pb))
+            p = ease_out_back(prog(t, self.BANNER_FOR + 0.15, 0.3), 2.2)
+        else:
+            p = ease_out_back(prog(t, 0.0, 0.4), 2.2)
         blit(fg, self.ribbon, SAFE_CX, SAFE_TOP + 40, scale=p, alpha=clamp(p))
         ph = ease_out_back(prog(t, 0.1, 0.45), 1.8)
         blit(fg, self.head, SAFE_CX, SAFE_TOP + 140, scale=lerp(0.6, 1, ph), alpha=clamp(ph))
@@ -370,21 +405,7 @@ class RoundScene(Scene):
 
     def _podium(self, answer: str, note: str = ""):
         """The answer on a hot-coloured podium card with an 'ANSWER' tab."""
-        text = answer.upper()
-        size = fit_size(text, "sign", 72, SAFE_W - 90, 2, min_size=38)
-        lines = wrap_words(text, "sign", size, SAFE_W - 90)
-        lh = int(size * 1.18)
-        h = 80 + lh * len(lines)
-        tab = _ribbon("ANSWER", self.pal, 24, fill=self.pal.sign, color=self.pal.ink, angle=-5)
-        card = slab(SAFE_W, h, self.pal.hot + (255,), self.pal.ink, radius=24, border=6, shadow=12)
-        out = Image.new("RGBA", (card.width, card.height + tab.height // 2), (0, 0, 0, 0))
-        out.alpha_composite(card, (0, tab.height // 2))
-        y = tab.height // 2 + 12 + 42
-        for ln in lines:
-            s = ink_text(" ".join(ln), "sign", size, self.pal.paper, self.pal.ink, max(2, size // 18), max(3, size // 14))
-            out.alpha_composite(s, ((out.width - s.width) // 2, y - (s.height - lh) // 2 - 4))
-            y += lh
-        out.alpha_composite(tab, (34, 0))
+        out = podium_card(answer, self.pal)
         note_s = None
         if note:
             ns = fit_size(note, "semi", 46, SAFE_W, 1, min_size=30)
@@ -408,14 +429,31 @@ class RoundScene(Scene):
             blit(fg, ln, SAFE_CX, y0 + i * step + (1 - p) * 24, alpha=p)
 
     def revealed(self, t) -> float:
+        if self.cliff:  # the answer is kept for tomorrow
+            return 0.0
         return ease_out_cubic(prog(t, self.reveal_at, 0.35))
+
+    def _stickers(self, fg, t):
+        if t >= self.reveal_at:
+            return
+        out = 1 - ease_out_cubic(prog(t, self.reveal_at - 0.2, 0.2))
+        for k, (sticker, x) in enumerate(((self.ask, SAFE_LEFT + 104), (self.pause, SAFE_RIGHT - 104))):
+            if sticker is None:
+                continue
+            p = ease_out_back(prog(t, self.CLUE_IN + 0.2 + 0.15 * k, 0.35), 2.6) * out
+            wob = 1 + 0.04 * math.sin(t * 6 + k)
+            blit(fg, sticker, x, TIMER_Y - 4, scale=p * wob, alpha=clamp(p))
 
     def render(self, fg, t):
         self._header(fg, t)
         self.clue(fg, t)
         self._timer(fg, t)
-        self.answer(fg, t)
-        self.confetti.draw(fg, t - self.reveal_at)
+        self._stickers(fg, t)
+        if self.cliff:
+            self._draw_podium(fg, t, self.cliff_card, self.cliff_note)
+        else:
+            self.answer(fg, t)
+            self.confetti.draw(fg, t - self.reveal_at)
 
     def clue(self, fg, t):  # pragma: no cover - interface
         raise NotImplementedError
@@ -431,7 +469,12 @@ class RoundScene(Scene):
         think = self.item.think
         for m in range(int(think), 0, -1):  # one tick each time the number changes
             ev.append((self.CLUE_IN + think - m, "tock" if m <= 3 else "clock"))
-        ev += [(self.reveal_at, "reveal"), (self.reveal_at + 0.05, "chime")]
+        if self.cliff:
+            ev += [(self.reveal_at, "whoosh"), (self.reveal_at + 0.1, "impact")]
+        else:
+            ev += [(self.reveal_at, "reveal"), (self.reveal_at + 0.05, "chime")]
+        if self.ask or self.pause:
+            ev.append((self.CLUE_IN + 0.2, "pop"))
         return ev
 
     def pulses(self):
@@ -719,7 +762,7 @@ class UnscrambleScene(RoundScene):
             p = ease_out_back(prog(t, 0.25 + 0.05 * i, 0.35), 2.2)
             if p <= 0:
                 continue
-            m = ease_in_out_cubic(prog(t, self.reveal_at + 0.03 * i, 0.5))
+            m = 0.0 if self.cliff else ease_in_out_cubic(prog(t, self.reveal_at + 0.03 * i, 0.5))
             hop = -math.sin(math.pi * m) * self.tile * 0.8
             x, y = lerp(sx, ex, m), lerp(sy, ey, m) + hop
             wig = 0 if m > 0 else 3 * math.sin(t * 9 + i)
@@ -744,10 +787,87 @@ ROUNDS = {
 }
 
 
-def build_scenes(spec, pal: Palette, seed: int) -> list[Scene]:
+def build_scenes(spec, pal: Palette, seed: int, reveal: dict | None = None) -> list[Scene]:
+    """intro → rounds → (yesterday's cliffhanger answer + shout-outs) → outro."""
     n = len(spec.rounds)
-    scenes: list[Scene] = [IntroScene(spec, pal, total=n, seed=seed)]
+    intro = getattr(spec, "intro", "card")
+    scenes: list[Scene] = []
+    if intro != "banner":
+        scenes.append(IntroScene(spec, pal, speed=2.2 if intro == "quick" else 1.0, total=n, seed=seed))
     for i, r in enumerate(spec.rounds, 1):
-        scenes.append(ROUNDS[r.type](r, pal, index=i, total=n, seed=seed))
+        scenes.append(ROUNDS[r.type](r, pal, index=i, total=n, seed=seed,
+                                     banner=spec.title if intro == "banner" and i == 1 else "",
+                                     pause_hint=getattr(spec, "pause_hint", False)))
+    if reveal:
+        scenes.append(YesterdayScene(reveal, pal, total=n, seed=seed))
     scenes.append(OutroScene(spec, pal, total=n, seed=seed))
     return scenes
+
+
+def podium_card(answer: str, pal: Palette, tab: str = "ANSWER") -> Image.Image:
+    """Text on a hot-coloured podium card with a tab label."""
+    text = answer.upper()
+    size = fit_size(text, "sign", 72, SAFE_W - 90, 2, min_size=38)
+    lines = wrap_words(text, "sign", size, SAFE_W - 90)
+    lh = int(size * 1.18)
+    h = 80 + lh * len(lines)
+    tab_s = _ribbon(tab, pal, 24, fill=pal.sign, color=pal.ink, angle=-5)
+    card = slab(SAFE_W, h, pal.hot + (255,), pal.ink, radius=24, border=6, shadow=12)
+    out = Image.new("RGBA", (card.width, card.height + tab_s.height // 2), (0, 0, 0, 0))
+    out.alpha_composite(card, (0, tab_s.height // 2))
+    y = tab_s.height // 2 + 12 + 42
+    for ln in lines:
+        s = ink_text(" ".join(ln), "sign", size, pal.paper, pal.ink, max(2, size // 18), max(3, size // 14))
+        out.alpha_composite(s, ((out.width - s.width) // 2, y - (s.height - lh) // 2 - 4))
+        y += lh
+    out.alpha_composite(tab_s, (34, 0))
+    return out
+
+
+class YesterdayScene(Scene):
+    """Yesterday's cliffhanger: the answer, then who got it right (first correct commenters)."""
+
+    def __init__(self, reveal: dict, pal, **kw):
+        super().__init__(reveal, pal, **kw)
+        names = reveal.get("shoutouts")  # None = comments couldn't be read; [] = nobody got it
+        self.duration = 4.6 if names else 3.8
+        self.ribbon = _ribbon("YESTERDAY'S CLIFFHANGER", pal, 28, angle=-3)
+        self.head = _sign("THE ANSWER WAS", 64, pal)
+        self.card = podium_card(reveal["answer"], pal)
+        self.note = _sign(reveal["note"], fit_size(reveal["note"], "semi", 40, SAFE_W, 1, 28), pal, pal.paper, "semi",
+                          shadow=3) if reveal.get("note") else None
+        self.names = []
+        if names is None:
+            self.label = _sign("DID YOU GET IT?", 48, pal, pal.paper)
+        elif not names:
+            self.label = _sign("NOBODY GOT IT!", 52, pal, pal.paper)
+            self.names = [_sign("Be first on today's cliffhanger", 40, pal, pal.cool, "semi", shadow=3)]
+        else:
+            self.label = _sign("GOT IT RIGHT", 48, pal, pal.paper)
+            size = min(fit_size("@" + n, "bold", 52, SAFE_W, 1, 30) for n in names)
+            self.names = [_sign("@" + n, size, pal, pal.sign, "bold", shadow=4) for n in names]
+        self.confetti = Confetti(pal, self.seed + 313, SAFE_CX, 620)
+
+    def render(self, fg, t):
+        p = ease_out_back(prog(t, 0.0, 0.4), 2.2)
+        blit(fg, self.ribbon, SAFE_CX, SAFE_TOP + 40, scale=p, alpha=clamp(p))
+        ph = ease_out_back(prog(t, 0.1, 0.45), 1.8)
+        blit(fg, self.head, SAFE_CX, SAFE_TOP + 140, scale=lerp(0.6, 1, ph), alpha=clamp(ph))
+        pc = prog(t, 0.35, 0.45)
+        if pc > 0:
+            blit(fg, self.card, SAFE_CX, 600 + (1 - ease_out_cubic(pc)) * 120, scale=lerp(0.7, 1, ease_out_back(pc, 2)),
+                 alpha=clamp(pc * 3))
+        y = 600 + self.card.height / 2 + 24
+        if self.note:
+            pn = ease_out_cubic(prog(t, 0.7, 0.4))
+            blit(fg, self.note, SAFE_CX, y + (1 - pn) * 20, anchor="mt", alpha=pn)
+            y += 70
+        pl = ease_out_back(prog(t, 1.2, 0.4), 2)
+        blit(fg, self.label, SAFE_CX, y + 50, scale=pl, alpha=clamp(pl))
+        for i, n in enumerate(self.names):
+            pn = ease_out_back(prog(t, 1.5 + 0.18 * i, 0.35), 2.4)
+            blit(fg, n, SAFE_CX, y + 120 + i * 66, scale=pn, alpha=clamp(pn))
+        self.confetti.draw(fg, t - 0.4)
+
+    def sfx(self):
+        return [(0.0, "whoosh"), (0.35, "reveal"), (0.4, "chime")] + [(1.5 + 0.18 * i, "pop") for i in range(len(self.names))]

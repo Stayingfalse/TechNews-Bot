@@ -200,3 +200,34 @@ def login_identity(code: str) -> str:
 def connected_identity() -> str | None:
     tok = store.get_tokens("instagram")
     return str(tok["user_id"]) if tok and tok.get("user_id") else None
+
+
+def comments(media_id: str, limit: int = 200) -> list[dict]:
+    """Comments on a post, oldest first: {id, user, text, at}. Needs instagram_business_manage_comments."""
+    tok = store.get_tokens("instagram")
+    url, params, out = f"{graph()}/{media_id}/comments", {
+        "fields": "id,text,username,timestamp", "limit": 50, "access_token": tok["access_token"]}, []
+    while url and len(out) < limit:
+        r = httpx.get(url, params=params, timeout=30)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Instagram comments unavailable: {r.text[:200]}")
+        d = r.json()
+        out += [{"id": c["id"], "user": c.get("username", ""), "text": c.get("text", ""), "at": c.get("timestamp", "")}
+                for c in d.get("data", [])]
+        url, params = d.get("paging", {}).get("next"), None
+    return sorted(out, key=lambda c: c["at"])
+
+
+def reply(comment_id: str, message: str) -> str:
+    tok = store.get_tokens("instagram")
+    r = httpx.post(f"{graph()}/{comment_id}/replies", data={"message": message, "access_token": tok["access_token"]}, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram reply failed: {r.text[:200]}")
+    return r.json().get("id", "")
+
+
+def own_name() -> str:
+    try:
+        return account().get("username", "")
+    except Exception:
+        return ""
