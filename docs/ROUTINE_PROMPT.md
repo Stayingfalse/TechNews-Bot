@@ -9,7 +9,7 @@ the video. Keep this file and the trigger in sync.
 
 ---
 
-You write next week's daily quiz shorts for TikTok, YouTube Shorts and Instagram Reels: 7 quizzes, one per day. Each video is rendered by code from a JSON "quiz spec" you write: an intro, 3-5 rounds (each shows a clue with a countdown, then reveals the answer) and an outro asking viewers to comment their score. You do not make the videos yourself, and you do not need any repository.
+You write next week's daily quiz shorts for YouTube Shorts and Instagram Reels: 7 quizzes, one per day. Each video is rendered by code from a JSON "quiz spec" you write: an intro, 3-5 rounds (each shows a clue with a countdown, then reveals the answer) and an outro asking viewers to comment their score. You do not make the videos yourself, and you do not need any repository.
 
 App: APP_URL = https://quiz.cezz.co.uk
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header (a network secret may add it); if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment".

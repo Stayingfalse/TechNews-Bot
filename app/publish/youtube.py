@@ -222,3 +222,13 @@ def reply(comment_id: str, text: str) -> str:
     if r.status_code >= 400:
         raise RuntimeError(f"YouTube reply failed: {r.text[:200]}")
     return r.json().get("id", "")
+
+
+def comment(video_id: str, text: str) -> str:
+    """A top-level comment on a video, as the channel."""
+    r = httpx.post("https://www.googleapis.com/youtube/v3/commentThreads", params={"part": "snippet"}, timeout=30,
+                   headers={"Authorization": f"Bearer {access_token()}"},
+                   json={"snippet": {"videoId": video_id, "topLevelComment": {"snippet": {"textOriginal": text}}}})
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube comment failed: {r.text[:200]}")
+    return r.json().get("id", "")

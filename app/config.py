@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-PLATFORMS = ("tiktok", "youtube", "instagram")
+PLATFORMS = ("youtube", "instagram")
+RETIRED = {"tiktok"}  # once supported; still accepted in PLATFORMS so an old env value doesn't stop the app
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -21,8 +22,9 @@ class Settings:
 
         # Master switch: when false, videos are rendered and you're notified, but nothing is uploaded.
         self.publish_enabled = _bool("PUBLISH_ENABLED", False)
-        # Where to post, comma-separated: any of tiktok, youtube, instagram.
-        self.platforms = [p.strip().lower() for p in os.environ.get("PLATFORMS", "tiktok,youtube,instagram").split(",") if p.strip()]
+        # Where to post, comma-separated: any of youtube, instagram.
+        listed = [p.strip().lower() for p in os.environ.get("PLATFORMS", "youtube,instagram").split(",") if p.strip()]
+        self.platforms = [p for p in listed if p not in RETIRED]
         unknown = set(self.platforms) - set(PLATFORMS)
         if unknown:
             raise ValueError(f"PLATFORMS has unknown entries {sorted(unknown)}; use any of {PLATFORMS}")
@@ -34,14 +36,6 @@ class Settings:
         if not (0 <= h < 24 and 0 <= m < 60):
             raise ValueError("POST_TIME must be HH:MM")
 
-        self.tiktok_client_key = os.environ.get("TIKTOK_CLIENT_KEY", "")
-        self.tiktok_client_secret = os.environ.get("TIKTOK_CLIENT_SECRET", "")
-        # draft  = upload to the TikTok inbox; you tap post (works without TikTok's app audit)
-        # direct = post straight to the profile (needs the video.publish scope; until TikTok audits
-        #          the app, direct posts are forced to private / SELF_ONLY)
-        self.tiktok_mode = os.environ.get("TIKTOK_MODE", "draft")
-        self.tiktok_privacy = os.environ.get("TIKTOK_PRIVACY", "PUBLIC_TO_EVERYONE")
-
         self.instagram_app_id = os.environ.get("INSTAGRAM_APP_ID", "")
         self.instagram_app_secret = os.environ.get("INSTAGRAM_APP_SECRET", "")
         self.graph_version = os.environ.get("GRAPH_API_VERSION", "v23.0")
@@ -50,6 +44,10 @@ class Settings:
         self.youtube_client_secret = os.environ.get("YOUTUBE_CLIENT_SECRET", "")
         # public | unlisted | private. Uploads from an unaudited Google API project are locked to private.
         self.youtube_privacy = os.environ.get("YOUTUBE_PRIVACY", "public")
+
+        # After each post, comment on the previous one pointing at it ("Next quiz is up"), and reply
+        # under each correct cliffhanger answer. Needs the comments permission on each platform.
+        self.next_link_comments = _bool("NEXT_LINK_COMMENTS", True)
 
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
@@ -67,10 +65,6 @@ class Settings:
     @property
     def music_dir(self) -> Path:
         return Path(self._music_dir) if self._music_dir else self.data_dir / "music"
-
-    @property
-    def tiktok_enabled(self) -> bool:
-        return bool(self.tiktok_client_key and self.tiktok_client_secret)
 
     @property
     def instagram_enabled(self) -> bool:

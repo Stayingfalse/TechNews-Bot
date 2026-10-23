@@ -16,7 +16,7 @@ from PIL import ImageFont
 W, H = 1080, 1920
 FPS = 30
 
-# Areas covered by TikTok / Instagram / YouTube UI (captions, buttons, tabs). Keep text inside SAFE.
+# Areas covered by Instagram / YouTube UI (captions, buttons, tabs). Keep text inside SAFE.
 SAFE_TOP = 270
 SAFE_BOTTOM = 1450
 SAFE_LEFT = 90

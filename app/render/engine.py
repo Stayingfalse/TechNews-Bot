@@ -15,15 +15,16 @@ from ..spec import QuizSpec
 from . import music
 from .audio import write_sfx_track
 from .background import Background
-from .draw import blit, clamp, disc, ease_in_cubic, ink_text, prog
-from .scenes import IntroScene, build_scenes
+from .draw import blit, clamp, disc, ease_in_cubic, ease_in_out_cubic, ink_text, prog
+from .scenes import IntroScene, RoundScene, build_scenes
 from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, W
 
 log = logging.getLogger(__name__)
 
 OUTRO = 0.22  # seconds each scene spends leaving
+LOOP = 0.45  # the last scene clears and the stage eases back to frame 0, so an autoplay replay loops seamlessly
 MUSIC_GAIN = float(os.environ.get("MUSIC_GAIN", "0.32"))  # library tracks, after loudness normalisation
-LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-15"))  # final mix target, about what TikTok/Reels play at
+LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-15"))  # final mix target, about what Reels/Shorts play at
 
 
 def seed_of(spec: QuizSpec) -> int:
@@ -46,6 +47,7 @@ class Video:
         self.brand = ink_text(brand, "sign", 28, self.pal.paper, self.pal.ink, 0, 3, 1) if brand else None
         self.lamp_on = disc(11, self.pal.sign + (255,), self.pal.ink, 4, 3)
         self.lamp_off = disc(11, self.pal.stage + (255,), self.pal.ink, 4, 3)
+        self.start_bg = self.bg.render(0.0)
 
     def sfx_events(self) -> list[tuple[float, str]]:
         ev = []
@@ -69,7 +71,12 @@ class Video:
         frame = self.bg.render(T, energy)
 
         last = i == len(self.scenes) - 1
-        out_p = 0.0 if last else ease_in_cubic(prog(t, scene.duration - OUTRO, OUTRO))
+        if last:  # fully cleared two frames before the end, so the final frames match frame 0
+            out_p = ease_in_out_cubic(prog(t, scene.duration - LOOP, LOOP - 2 / FPS))
+        else:
+            out_p = ease_in_cubic(prog(t, scene.duration - OUTRO, OUTRO))
+        if last and out_p > 0:
+            frame = Image.blend(frame, self.start_bg, out_p)
 
         fg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         scene.render(fg, t)
@@ -78,19 +85,19 @@ class Video:
         else:
             frame.alpha_composite(fg)
 
-        self._chrome(frame, T)
+        self._chrome(frame, T, looping=last and out_p > 0.5)
         return frame
 
-    def _chrome(self, frame: Image.Image, T: float) -> None:
+    def _chrome(self, frame: Image.Image, T: float, looping: bool = False) -> None:
         # Brand top-left; one lamp per round top-right, lit once that round has started
         y = SAFE_TOP - 70
         if self.brand:
             blit(frame, self.brand, SAFE_LEFT - 6, y, anchor="lm")
-        rounds = range(1, len(self.scenes) - 1)
+        rounds = [k for k, s in enumerate(self.scenes) if isinstance(s, RoundScene)]
         step = 34
         x0 = SAFE_RIGHT - (len(rounds) - 1) * step - 10
         for k, si in enumerate(rounds):
-            lamp = self.lamp_on if T >= self.starts[si] else self.lamp_off
+            lamp = self.lamp_on if T >= self.starts[si] and not looping else self.lamp_off
             blit(frame, lamp, x0 + k * step, y)
 
 

@@ -5,6 +5,9 @@ comment theirs. When the next quiz is rendered (shortly before it posts), the co
 cliffhanger post are read from Instagram and YouTube, judged, and the first correct commenters
 get a shout-out in the video next to the revealed answer. Once that quiz is posted, each of them
 gets a reply under their comment pointing at the new video.
+
+Every post also gets a comment of our own pointing at the quiz that follows it, so each comment
+section leads to the next video (with the link on YouTube; Instagram comments can't carry links).
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
 from . import store
+from .config import settings
 from .publish import PUBLISHERS
 from .spec import QuizSpec
 
@@ -166,7 +170,7 @@ def after_publish(job: dict) -> None:
         cliff["cliff_revealed_by"] = job["id"]
         store.save_job(cliff)
     replies = []
-    for i, w in enumerate(reveal.get("winners", [])):
+    for i, w in enumerate(reveal.get("winners", []) if settings.next_link_comments else []):
         res = job["results"].get(w["platform"], {})
         if not res.get("ok"):
             continue
@@ -178,3 +182,48 @@ def after_publish(job: dict) -> None:
             replies.append({"user": w["user"], "platform": w["platform"], "ok": False, "error": str(e)[:200]})
     reveal["replies"] = replies
     store.save_job(job)
+
+
+NEXT_LINK = {
+    "youtube": {"cliff": "🔓 Answer revealed, with shout-outs to everyone who got it, in today's quiz: {url}",
+                "next": "▶️ Next quiz is up: {url}"},
+    "instagram": {"cliff": "🔓 Answer revealed, with shout-outs, in today's quiz! It's the newest post on our profile 👀",
+                  "next": "▶️ Next quiz is up! It's the newest post on our profile 👀"},
+}
+
+
+def previous_post(job: dict) -> dict | None:
+    """The real quiz posted most recently before this one."""
+    best = None
+    for j in store.list_jobs(200):
+        if (j["id"] == job["id"] or j.get("status") != "done" or j.get("dry_run") or j["id"].startswith("test-")
+                or not j.get("published_at") or j["published_at"] >= job["published_at"]):
+            continue
+        if best is None or j["published_at"] > best["published_at"]:
+            best = j
+    return best
+
+
+def link_previous(job: dict) -> None:
+    """Comment on the previous post, on each platform both went out on, pointing at this one."""
+    if not settings.next_link_comments or job.get("dry_run") or job["id"].startswith("test-"):
+        return
+    prev = previous_post(job)
+    if not prev:
+        return
+    cliff = (job.get("reveal") or {}).get("from_job") == prev["id"]
+    links = prev.setdefault("next_link", {})
+    for platform, res in job.get("results", {}).items():
+        old = prev.get("results", {}).get(platform, {})
+        if platform not in NEXT_LINK or not res.get("ok") or not old.get("ok") or links.get(platform, {}).get("ok"):
+            continue
+        text = NEXT_LINK[platform]["cliff" if cliff else "next"].format(url=res.get("url") or "")
+        target = old.get("video_id") if platform == "youtube" else old.get("media_id")
+        try:
+            cid = PUBLISHERS[platform].comment(target, text)
+            links[platform] = {"ok": True, "to_job": job["id"], "comment_id": cid}
+        except Exception as e:
+            log.warning("next-video comment %s on %s: %s", platform, prev["id"], e)
+            links[platform] = {"ok": False, "to_job": job["id"], "error": str(e)[:200]}
+    store.save_job(prev)
+    job["linked_from"] = {"job": prev["id"], **{p: v["ok"] for p, v in links.items() if v.get("to_job") == job["id"]}}

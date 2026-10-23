@@ -156,8 +156,8 @@ def _publish(job: dict) -> None:
     results = job["results"]
     if settings.publish_enabled and not job["dry_run"]:
         for name in job.get("platforms") or settings.platforms:
-            if results.get(name, {}).get("ok"):
-                continue  # already posted there (resuming after a restart)
+            if name not in PUBLISHERS or results.get(name, {}).get("ok"):
+                continue  # retired platform, or already posted there (resuming after a restart)
             mod = PUBLISHERS[name]
             if not mod.configured():
                 results[name] = {"ok": False, "error": "not configured (missing app credentials)"}
@@ -188,6 +188,10 @@ def _publish(job: dict) -> None:
         cliffhanger.after_publish(job)  # mark yesterday's cliffhanger revealed; reply under the winners' comments
     except Exception:
         log.exception("cliffhanger replies failed")
+    try:
+        cliffhanger.link_previous(job)  # yesterday's comment section points at today's quiz
+    except Exception:
+        log.exception("next-video comment failed")
     if results and all(r.get("ok") for r in results.values()):
         # every platform has its copy; keep the file only when something needs a retry
         video.unlink(missing_ok=True)
@@ -228,11 +232,9 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
         lines.append("_Publishing is off; nothing was uploaded._")
     for name, res in job["results"].items():
         if not res["ok"]:
-            lines.append(f"**{LABELS[name]}:** failed: {res['error']}")
-        elif name == "tiktok" and res.get("mode") == "draft":
-            lines.append("**TikTok:** in your inbox; open it and tap post")
+            lines.append(f"**{LABELS.get(name, name)}:** failed: {res['error']}")
         else:
-            lines.append(f"**{LABELS[name]}:** posted {res.get('url') or res.get('privacy') or ''}".rstrip())
+            lines.append(f"**{LABELS.get(name, name)}:** posted {res.get('url') or res.get('privacy') or ''}".rstrip())
     embed = {
         "title": f"Posted: {spec.title.replace('*', '')}",
         "url": job["video_url"],
@@ -245,6 +247,10 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
         who = ", ".join("@" + n for n in names) if names else ("nobody got it" if names == [] else "comments not readable")
         ok = sum(1 for r in rv.get("replies", []) if r["ok"])
         lines.append(f"**Cliffhanger revealed:** {rv['answer']} · shout-outs: {who} · replies sent: {ok}")
+    lf = job.get("linked_from")
+    if lf:
+        done = [LABELS.get(p, p) for p, ok in lf.items() if p != "job" and ok]
+        lines.append(f"**Linked from {lf['job']}:** " + (", ".join(done) if done else "comment failed (check the comments permission)"))
     if spec.rounds[-1].cliffhanger:
         lines.append("**Cliffhanger:** the last round's answer is held back for the next quiz.")
     content = "\n".join(lines) + f"\n\n**Caption:**\n```\n{spec.full_caption()[:1500]}\n```"

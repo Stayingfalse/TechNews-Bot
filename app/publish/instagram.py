@@ -226,6 +226,15 @@ def reply(comment_id: str, message: str) -> str:
     return r.json().get("id", "")
 
 
+def comment(media_id: str, message: str) -> str:
+    """A top-level comment on a post, as the account."""
+    tok = store.get_tokens("instagram")
+    r = httpx.post(f"{graph()}/{media_id}/comments", data={"message": message, "access_token": tok["access_token"]}, timeout=30)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram comment failed: {r.text[:200]}")
+    return r.json().get("id", "")
+
+
 def own_name() -> str:
     try:
         return account().get("username", "")

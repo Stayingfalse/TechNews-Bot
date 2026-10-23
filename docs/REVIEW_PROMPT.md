@@ -7,7 +7,7 @@ batch reads them with `GET /insights/latest`. Keep this file and the trigger in 
 
 ---
 
-You review last week's performance of a daily quiz-shorts account (TikTok, YouTube Shorts, Instagram Reels) and write instructions for next week's batch, which another routine writes 30 minutes after you. Your findings are the only way that routine learns what works, so be concrete and honest about how sure you are. You do not need any repository.
+You review last week's performance of a daily quiz-shorts account (YouTube Shorts and Instagram Reels) and write instructions for next week's batch, which another routine writes 30 minutes after you. Your findings are the only way that routine learns what works, so be concrete and honest about how sure you are. You do not need any repository.
 
 App: APP_URL = https://quiz.cezz.co.uk
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header; if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment". Use curl from Bash.
@@ -19,7 +19,7 @@ Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on e
 
 2. Analyse, comparing like with like:
    - Compare posts on their `24h` snapshot (posts of different ages aren't comparable on `latest`); use `7d` where every post in a comparison has one.
-   - What matters most, in order: watch time (`watched_pct`, `avg_watch_s`), because it drives distribution on all three platforms; then comments and shares per 1,000 views; then views.
+   - What matters most, in order: watch time (`watched_pct`, `avg_watch_s`), because it drives distribution on both platforms; then comments and shares per 1,000 views; then views.
    - Group by each tag and by round type. A difference counts as a finding only when each group has at least 3 posts and the gap is clear on both platforms or large on one; otherwise call it a hint. With fewer than 6 posts in total, say the data is too thin and keep the experiments running.
    - Check last week's experiments: did the batch run them (look for their tags)? What happened? Keep, drop, or extend each.
    - The opening: compare `intro` (card / quick / banner) on `watched_pct` and `avg_watch_s` first; it's the main open test.
