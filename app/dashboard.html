@@ -86,6 +86,7 @@ a { color: var(--ig); }
   <header>
     <h1>Quiz performance</h1>
     <span class="updated" id="updated">Loading…</span>
+    <a href="/logout" style="margin-left:auto;font-size:13px">Sign out</a>
   </header>
 
   <div class="filters card" role="group" aria-label="Filters">
@@ -144,8 +145,9 @@ a { color: var(--ig); }
 
 <script>
 (() => {
+  // Signed-in browsers send their cookie; ?token=… still works for scripts and bookmarks.
   const token = new URLSearchParams(location.search).get("token") || "";
-  const auth = { headers: { Authorization: "Bearer " + token } };
+  const auth = token ? { headers: { Authorization: "Bearer " + token } } : {};
   const PLATFORMS = [
     { key: "instagram", name: "Instagram", color: "var(--ig)" },
     { key: "youtube", name: "YouTube", color: "var(--yt)" },
@@ -384,7 +386,7 @@ a { color: var(--ig); }
   async function load() {
     document.querySelector("main").style.opacity = posts.length ? 0.6 : 1;
     const r = await fetch("/metrics", auth);
-    if (r.status === 401) { $("updated").textContent = "Open this page with ?token=<API token>."; return; }
+    if (r.status === 401) { location.href = "/login?next=/dashboard"; return; }
     posts = await r.json();
     const ins = await fetch("/insights/latest", auth);
     insight = ins.ok ? await ins.json() : null;

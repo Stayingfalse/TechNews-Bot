@@ -34,7 +34,7 @@ def redirect_uri() -> str:
     return f"{settings.public_base_url}/oauth/youtube/callback"
 
 
-def authorize_url(state: str) -> str:
+def authorize_url(state: str, login: bool = False) -> str:
     q = {
         "client_id": settings.youtube_client_id,
         "redirect_uri": redirect_uri(),
@@ -44,6 +44,9 @@ def authorize_url(state: str) -> str:
         "prompt": "consent",  # and Google only returns one on a consent screen
         "state": state,
     }
+    if login:  # sign-in only needs to see which channel this is; no refresh token, no consent screen
+        q.update(scope="https://www.googleapis.com/auth/youtube.readonly", access_type="online",
+                 prompt="select_account")
     return f"{AUTH_URL}?{urlencode(q)}"
 
 
@@ -157,3 +160,35 @@ def metrics(video_id: str, published: str) -> dict:
     elif a.status_code >= 400:
         out["note"] = f"watch time unavailable: {a.text[:120]}"
     return out
+
+
+def _channel_id(token: str) -> str:
+    r = httpx.get("https://www.googleapis.com/youtube/v3/channels", timeout=30,
+                  params={"part": "id", "mine": "true"}, headers={"Authorization": f"Bearer {token}"})
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube channel lookup failed: {r.text[:200]}")
+    items = r.json().get("items") or []
+    if not items:
+        raise RuntimeError("that Google account has no YouTube channel")
+    return items[0]["id"]
+
+
+def login_identity(code: str) -> str:
+    """Sign-in: which channel did they pick? Uses a throwaway token; the posting token is untouched."""
+    r = httpx.post(TOKEN_URL, timeout=30, data={
+        "client_id": settings.youtube_client_id, "client_secret": settings.youtube_client_secret,
+        "code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri()})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Google sign-in failed: {r.text[:200]}")
+    return _channel_id(r.json()["access_token"])
+
+
+def connected_identity() -> str | None:
+    """The channel the bot posts to (looked up once with the posting token, then remembered)."""
+    tok = store.get_tokens("youtube")
+    if not tok:
+        return None
+    if not tok.get("channel_id"):
+        tok["channel_id"] = _channel_id(access_token())  # needs youtube.readonly on the posting token
+        store.set_tokens("youtube", {**store.get_tokens("youtube"), "channel_id": tok["channel_id"]})
+    return tok["channel_id"]

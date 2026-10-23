@@ -26,12 +26,12 @@ def redirect_uri() -> str:
     return f"{settings.public_base_url}/oauth/instagram/callback"
 
 
-def authorize_url(state: str) -> str:
+def authorize_url(state: str, login: bool = False) -> str:
     q = {
         "client_id": settings.instagram_app_id,
         "redirect_uri": redirect_uri(),
         "response_type": "code",
-        "scope": SCOPES,
+        "scope": "instagram_business_basic" if login else SCOPES,
         "state": state,
     }
     return f"https://www.instagram.com/oauth/authorize?{urlencode(q)}"
@@ -185,3 +185,18 @@ def metrics(media_id: str) -> dict:
         if m.get("name") in names and v is not None:
             out[names[m["name"]]] = v / 1000 if m["name"] == "ig_reels_avg_watch_time" else v  # ms → s
     return out
+
+
+def login_identity(code: str) -> str:
+    """Sign-in: who approved? Returns the Instagram account ID without touching the posting token."""
+    r = httpx.post("https://api.instagram.com/oauth/access_token", timeout=30, data={
+        "client_id": settings.instagram_app_id, "client_secret": settings.instagram_app_secret,
+        "grant_type": "authorization_code", "redirect_uri": redirect_uri(), "code": code})
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram sign-in failed: {r.text[:200]}")
+    return str(r.json()["user_id"])
+
+
+def connected_identity() -> str | None:
+    tok = store.get_tokens("instagram")
+    return str(tok["user_id"]) if tok and tok.get("user_id") else None

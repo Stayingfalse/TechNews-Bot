@@ -63,8 +63,11 @@ Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6)
 
 ## API
 
-All endpoints except `/health`, `/media/*` and the OAuth callbacks need
-`Authorization: Bearer $API_TOKEN` (or `?token=` for browser use).
+All endpoints except `/health`, `/media/*`, `/login` and the OAuth callbacks need
+`Authorization: Bearer $API_TOKEN` (or `?token=` for browser use). In a browser you can instead
+sign in at `/login` with the connected Instagram or YouTube account; that cookie can read
+everything and refresh the dashboard's numbers, but booking, cancelling and posting still need
+the token.
 
 | Endpoint | |
 |---|---|
@@ -74,7 +77,8 @@ All endpoints except `/health`, `/media/*` and the OAuth callbacks need
 | `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
 | `GET /jobs/{id}` | Job status, video URL, publish results |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
-| `GET /dashboard?token=…` | Performance dashboard: totals, views per post, compare posts by any label, the latest weekly review |
+| `GET /login`, `GET /logout` | Sign in with the Instagram or YouTube account the bot posts to (30-day cookie; read-only plus the dashboard's refresh) |
+| `GET /dashboard` | Performance dashboard: totals, views per post, compare posts by any label, the latest weekly review (signed in, or `?token=…`) |
 | `GET /metrics`, `POST /metrics/refresh` | Every posted quiz with its labels and per-platform numbers (latest + 1h/24h/7d snapshots); refresh fetches now |
 | `POST /insights`, `GET /insights/latest` | The weekly review's findings; the Monday batch reads the latest |
 | `GET /schema` | Spec JSON schema |

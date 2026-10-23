@@ -5,8 +5,12 @@ import re
 import secrets
 import time
 import datetime as dt
+import hashlib
+import hmac
 from contextlib import asynccontextmanager
+from html import escape
 from pathlib import Path
+from urllib.parse import quote
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -37,10 +41,41 @@ settings.videos_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=settings.videos_dir), name="media")
 
 
-def require_token(authorization: str = Header(default=""), token: str = Query(default="")) -> None:
+SESSION_COOKIE = "quizbot_session"
+SESSION_DAYS = 30
+
+
+def _sign(value: str) -> str:
+    return hmac.new(settings.api_token.encode(), value.encode(), hashlib.sha256).hexdigest()
+
+
+def make_session(provider: str) -> str:
+    value = f"{provider}|{int(time.time()) + SESSION_DAYS * 86400}"
+    return f"{value}|{_sign(value)}"
+
+
+def valid_session(cookie: str) -> bool:
+    try:
+        provider, expiry, sig = cookie.split("|")
+    except ValueError:
+        return False
+    return secrets.compare_digest(sig, _sign(f"{provider}|{expiry}")) and int(expiry) > time.time()
+
+
+def is_authorised(request: Request, authorization: str = "", token: str = "") -> bool:
     supplied = authorization.removeprefix("Bearer ").strip() or token
-    if not settings.api_token or not secrets.compare_digest(supplied, settings.api_token):
-        raise HTTPException(401, "bad token")
+    if settings.api_token and supplied and secrets.compare_digest(supplied, settings.api_token):
+        return True
+    # A sign-in cookie works for reading, and for the dashboard's refresh button. Anything else that
+    # changes state needs the API token, so a cookie can never be used to book, cancel or post.
+    if request.method in ("GET", "HEAD") or request.url.path == "/metrics/refresh":
+        return valid_session(request.cookies.get(SESSION_COOKIE, ""))
+    return False
+
+
+def require_token(request: Request, authorization: str = Header(default=""), token: str = Query(default="")) -> None:
+    if not settings.api_token or not is_authorised(request, authorization, token):
+        raise HTTPException(401, "bad token; send the API token, or sign in at /login")
 
 
 @app.get("/health")
@@ -307,9 +342,11 @@ def latest_insight():
     return rows[-1]
 
 
-@app.get("/dashboard", dependencies=[Depends(require_token)])
-def dashboard():
-    """Performance dashboard (open with ?token=…; the page reuses it to load /metrics)."""
+@app.get("/dashboard")
+def dashboard(request: Request, token: str = ""):
+    """Performance dashboard. Signed-in browsers go straight in; others are sent to /login."""
+    if not is_authorised(request, token=token):
+        return RedirectResponse("/login?next=/dashboard")
     return FileResponse(Path(__file__).parent / "dashboard.html", media_type="text/html")
 
 
@@ -364,8 +401,44 @@ def delete_music(name: str):
 
 # ------------------------------------------------------------------ OAuth (one-time browser setup)
 
-_states: dict[str, tuple[str, float]] = {}
+_states: dict[str, tuple[str, float, str, str]] = {}  # state -> (provider, expiry, "connect"|"login", next)
 PROVIDERS = PUBLISHERS
+
+
+def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
+    html = (Path(__file__).parent / "login.html").read_text()
+    return HTMLResponse(html.replace("{{title}}", title).replace("{{body}}", body), status_code=status)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/dashboard"):
+    """Sign in with the Instagram or YouTube account the bot posts to."""
+    nxt = next if next.startswith("/") and not next.startswith("//") else "/dashboard"
+    if valid_session(request.cookies.get(SESSION_COOKIE, "")):
+        return RedirectResponse(nxt)
+    buttons = "".join(
+        f'<a class="btn {p}" href="/login/{p}?next={quote(nxt)}">Sign in with {LABELS[p]}</a>'
+        for p in ("instagram", "youtube") if PUBLISHERS[p].configured() and store.get_tokens(p))
+    if not buttons:
+        buttons = '<p class="note">No account is connected yet. Use the API token for now.</p>'
+    return _page("Sign in", f"<h1>Quiz bot</h1><p class='note'>Sign in with the account the bot posts to.</p>{buttons}")
+
+
+@app.get("/login/{provider}")
+def login_start(provider: str, next: str = "/dashboard"):
+    if provider not in ("instagram", "youtube") or not store.get_tokens(provider):
+        raise HTTPException(404)
+    state = secrets.token_urlsafe(16)
+    nxt = next if next.startswith("/") and not next.startswith("//") else "/dashboard"
+    _states[state] = (provider, time.time() + 600, "login", nxt)
+    return RedirectResponse(PROVIDERS[provider].authorize_url(state, login=True))
+
+
+@app.get("/logout")
+def logout():
+    resp = RedirectResponse("/login")
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
 
 
 @app.get("/oauth/{provider}/start", dependencies=[Depends(require_token)])
@@ -374,7 +447,7 @@ def oauth_start(provider: str):
     if not mod:
         raise HTTPException(404)
     state = secrets.token_urlsafe(16)
-    _states[state] = (provider, time.time() + 600)
+    _states[state] = (provider, time.time() + 600, "connect", "")
     return RedirectResponse(mod.authorize_url(state))
 
 
@@ -385,5 +458,23 @@ def oauth_callback(provider: str, code: str = "", state: str = "", error: str = 
         raise HTTPException(400, "invalid or expired state; start again")
     if error or not code:
         raise HTTPException(400, f"{provider} returned an error: {error} {error_description}")
+    if expected[2] == "login":
+        return _finish_login(provider, code.removesuffix("#_"), expected[3])
     PROVIDERS[provider].exchange_code(code.removesuffix("#_"))
     return f"<h2>{LABELS[provider]} connected ✔</h2><p>You can close this tab.</p>"
+
+
+def _finish_login(provider: str, code: str, nxt: str):
+    mod = PROVIDERS[provider]
+    try:
+        who, owner = mod.login_identity(code), mod.connected_identity()
+    except Exception as e:
+        return _page("Sign-in failed", f"<h1>Sign-in failed</h1><p class='note'>{escape(str(e))}</p>"
+                     "<a class='btn plain' href='/login'>Try again</a>", 502)
+    if not owner or not secrets.compare_digest(who, owner):
+        return _page("Not this account", f"<h1>That's a different account</h1><p class='note'>Sign in with the "
+                     f"{LABELS[provider]} account this bot posts to.</p><a class='btn plain' href='/login'>Try again</a>", 403)
+    resp = RedirectResponse(nxt or "/dashboard")
+    resp.set_cookie(SESSION_COOKIE, make_session(provider), max_age=SESSION_DAYS * 86400, httponly=True,
+                    secure=settings.public_base_url.startswith("https"), samesite="lax", path="/")
+    return resp

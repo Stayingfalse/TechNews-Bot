@@ -134,7 +134,8 @@ Long-lived tokens last 60 days and are refreshed automatically.
 ## 6b. Performance numbers (dashboard + weekly review)
 
 The bot collects each post's numbers at about 1 hour, 24 hours and 7 days, and refreshes them
-every 4 hours for 14 days. See them at `APP_URL/dashboard?token=API_TOKEN`. Two platforms need
+every 4 hours for 14 days. See them at `APP_URL/dashboard`: sign in with the Instagram or
+YouTube account the bot posts to (YouTube sign-in needs the reconnect below first). Two platforms need
 extra permissions for this, granted by reconnecting once:
 
 - **Instagram:** in the Meta app → Instagram → **Permissions and features**, add
