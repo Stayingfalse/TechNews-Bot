@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import secrets
+import threading
 import time
 import datetime as dt
 import hashlib
@@ -458,11 +459,15 @@ def instagram_story(job_id: str):
 @app.post("/instagram/carousel", dependencies=[Depends(require_token)])
 def instagram_carousel(job_id: str = "", dry_run: bool = True):
     """Make the swipe-to-play carousel for a quiz (default: this week's most viewed). dry_run=true
-    (the default) only makes the slides and returns their URLs to look at; false posts it."""
+    (the default) only makes the slides and returns their URLs to look at; false posts it in the
+    background (a couple of minutes) and Discord says how it went."""
     job = store.get_job(job_id) if job_id else social.carousel_pick()
     if not job or job.get("status") != "done":
         raise HTTPException(404, "no posted quiz to make a carousel from")
-    return social.post_carousel(job, dry_run=dry_run)
+    if dry_run:
+        return social.post_carousel(job, dry_run=True)
+    threading.Thread(target=social.post_carousel, args=(job,), daemon=True, name="carousel").start()
+    return {"job_id": job["id"], "posting": True, "result": f"see Discord, or GET /jobs/{job['id']} (carousel)"}
 
 
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])
