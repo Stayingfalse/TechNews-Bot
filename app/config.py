@@ -69,6 +69,11 @@ class Settings:
         self.carousel_day = os.environ.get("CAROUSEL_DAY", "mon").strip().lower()[:3]
         self.carousel_time = os.environ.get("CAROUSEL_TIME", "20:00")
 
+        # Profile picture rotation: every AVATAR_EVERY_WEEKS weeks (0 = off), on Monday morning, Discord
+        # gets the next picture to upload (neither platform's API can change it). Pictures: the
+        # avatar-*.png files in assets/avatars, plus any added to DATA_DIR/avatars.
+        self.avatar_every_weeks = int(os.environ.get("AVATAR_EVERY_WEEKS", "3"))
+
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))

@@ -36,6 +36,7 @@ Environment variables:
 | `INSTAGRAM_STORIES` | default `false`: after each Reel, post a "New quiz out now" story of its title card |
 | `INSTAGRAM_CAROUSELS` | default `true`: once a week, post the week's most-viewed quiz again as a swipe-to-play carousel (clue, then answer) |
 | `CAROUSEL_DAY`, `CAROUSEL_TIME` | when the weekly carousel goes out: default `mon` and `20:00` (local), after the week has run and the Monday batch has booked the next |
+| `AVATAR_EVERY_WEEKS` | default `3`: how often Discord gets the next profile picture to upload (0 = off) |
 | `ELEVENLABS_API_KEY` | optional: turns on the host voice-over for quizzes with `"voice": true` (ElevenLabs → Developers → API keys; text-to-speech permission is enough) |
 | `ELEVENLABS_VOICE_ID` | default `TX3LPaxmHKxFdv7VOQHJ` ("Liam", a built-in energetic voice). For another, copy its ID in ElevenLabs (the voice's ⋯ menu → Copy voice ID). On the free plan only built-in voices work through the API; a refused library voice falls back to Liam |
 | `ELEVENLABS_VOICES` | the host voices quizzes pick by `voice_name`, as `name=id,…`; default `alex`, `liam`, `althea` (female, game-show host), `milly` (female, Australian presenter) |

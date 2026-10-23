@@ -10,6 +10,7 @@ import logging
 import secrets
 import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from . import notify, store
 from .config import settings
@@ -96,3 +97,44 @@ def weekly_tick(now_local: datetime) -> None:
     job = carousel_pick()
     if job:  # off the scheduler's thread: making and posting the slides takes a minute or two
         threading.Thread(target=post_carousel, args=(job,), daemon=True, name="carousel").start()
+
+
+# ------------------------------------------------------------------ profile picture rotation
+
+AVATAR_DIRS = (Path(__file__).resolve().parents[1] / "assets" / "avatars", settings.data_dir / "avatars")
+
+
+def avatars() -> list[Path]:
+    """The pictures in rotation, in a fixed order (repo ones first, then any added on the server)."""
+    return [p for d in AVATAR_DIRS if d.exists() for p in sorted(d.glob("avatar-*.png"))]
+
+
+def send_next_avatar() -> dict:
+    """Send the next picture in the rotation to Discord, to upload on both platforms."""
+    pics = avatars()
+    if not pics:
+        return {"sent": False, "reason": "no avatar-*.png files"}
+    state = store._read("social.json", {})
+    names = [p.name for p in pics]
+    last = state.get("avatar")
+    pick = pics[(names.index(last) + 1) % len(pics)] if last in names else pics[0]
+    notify.send(
+        f"**Time for a fresh profile picture** ({names.index(pick.name) + 1} of {len(pics)} in the rotation). "
+        "Neither platform lets the bot change it, so here it is to upload:\n"
+        "• **Instagram:** profile → Edit profile → Edit picture\n"
+        "• **YouTube:** YouTube Studio → Customisation → Branding → Picture → Change\n"
+        f"Next one in {settings.avatar_every_weeks} weeks.",
+        attach=pick)
+    state.update(avatar=pick.name, avatar_at=store.now_iso())
+    store._write("social.json", state)
+    return {"sent": True, "picture": pick.name}
+
+
+def avatar_tick(now_local: datetime) -> None:
+    """Monday from 10:00, every AVATAR_EVERY_WEEKS weeks: hand over the next profile picture."""
+    if settings.avatar_every_weeks <= 0 or now_local.weekday() != 0 or now_local.strftime("%H:%M") < "10:00":
+        return
+    last = store._read("social.json", {}).get("avatar_at")
+    if last and datetime.now(timezone.utc) - datetime.fromisoformat(last) < timedelta(weeks=settings.avatar_every_weeks, hours=-12):
+        return
+    send_next_avatar()

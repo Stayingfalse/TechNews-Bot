@@ -470,6 +470,20 @@ def instagram_carousel(job_id: str = "", dry_run: bool = True):
     return {"job_id": job["id"], "posting": True, "result": f"see Discord, or GET /jobs/{job['id']} (carousel)"}
 
 
+@app.get("/avatars", dependencies=[Depends(require_token)])
+def list_avatars():
+    """The profile pictures in rotation and which one was handed over last."""
+    state = store._read("social.json", {})
+    return {"pictures": [p.name for p in social.avatars()], "current": state.get("avatar"),
+            "since": state.get("avatar_at"), "every_weeks": settings.avatar_every_weeks}
+
+
+@app.post("/avatars/next", dependencies=[Depends(require_token)])
+def next_avatar():
+    """Send the next profile picture to Discord now (the rotation carries on from it)."""
+    return social.send_next_avatar()
+
+
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])
 def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked

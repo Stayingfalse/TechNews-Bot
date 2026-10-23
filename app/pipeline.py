@@ -392,8 +392,9 @@ def tick() -> None:
     _rescue_orphans()
     try:
         social.weekly_tick(t.astimezone(settings.tz))
+        social.avatar_tick(t.astimezone(settings.tz))
     except Exception:
-        log.exception("weekly carousel failed")
+        log.exception("weekly carousel / profile picture failed")
     for job in scheduled_jobs():
         due = datetime.fromisoformat(job["publish_at"])
         if job["status"] == "booked" and t >= due - lead:

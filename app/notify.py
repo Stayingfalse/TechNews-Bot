@@ -11,6 +11,7 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 MAX_ATTACH = 9_500_000  # Discord's default upload limit is 10 MB
+MIME = {".mp4": "video/mp4", ".png": "image/png", ".jpg": "image/jpeg"}
 
 
 def send(content: str, embed: dict | None = None, attach: Path | None = None) -> None:
@@ -24,7 +25,7 @@ def send(content: str, embed: dict | None = None, attach: Path | None = None) ->
                 r = httpx.post(
                     settings.discord_webhook_url,
                     data={"payload_json": json.dumps(payload)},
-                    files={"files[0]": (attach.name, fh, "video/mp4")},
+                    files={"files[0]": (attach.name, fh, MIME.get(attach.suffix.lower(), "application/octet-stream"))},
                     timeout=120,
                 )
         else:
