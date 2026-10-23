@@ -122,6 +122,11 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 
+## Channels
+
+Built for one channel today (the quiz account) with the seams for several: jobs record their channel,
+run as it, and OAuth tokens are stored per channel. The plan is in [docs/MULTI_ACCOUNT.md](docs/MULTI_ACCOUNT.md).
+
 ## Configuration
 
 See [docs/SETUP.md](docs/SETUP.md). The key switches: `PLATFORMS=youtube,instagram` (either or

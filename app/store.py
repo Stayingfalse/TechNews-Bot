@@ -87,13 +87,18 @@ def history(limit: int = 60) -> list[dict]:
 
 # ------------------------------------------------------------------ tokens
 
-def get_tokens(provider: str) -> dict | None:
-    return _read("tokens.json", {}).get(provider)
+def get_tokens(provider: str, channel: str | None = None) -> dict | None:
+    """A platform's tokens for a channel (default: the channel the current job runs as)."""
+    from .channels import token_key
+
+    return _read("tokens.json", {}).get(token_key(provider, channel))
 
 
-def set_tokens(provider: str, data: dict) -> None:
+def set_tokens(provider: str, data: dict, channel: str | None = None) -> None:
+    from .channels import token_key
+
     with _lock:
         all_tokens = _read("tokens.json", {})
-        all_tokens[provider] = data
+        all_tokens[token_key(provider, channel)] = data
         _write("tokens.json", all_tokens)
         os.chmod(_path("tokens.json"), 0o600)

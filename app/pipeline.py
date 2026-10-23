@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cliffhanger, lease, metrics, notify, social, store, themes
+from . import channels, cliffhanger, lease, metrics, notify, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -67,6 +67,7 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: 
         "slot_time": (at or settings.post_time) if slot else None,
         "publish_at": slot_time(slot, at).isoformat() if slot else None,
         "results": {},
+        "channel": channels.current.get(),
         **({"platforms": platforms} if platforms else {}),
     }
     store.save_job(job)
@@ -364,10 +365,11 @@ def _work(action: str, job_id: str) -> None:
     if not job or job["status"] in ("cancelled", "done"):
         return
     try:
-        if action == "render":
-            _render(job)
-        else:
-            _publish(job)
+        with channels.use(job.get("channel")):  # its own accounts' tokens (jobs from before channels: main)
+            if action == "render":
+                _render(job)
+            else:
+                _publish(job)
     except Exception as e:
         log.exception("job %s failed", job_id)
         job = store.get_job(job_id) or {"id": job_id}
