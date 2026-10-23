@@ -67,7 +67,7 @@ All endpoints except `/health`, `/media/*`, `/login` and the OAuth callbacks nee
 `Authorization: Bearer $API_TOKEN` (or `?token=` for browser use). In a browser you can instead
 sign in at `/login` with the connected Instagram or YouTube account. That sign-in can read
 everything, refresh the numbers, and move, edit or cancel single bookings from the dashboard's
-Schedule tab; booking a batch and posting still need the token.
+Schedule tab, and retry a failed post; booking a batch and posting new quizzes still need the token.
 
 | Endpoint | |
 |---|---|
@@ -77,6 +77,7 @@ Schedule tab; booking a batch and posting still need the token.
 | `DELETE /schedule/{date}?time=HH:MM` | Cancel a booked quiz (`time` needed when the day has more than one) |
 | `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
 | `GET /jobs/{id}` | Job status, video URL, publish results |
+| `GET /jobs/failed?days=14`, `POST /jobs/{id}/retry` | Recent posts that missed a platform, with each error; retry posts again to just those platforms (the video is made again if it was deleted). The dashboard shows them with a Retry button. |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
 | `GET /login`, `GET /logout` | Sign in with the Instagram or YouTube account the bot posts to (30-day cookie; read-only plus the dashboard's refresh) |
 | `GET /dashboard` | Performance dashboard: totals, views per post, compare posts by any label, the latest weekly review (signed in, or `?token=…`) |
