@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cliffhanger, metrics, notify, store
+from . import cliffhanger, metrics, notify, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -200,6 +200,10 @@ def _publish(job: dict) -> None:
         cliffhanger.link_previous(job)  # yesterday's comment section points at today's quiz
     except Exception:
         log.exception("next-video comment failed")
+    try:
+        themes.after_publish(job)  # tell the viewer who picked this quiz's theme
+    except Exception:
+        log.exception("theme reply failed")
     if results and all(r.get("ok") for r in results.values()):
         # every platform has its copy; keep the file only when something needs a retry
         video.unlink(missing_ok=True)
@@ -283,6 +287,12 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
         who = ", ".join("@" + n for n in names) if names else ("nobody got it" if names == [] else "comments not readable")
         ok = sum(1 for r in rv.get("replies", []) if r["ok"])
         lines.append(f"**Cliffhanger revealed:** {rv['answer']} · shout-outs: {who} · replies sent: {ok}")
+    if spec.picked_by:
+        pr = job.get("picked_reply") or {}
+        lines.append(f"**Theme picked by:** @{spec.picked_by.user} ({LABELS[spec.picked_by.platform]}) · "
+                     + ("replied under their comment" if pr.get("ok") else f"reply failed: {pr.get('error', 'not sent')}"))
+    if spec.ask_theme:
+        lines.append("**Theme ask:** this one asks viewers to comment a theme; Monday's batch reads them.")
     lf = job.get("linked_from")
     if lf:
         done = [LABELS.get(p, p) for p, ok in lf.items() if p != "job" and ok]

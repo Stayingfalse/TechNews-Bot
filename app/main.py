@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import metrics, notify, pipeline, store
+from . import metrics, notify, pipeline, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
@@ -190,7 +190,8 @@ def _booking(j: dict) -> dict:
     spec = QuizSpec.model_validate(j["spec"])
     return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
             "title": spec.title, "theme": spec.theme, "video_url": j.get("video_url"), "tags": spec.tags,
-            "intro": spec.intro, "cliffhanger": spec.rounds[-1].cliffhanger,
+            "intro": spec.intro, "cliffhanger": spec.rounds[-1].cliffhanger, "ask_theme": spec.ask_theme,
+            "picked_by": spec.picked_by.user if spec.picked_by else None,
             "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]}
 
 
@@ -425,6 +426,13 @@ def dashboard(request: Request, token: str = ""):
 @app.get("/history", dependencies=[Depends(require_token)])
 def get_history(limit: int = 60):
     return store.history(limit)
+
+
+@app.get("/themes/suggestions", dependencies=[Depends(require_token)])
+def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
+    """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked
+    (most suggested first, then earliest). Credit a pick with the group's `first` entry as `picked_by`."""
+    return themes.suggestions(days)
 
 
 # ------------------------------------------------------------------ music library

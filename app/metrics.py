@@ -56,6 +56,8 @@ def tags_for(job: dict) -> dict[str, str]:
         "reveals_yesterday": "yes" if job.get("reveal") else "no",
         "ask_comment": "yes" if any(r.ask_comment for r in spec.rounds) else "no",
         "pause_hint": "yes" if spec.pause_hint else "no",
+        "ask_theme": "yes" if spec.ask_theme else "no",
+        "picked_theme": "yes" if spec.picked_by else "no",
     }
     return {**auto, **spec.tags}
 

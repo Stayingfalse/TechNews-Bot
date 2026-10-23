@@ -110,6 +110,15 @@ def _ribbon(text: str, pal: Palette, size=30, fill=None, color=None, angle=-3.0)
     return r.rotate(angle, resample=Image.BICUBIC, expand=True)
 
 
+def _credit(spec, pal: Palette) -> Image.Image | None:
+    """'THEME PICKED BY @NAME' for a quiz whose theme came from a viewer's comment."""
+    picked = getattr(spec, "picked_by", None)
+    if not picked:
+        return None
+    text = f"THEME PICKED BY @{picked.user}".upper()
+    return _ribbon(text, pal, fit_size(text, "sign", 30, SAFE_W - 80, 1, 18), fill=pal.cool, color=pal.ink, angle=2)
+
+
 def _sticker(lines: list[str], pal: Palette, fill, color, angle: float) -> Image.Image:
     """A small tilted two-line sticker that fits beside the countdown (≤ 200 px wide)."""
     sprites = [ink_text(ln, "sign", 24, color, pal.ink, 0, 0, 1) for ln in lines]
@@ -281,6 +290,7 @@ class IntroScene(Scene):
         self.sub = _sign(spec.subtitle, 46, pal, pal.paper, "semi", shadow=4) if spec.subtitle else None
         n = len(spec.rounds)
         self.ticket = _ribbon(f"{n} ROUNDS", pal, 38, fill=pal.sign, color=pal.ink, angle=3)
+        self.credit = _credit(spec, pal)
 
     def render(self, fg, t):
         t *= self.speed
@@ -301,6 +311,9 @@ class IntroScene(Scene):
             y += 110
         pi = ease_out_back(prog(t, 1.0, 0.45), 2.4)
         blit(fg, self.ticket, SAFE_CX, y + 50, scale=pi, alpha=clamp(pi))
+        if self.credit:
+            pc = ease_out_back(prog(t, 1.25, 0.45), 2.4)
+            blit(fg, self.credit, SAFE_CX, y + 160, scale=pc, alpha=clamp(pc))
 
     def sfx(self):
         ev = [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))] + [(1.0, "swipe")]
@@ -326,7 +339,11 @@ class OutroScene(Scene):
             place(c, text_sprite(str(k), "sign", int(r * 1.05), pal.ink), c.width / 2 - 4, c.height / 2 - 1)
             self.chips.append(c)
         self.comment = _sign("COMMENT YOUR SCORE", 40, pal, pal.paper, tracking=2, shadow=4)
-        self.follow = _ribbon(spec.follow.upper(), pal, 34, angle=-2)
+        if getattr(spec, "ask_theme", False):
+            ask = "COMMENT A THEME FOR NEXT WEEK"
+            self.follow = _ribbon(ask, pal, fit_size(ask, "sign", 34, SAFE_W - 80, 1, 20), fill=pal.cool, color=pal.ink, angle=-2)
+        else:
+            self.follow = _ribbon(spec.follow.upper(), pal, 34, angle=-2)
         self.confetti = Confetti(pal, self.seed + 99, SAFE_CX, self.chips_y)
 
     def render(self, fg, t):
@@ -365,17 +382,21 @@ class RoundScene(Scene):
 
     CLIFF_HOLD = 3.4  # seconds the "comment your answer" card stays up instead of a reveal
     BANNER_FOR = 3.0  # seconds the quiz title rides above round 1 when there is no title card
+    CREDIT_FOR = 2.4  # then, for a viewer-picked theme, who picked it
 
-    def __init__(self, rnd, pal, banner: str = "", pause_hint: bool = False, **kw):
+    def __init__(self, rnd, pal, banner: str = "", pause_hint: bool = False, credit: Image.Image | None = None, **kw):
         super().__init__(rnd, pal, **kw)
         self.cliff = getattr(rnd, "cliffhanger", False)
         self.reveal_at = self.CLUE_IN + rnd.think
         self.duration = self.reveal_at + (self.CLIFF_HOLD if self.cliff else rnd.reveal)
         self.ribbon = _ribbon(f"ROUND {self.index} OF {self.total}", pal, 28, angle=-3 if self.index % 2 else 3)
-        self.banner = None
+        self.prelude = []  # (sprite, seconds) shown in the ribbon's place before it
         if banner:  # the quiz title, sized to fit one line across the safe area
             words = banner.replace("*", "").upper()
-            self.banner = _ribbon(words, pal, fit_size(words, "sign", 30, SAFE_W - 80, 1, 18), fill=pal.sign, color=pal.ink, angle=-2)
+            self.prelude.append((_ribbon(words, pal, fit_size(words, "sign", 30, SAFE_W - 80, 1, 18), fill=pal.sign,
+                                         color=pal.ink, angle=-2), self.BANNER_FOR))
+        if credit:
+            self.prelude.append((credit, self.CREDIT_FOR))
         self.ask = _sticker(["COMMENT", "YOUR GUESS!"], pal, pal.hot, pal.paper, -8) if getattr(rnd, "ask_comment", False) and not self.cliff else None
         self.pause = _sticker(["PAUSE TO", "ANSWER"], pal, pal.cool, pal.ink, 7) if pause_hint else None
         if self.cliff:
@@ -388,12 +409,13 @@ class RoundScene(Scene):
 
     # -- shared pieces
     def _header(self, fg, t):
-        if self.banner and t < self.BANNER_FOR + 0.4:  # the quiz title first, then this round's ribbon
-            pb = ease_out_back(prog(t, 0.0, 0.35), 2.2) * (1 - ease_out_cubic(prog(t, self.BANNER_FOR, 0.3)))
-            blit(fg, self.banner, SAFE_CX, SAFE_TOP + 40, scale=pb, alpha=clamp(pb))
-            p = ease_out_back(prog(t, self.BANNER_FOR + 0.15, 0.3), 2.2)
-        else:
-            p = ease_out_back(prog(t, 0.0, 0.4), 2.2)
+        start = 0.0  # the prelude (quiz title, who picked the theme) first, then this round's ribbon
+        for sprite, secs in self.prelude:
+            if start <= t < start + secs + 0.4:
+                pb = ease_out_back(prog(t, start, 0.35), 2.2) * (1 - ease_out_cubic(prog(t, start + secs, 0.3)))
+                blit(fg, sprite, SAFE_CX, SAFE_TOP + 40, scale=pb, alpha=clamp(pb))
+            start += secs + 0.15
+        p = ease_out_back(prog(t, start, 0.3 if self.prelude else 0.4), 2.2)
         blit(fg, self.ribbon, SAFE_CX, SAFE_TOP + 40, scale=p, alpha=clamp(p))
         ph = ease_out_back(prog(t, 0.1, 0.45), 1.8)
         blit(fg, self.head, SAFE_CX, SAFE_TOP + 140, scale=lerp(0.6, 1, ph), alpha=clamp(ph))
@@ -797,6 +819,7 @@ def build_scenes(spec, pal: Palette, seed: int, reveal: dict | None = None) -> l
     for i, r in enumerate(spec.rounds, 1):
         scenes.append(ROUNDS[r.type](r, pal, index=i, total=n, seed=seed,
                                      banner=spec.title if intro == "banner" and i == 1 else "",
+                                     credit=_credit(spec, pal) if intro == "banner" and i == 1 else None,
                                      pause_hint=getattr(spec, "pause_hint", False)))
     if reveal:
         scenes.append(YesterdayScene(reveal, pal, total=n, seed=seed))

@@ -13,7 +13,7 @@ App: APP_URL = https://quiz.cezz.co.uk
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on every request. If that variable is empty, try without the header; if you then get 401, stop and report "SHORTS_API_TOKEN is not available in the environment". Use curl from Bash.
 
 1. Load:
-   - POST APP_URL/metrics/refresh (fresh numbers), then GET APP_URL/metrics: every posted quiz with `tags` (labels to compare by: theme, rounds, format, slot, weekday, length, palette, music, intro, cliffhanger, reveals_yesterday, ask_comment, pause_hint, plus experiment tags the batch set) and, per platform, `latest` and `snapshots` (`1h`, `24h`, `7d`) of views, likes, comments, shares, saves, `avg_watch_s`, `watched_pct`, `engagement_per_1k`, `comments_per_1k`. Ignore posts with tag `test: yes`.
+   - POST APP_URL/metrics/refresh (fresh numbers), then GET APP_URL/metrics: every posted quiz with `tags` (labels to compare by: theme, rounds, format, slot, weekday, length, palette, music, intro, cliffhanger, reveals_yesterday, ask_comment, pause_hint, ask_theme, picked_theme, plus experiment tags the batch set) and, per platform, `latest` and `snapshots` (`1h`, `24h`, `7d`) of views, likes, comments, shares, saves, `avg_watch_s`, `watched_pct`, `engagement_per_1k`, `comments_per_1k`. Ignore posts with tag `test: yes`.
    - GET APP_URL/insights?limit=4: your previous reviews, including the experiments you asked for.
    - GET APP_URL/history?limit=60 for the round types and answers of each quiz.
 
@@ -24,9 +24,10 @@ Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` (environment variable) on e
    - Check last week's experiments: did the batch run them (look for their tags)? What happened? Keep, drop, or extend each.
    - The opening: compare `intro` (card / quick / banner) on `watched_pct` and `avg_watch_s` first; it's the main open test.
    - The cliffhanger loop: do cliffhanger posts (`cliffhanger: yes`) get more comments per 1,000 views than the rest, and do the next-day posts that reveal them (`reveals_yesterday: yes`) hold viewers better? GET APP_URL/jobs/<job_id> shows a reveal's `comments_read`, `shoutouts` and `replies`. Recommend more, fewer or none.
+   - Viewer themes: do `ask_theme: yes` posts get more comments per 1,000 views, how many suggestions came in (GET APP_URL/themes/suggestions), and how did the `picked_theme: yes` quiz do against the week's others?
    - Note anything the batch can't change itself (the video's design, the intro length, voice-over, new formats): list those for the owner in the summary.
 
-3. Decide next week's instructions. Change at most two things at once and keep the rest as a control, or nothing is learnt. The batch can change: themes and topics, round types and counts (3-5), think time, titles and hooks, captions and calls to action, the weekly specials, palettes, the `intro` (card / quick / banner), how many cliffhangers a week, the `ask_comment` and `pause_hint` stickers, and posting times (it may book extra slots with a `time` only when you recommend it). Each experiment names the tag the batch must set on the quizzes that run it (e.g. `rounds: 3` on 3 of the 7 days, the other 4 as they are).
+3. Decide next week's instructions. Change at most two things at once and keep the rest as a control, or nothing is learnt. The batch can change: themes and topics, round types and counts (3-5), think time, titles and hooks, captions and calls to action, the weekly specials, palettes, the `intro` (card / quick / banner), how many cliffhangers and theme asks a week, the `ask_comment` and `pause_hint` stickers, and posting times (it may book extra slots with a `time` only when you recommend it). Each experiment names the tag the batch must set on the quizzes that run it (e.g. `rounds: 3` on 3 of the 7 days, the other 4 as they are).
 
 4. Store it: POST APP_URL/insights (Content-Type: application/json) with
    `{"week_of": "<Monday of the week reviewed, YYYY-MM-DD>", "summary": "...", "recommendations": ["..."], "experiments": ["..."]}`.

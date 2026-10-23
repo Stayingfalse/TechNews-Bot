@@ -67,6 +67,10 @@ Engagement options:
   video shows the answer plus a shout-out to the first 5 correct commenters. Once it's posted, each of
   them gets a reply under their comment pointing at it (a link on YouTube; Instagram comments can't
   carry clickable links). Needs the comments permissions (reconnect from the dashboard).
+- **Viewer-picked themes:** `ask_theme` makes the outro ask viewers to comment a theme for next week;
+  `GET /themes/suggestions` groups and ranks what they suggested. Monday's batch picks one and sets
+  `picked_by` on that quiz: the video shows "Theme picked by @name" and the viewer gets a reply under
+  their suggestion once it posts.
 - **Next-quiz links** (every post, `NEXT_LINK_COMMENTS=true`): once a quiz is posted, the bot comments on the
   previous post pointing at it ("Next quiz is up", or "Answer revealed" under a cliffhanger), so every
   comment section leads to the next video.
@@ -100,6 +104,7 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /metrics`, `POST /metrics/refresh` | Every posted quiz with its labels and per-platform numbers (latest + 1h/24h/7d snapshots); refresh fetches now |
 | `POST /insights`, `GET /insights/latest` | The weekly review's findings; the Monday batch reads the latest |
 | `GET /schema` | Spec JSON schema |
+| `GET /themes/suggestions?days=8` | Themes viewers commented on recent `ask_theme` posts, grouped and ranked |
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |

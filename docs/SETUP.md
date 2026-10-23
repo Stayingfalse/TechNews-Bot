@@ -32,7 +32,7 @@ Environment variables:
 | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | step 4 |
 | `YOUTUBE_PRIVACY` | `public` (default), `unlisted` or `private` |
 | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 5 |
-| `NEXT_LINK_COMMENTS` | default `true`: after each post, comment on the previous one pointing at it, and reply under correct cliffhanger answers (needs the comments permissions in step 5b) |
+| `NEXT_LINK_COMMENTS` | default `true`: after each post, comment on the previous one pointing at it, and reply under correct cliffhanger answers and picked theme suggestions (needs the comments permissions in step 5b) |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |

@@ -105,12 +105,11 @@ def pending_for(job: dict) -> dict | None:
     return best
 
 
-def collect(cliff_job: dict) -> dict:
-    """Judge the comments on a cliffhanger post. shoutouts = None when no platform's comments could be read."""
-    rnd = QuizSpec.model_validate(cliff_job["spec"]).rounds[-1]
-    answer, note = reveal_text(rnd)
+def read_comments(job: dict) -> tuple[list[dict], int, list[str]]:
+    """Viewers' comments on a post across platforms, oldest first (our own left out), how many
+    platforms could be read, and the errors from the rest."""
     found, readable, errors = [], 0, []
-    for platform, res in cliff_job.get("results", {}).items():
+    for platform, res in job.get("results", {}).items():
         if not res.get("ok") or platform not in ("instagram", "youtube") or not PUBLISHERS[platform].configured():
             continue
         mod = PUBLISHERS[platform]
@@ -125,8 +124,16 @@ def collect(cliff_job: dict) -> dict:
             found += rows
         except Exception as e:
             errors.append(f"{platform}: {e}"[:200])
-            log.warning("cliffhanger comments %s: %s", platform, e)
+            log.warning("comments %s on %s: %s", platform, job["id"], e)
     found.sort(key=lambda c: c["at"])
+    return found, readable, errors
+
+
+def collect(cliff_job: dict) -> dict:
+    """Judge the comments on a cliffhanger post. shoutouts = None when no platform's comments could be read."""
+    rnd = QuizSpec.model_validate(cliff_job["spec"]).rounds[-1]
+    answer, note = reveal_text(rnd)
+    found, readable, errors = read_comments(cliff_job)
     winners, seen = [], set()
     for c in found:
         name = safe_name(c["user"])

@@ -167,6 +167,13 @@ Round = Annotated[
 PALETTES = ("teatime", "primetime", "jackpot", "bingo", "pitch")
 
 
+class PickedBy(BaseModel):
+    """The viewer whose comment suggested this quiz's theme (from GET /themes/suggestions)."""
+    user: str = Field(pattern=r"^[A-Za-z0-9._-]{2,28}$", description="Their username, exactly as the suggestions list gives it")
+    platform: Literal["instagram", "youtube"]
+    comment_id: str = Field(min_length=1, max_length=120, description="The suggestion's comment_id; they get a reply there once it posts")
+
+
 class QuizSpec(BaseModel):
     """An intro, 3-5 rounds (any mix of: emoji, bad_description, true_false, choice, odd_one_out,
     unscramble) and an outro asking viewers to comment their score."""
@@ -184,6 +191,9 @@ class QuizSpec(BaseModel):
     intro: Literal["card", "quick", "banner"] = Field(default="card", description=(
         "card = 2.8 s title card; quick = 1.2 s title card; banner = no card, the title rides a banner over round 1"))
     pause_hint: bool = Field(default=False, description="Show a 'Pause to answer' sticker during countdowns")
+    ask_theme: bool = Field(default=False, description="The outro asks viewers to comment a theme for next week")
+    picked_by: PickedBy | None = Field(default=None, description=(
+        "This quiz's theme came from a viewer's comment: credited on screen, and they get a reply once it posts"))
     music: str = Field(
         default="auto",
         description="'auto' (random track from the music library, else synth), 'synth', 'none', or a library file name",
