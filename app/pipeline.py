@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import notify, store
+from . import metrics, notify, store
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -326,3 +326,4 @@ def start_background() -> None:
     threading.Thread(target=_worker, daemon=True, name="worker").start()
     threading.Thread(target=_scheduler, daemon=True, name="scheduler").start()
     threading.Thread(target=_maintenance, daemon=True, name="maintenance").start()
+    threading.Thread(target=metrics.run_forever, daemon=True, name="metrics").start()

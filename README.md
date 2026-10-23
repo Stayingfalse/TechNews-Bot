@@ -74,6 +74,9 @@ All endpoints except `/health`, `/media/*` and the OAuth callbacks need
 | `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
 | `GET /jobs/{id}` | Job status, video URL, publish results |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
+| `GET /dashboard?token=…` | Performance dashboard: totals, views per post, compare posts by any label, the latest weekly review |
+| `GET /metrics`, `POST /metrics/refresh` | Every posted quiz with its labels and per-platform numbers (latest + 1h/24h/7d snapshots); refresh fetches now |
+| `POST /insights`, `GET /insights/latest` | The weekly review's findings; the Monday batch reads the latest |
 | `GET /schema` | Spec JSON schema |
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |

@@ -131,6 +131,23 @@ The Reel is published through the API with the video's own music.
 The app stays in development mode (posting to your own account doesn't need Meta App Review).
 Long-lived tokens last 60 days and are refreshed automatically.
 
+## 6b. Performance numbers (dashboard + weekly review)
+
+The bot collects each post's numbers at about 1 hour, 24 hours and 7 days, and refreshes them
+every 4 hours for 14 days. See them at `APP_URL/dashboard?token=API_TOKEN`. Two platforms need
+extra permissions for this, granted by reconnecting once:
+
+- **Instagram:** in the Meta app → Instagram → **Permissions and features**, add
+  `instagram_business_manage_insights` (views, reach, shares, saves, watch time) and
+  `instagram_business_manage_comments` (for comment replies later). Then reconnect at
+  `APP_URL/oauth/instagram/start?token=API_TOKEN`. Without it you still get likes and comments.
+- **YouTube:** in Google Cloud → **APIs & Services → Library**, enable **YouTube Analytics
+  API**. In **Google Auth Platform → Data access**, add the scopes `youtube.readonly`,
+  `yt-analytics.readonly` and `youtube.force-ssl`. Then reconnect at
+  `APP_URL/oauth/youtube/start?token=API_TOKEN`. Watch time from YouTube lags 1–2 days.
+
+`APP_URL/status?token=API_TOKEN` lists the permissions each connection was granted (`granted`).
+
 ## 7. Turn on publishing
 
 Set `PUBLISH_ENABLED=true`, redeploy, then test (posts immediately to every platform in `PLATFORMS`):

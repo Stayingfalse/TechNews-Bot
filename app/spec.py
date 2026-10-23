@@ -160,6 +160,10 @@ class QuizSpec(BaseModel):
         description="'auto' (random track from the music library, else synth), 'synth', 'none', or a library file name",
     )
     sfx: bool = True
+    tags: dict[str, str] = Field(
+        default_factory=dict,
+        description="Experiment labels for the dashboard, e.g. {'special': 'hard', 'cta': 'answer-before-reveal'}",
+    )
 
     @field_validator("hashtags")
     @classmethod
@@ -173,6 +177,16 @@ class QuizSpec(BaseModel):
                 raise ValueError(f"invalid hashtag: {tag!r}")
             out.append(tag)
         return out
+
+    @field_validator("tags")
+    @classmethod
+    def _tags(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > 8:
+            raise ValueError("at most 8 tags")
+        for k, val in v.items():
+            if not re.fullmatch(r"[a-z][a-z0-9_]{0,23}", k) or not 0 < len(val) <= 40:
+                raise ValueError(f"tag {k!r}: key = lowercase word (max 24), value = 1-40 chars")
+        return v
 
     def answer_keys(self) -> list[str]:
         """Normalised answers, used to avoid repeating a puzzle."""

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Performance</title>
+<style>
+/* Layout: one column of cards; filters in one row on top; numbers first, then charts, then the post table. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --ig: #2a78d6; --yt: #eb6834; --tt: #1baf7a;
+  --warn-bg: #fff4dc; --warn-ink: #6b4a00;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --ig: #3987e5; --yt: #d95926; --tt: #199e70;
+    --warn-bg: #2b2412; --warn-ink: #f0d79a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --ig: #3987e5; --yt: #d95926; --tt: #199e70;
+  --warn-bg: #2b2412; --warn-ink: #f0d79a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.45 var(--font); }
+main { max-width: 1120px; margin: 0 auto; padding-block: 24px 48px;
+       padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+       display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 15px; margin: 0 0 4px; }
+.sub { color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
+.updated { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; min-width: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+label { color: var(--ink-2); font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface);
+                 border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px; }
+button { cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--ig); outline-offset: 2px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.tile .label { color: var(--ink-2); font-size: 13px; }
+.tile .value { font-size: 28px; font-weight: 600; margin-top: 2px; }
+.tile .note { color: var(--muted); font-size: 12px; }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.notice ul { margin: 4px 0 0; padding-left: 18px; }
+.legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                       margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--ring);
+       border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+       min-width: 140px; z-index: 2; }
+.tip .v { font-size: 15px; font-weight: 600; color: var(--ink); }
+.tip .k { color: var(--ink-2); }
+.tip .key { display: inline-block; width: 12px; height: 2px; background: var(--c); vertical-align: middle; margin-right: 6px; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+td.quiz { min-width: 240px; }
+td.platform { white-space: nowrap; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .pf { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 6px; }
+.tags { color: var(--muted); font-size: 12px; }
+a { color: var(--ig); }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.insight ul { margin: 6px 0 0; padding-left: 18px; }
+.insight .summary { white-space: pre-wrap; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+@media (prefers-reduced-motion: no-preference) { .chart svg rect.bar { transition: opacity .12s; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Quiz performance</h1>
+    <span class="updated" id="updated">Loading…</span>
+  </header>
+
+  <div class="filters card" role="group" aria-label="Filters">
+    <label for="f-days">Posted in
+      <select id="f-days"><option value="7">last 7 days</option><option value="30" selected>last 30 days</option><option value="90">last 90 days</option><option value="0">all time</option></select>
+    </label>
+    <label for="f-platform">Platform
+      <select id="f-platform"><option value="all">All</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option></select>
+    </label>
+    <label for="f-tests"><input type="checkbox" id="f-tests"> Include test posts</label>
+    <button id="refresh" type="button">Fetch fresh numbers</button>
+  </div>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <section class="tiles" id="tiles" aria-label="Totals"></section>
+
+  <section class="card">
+    <h2>Views per post</h2>
+    <p class="sub">Latest count for each post, by platform. Hover a bar for its other numbers.</p>
+    <div class="legend" id="legend-views"></div>
+    <div class="chart" id="chart-views"></div>
+  </section>
+
+  <section class="card">
+    <h2>What works: compare posts by a label</h2>
+    <p class="sub">Average per post for each group. Groups of fewer than 3 posts are hints, not findings.</p>
+    <div class="filters" style="margin-bottom:10px">
+      <label for="c-tag">Group by <select id="c-tag"></select></label>
+      <label for="c-measure">Measure
+        <select id="c-measure">
+          <option value="views">Views</option>
+          <option value="engagement_per_1k">Interactions per 1,000 views</option>
+          <option value="comments_per_1k">Comments per 1,000 views</option>
+          <option value="watched_pct">Average % watched</option>
+        </select>
+      </label>
+    </div>
+    <div class="chart" id="chart-compare"></div>
+  </section>
+
+  <div class="row2">
+    <section class="card insight" id="insight">
+      <h2>Latest weekly review</h2>
+      <p class="sub" id="insight-when"></p>
+      <div id="insight-body" class="empty">No weekly review yet. The first runs on Monday evening.</div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>All posts</h2>
+    <p class="sub">Newest first. Watched % = average watch time against the video's length.</p>
+    <div class="table-wrap"><table id="posts"></table></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const auth = { headers: { Authorization: "Bearer " + token } };
+  const PLATFORMS = [
+    { key: "instagram", name: "Instagram", color: "var(--ig)" },
+    { key: "youtube", name: "YouTube", color: "var(--yt)" },
+    { key: "tiktok", name: "TikTok", color: "var(--tt)" },
+  ];
+  const pf = k => PLATFORMS.find(p => p.key === k);
+  const $ = id => document.getElementById(id);
+  const el = (tag, attrs = {}, text) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+  const svgEl = (tag, attrs = {}) => {
+    const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    return n;
+  };
+  const fmt = v => v == null || Number.isNaN(v) ? "–" : v >= 10000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "K"
+                 : Number.isInteger(v) ? v.toLocaleString("en-GB") : v.toFixed(1);
+  const when = iso => new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+
+  let posts = [], insight = null;
+
+  function filtered() {
+    const days = Number($("f-days").value), platform = $("f-platform").value, tests = $("f-tests").checked;
+    const since = days ? Date.now() - days * 864e5 : 0;
+    return posts
+      .filter(p => tests || p.tags.test !== "yes")
+      .filter(p => Date.parse(p.published_at) >= since)
+      .map(p => ({ ...p, rows: Object.entries(p.platforms)
+        .filter(([k]) => platform === "all" || k === platform)
+        .map(([k, v]) => ({ platform: k, url: v.url, ...v.latest })) }))
+      .filter(p => p.rows.length);
+  }
+
+  function tiles(list) {
+    const rows = list.flatMap(p => p.rows);
+    const sum = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
+    const views = sum("views");
+    const watched = rows.map(r => r.watched_pct).filter(v => v != null);
+    const items = [
+      ["Posts", list.length, `${rows.length} platform uploads`],
+      ["Views", views, "latest counts, all posts"],
+      ["Views per upload", rows.length ? views / rows.length : null, "average"],
+      ["Interactions per 1,000 views", views ? (sum("likes") + sum("comments") + sum("shares") + sum("saves")) / views * 1000 : null, "likes, comments, shares, saves"],
+      ["Average % watched", watched.length ? watched.reduce((a, b) => a + b, 0) / watched.length : null, watched.length ? `${watched.length} uploads with watch time` : "needs the new permissions"],
+    ];
+    const box = $("tiles"); box.replaceChildren();
+    for (const [label, value, note] of items) {
+      const t = el("div", { class: "card tile" });
+      t.append(el("div", { class: "label" }, label), el("div", { class: "value" }, label.startsWith("Average %") && value != null ? fmt(value) + "%" : fmt(value)), el("div", { class: "note" }, note));
+      box.append(t);
+    }
+  }
+
+  function legend(id, keys) {
+    const box = $(id); box.replaceChildren();
+    if (keys.length < 2) return;  // one series: the heading names it
+    for (const k of keys) { const s = el("span", {}, pf(k).name); s.style.setProperty("--c", pf(k).color); box.append(s); }
+  }
+
+  function ticks(max) {
+    if (max <= 0) return [0, 1];
+    const step0 = max / 4, mag = 10 ** Math.floor(Math.log10(step0));
+    const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
+    const out = []; for (let v = 0; v <= max + step * 0.001; v += step) out.push(v);
+    if (out.at(-1) < max) out.push(out.at(-1) + step);
+    return out;
+  }
+
+  function tooltip(chart, x, y, title, lines) {
+    let tip = chart.querySelector(".tip");
+    if (!tip) { tip = el("div", { class: "tip", role: "status" }); chart.append(tip); }
+    tip.replaceChildren(el("div", { class: "k" }, title));
+    for (const [color, value, label] of lines) {
+      const row = el("div");
+      const key = el("span", { class: "key" }); key.style.setProperty("--c", color);
+      row.append(key, el("span", { class: "v" }, value), document.createTextNode(" "), el("span", { class: "k" }, label));
+      tip.append(row);
+    }
+    tip.hidden = false;
+    const w = chart.clientWidth, tw = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(w - tw, x - tw / 2)) + "px";
+    tip.style.top = Math.max(0, y - tip.offsetHeight - 10) + "px";
+  }
+  const hideTip = chart => { const t = chart.querySelector(".tip"); if (t) t.hidden = true; };
+
+  function viewsChart(list) {
+    const chart = $("chart-views"); chart.replaceChildren();
+    const ordered = [...list].reverse();  // oldest left
+    const keys = PLATFORMS.map(p => p.key).filter(k => ordered.some(p => p.rows.some(r => r.platform === k)));
+    legend("legend-views", keys);
+    if (!ordered.length) { chart.append(el("div", { class: "empty" }, "No posts in this range yet.")); return; }
+    const W = Math.max(320, chart.clientWidth), H = 280, L = 44, R = 8, T = 12, B = 46;
+    const max = Math.max(1, ...ordered.flatMap(p => p.rows.map(r => r.views || 0)));
+    const tk = ticks(max), top = tk.at(-1);
+    const y = v => T + (H - T - B) * (1 - v / top);
+    const band = (W - L - R) / ordered.length;
+    const bw = Math.min(24, (band - 12) / keys.length - 2);
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Views per post by platform" });
+    for (const v of tk) {
+      svg.append(svgEl("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: v ? "var(--grid)" : "var(--axis)" }));
+      const t = svgEl("text", { x: L - 8, y: y(v) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)", style: "font-variant-numeric: tabular-nums" });
+      t.textContent = fmt(v); svg.append(t);
+    }
+    ordered.forEach((p, i) => {
+      const cx = L + band * (i + 0.5), groupW = keys.length * (bw + 2) - 2;
+      keys.forEach((k, j) => {
+        const r = p.rows.find(r => r.platform === k);
+        if (!r) return;
+        const v = r.views || 0, x = cx - groupW / 2 + j * (bw + 2), h = Math.max(0, y(0) - y(v)), rr = Math.min(4, h / 2, bw / 2);
+        const path = `M${x} ${y(0)}V${y(0) - h + rr}Q${x} ${y(0) - h} ${x + rr} ${y(0) - h}H${x + bw - rr}Q${x + bw} ${y(0) - h} ${x + bw} ${y(0) - h + rr}V${y(0)}Z`;
+        svg.append(svgEl("path", { d: path, fill: pf(k).color }));
+        const hit = svgEl("rect", { x: x - 2, y: T, width: bw + 4, height: H - T - B, fill: "transparent", tabindex: 0,
+                                    "aria-label": `${p.title}, ${pf(k).name}: ${fmt(v)} views` });
+        const show = () => {
+          const bx = chart.clientWidth / W;
+          tooltip(chart, (x + bw / 2) * bx, (y(v)) * bx, `${when(p.published_at)} · ${pf(k).name}`, [
+            [pf(k).color, fmt(v), "views"], [pf(k).color, fmt(r.likes), "likes"], [pf(k).color, fmt(r.comments), "comments"],
+            [pf(k).color, r.watched_pct != null ? fmt(r.watched_pct) + "%" : "–", "watched"]]);
+        };
+        hit.addEventListener("pointermove", show); hit.addEventListener("focus", show);
+        hit.addEventListener("pointerleave", () => hideTip(chart)); hit.addEventListener("blur", () => hideTip(chart));
+        svg.append(hit);
+      });
+      const d = new Date(p.published_at);
+      const l1 = svgEl("text", { x: cx, y: H - B + 16, "text-anchor": "middle", "font-size": 11, fill: "var(--ink-2)" });
+      l1.textContent = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
+      const l2 = svgEl("text", { x: cx, y: H - B + 30, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" });
+      l2.textContent = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+      const every = Math.ceil(ordered.length / Math.max(1, Math.floor((W - L) / 56)));  // ~56px per date label
+      if (i % every === 0) svg.append(l1, l2);
+    });
+    chart.append(svg);
+  }
+
+  function compareChart(list) {
+    const chart = $("chart-compare"); chart.replaceChildren();
+    const tag = $("c-tag").value, measure = $("c-measure").value;
+    const groups = new Map();
+    for (const p of list) {
+      const vals = p.rows.map(r => r[measure]).filter(v => v != null);
+      if (!vals.length) continue;
+      const g = p.tags[tag] ?? "(none)";
+      const e = groups.get(g) || { sum: 0, n: 0 };
+      e.sum += vals.reduce((a, b) => a + b, 0) / vals.length; e.n += 1; groups.set(g, e);
+    }
+    const rows = [...groups].map(([g, e]) => ({ g, v: e.sum / e.n, n: e.n })).sort((a, b) => b.v - a.v);
+    if (!rows.length) { chart.append(el("div", { class: "empty" }, "No posts have this number yet.")); return; }
+    const W = Math.max(320, chart.clientWidth), row = 32, L = Math.min(200, Math.round(W * 0.34)), R = 110, H = rows.length * row + 8;
+    const max = Math.max(...rows.map(r => r.v)) || 1;
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Average ${measure} by ${tag}` });
+    svg.append(svgEl("line", { x1: L, x2: L, y1: 0, y2: H, stroke: "var(--axis)" }));
+    rows.forEach((r, i) => {
+      const yy = i * row + 4, w = Math.max(2, (W - L - R) * r.v / max);
+      const name = svgEl("text", { x: L - 10, y: yy + 17, "text-anchor": "end", "font-size": 12, fill: "var(--ink)" });
+      const maxChars = Math.floor((L - 14) / 6.6);
+      name.textContent = r.g.length > maxChars ? r.g.slice(0, maxChars - 1) + "…" : r.g;
+      const bar = svgEl("path", { d: `M${L} ${yy + 6}H${L + w - 4}Q${L + w} ${yy + 6} ${L + w} ${yy + 10}V${yy + 20}Q${L + w} ${yy + 24} ${L + w - 4} ${yy + 24}H${L}Z`, fill: "var(--ig)" });
+      const val = svgEl("text", { x: L + w + 8, y: yy + 19, "font-size": 12, fill: "var(--ink)", "font-weight": 600 });
+      val.textContent = (measure === "watched_pct" ? fmt(r.v) + "%" : fmt(r.v));
+      const n = svgEl("tspan", { fill: "var(--muted)", "font-weight": 400 }); n.textContent = `  ${r.n} post${r.n === 1 ? "" : "s"}`;
+      val.append(n);
+      svg.append(name, bar, val);
+    });
+    chart.append(svg);
+  }
+
+  function table(list) {
+    const t = $("posts"); t.replaceChildren();
+    const head = el("tr");
+    for (const [h, n] of [["Posted", 0], ["Quiz", 0], ["Platform", 0], ["Views", 1], ["Likes", 1], ["Comments", 1], ["Shares", 1], ["Saves", 1], ["Watched", 1], ["Per 1k", 1]])
+      head.append(el("th", n ? { class: "n" } : {}, h));
+    t.append(head);
+    if (!list.length) { const r = el("tr"); r.append(el("td", { colspan: 10, class: "empty" }, "No posts in this range yet.")); t.append(r); return; }
+    for (const p of list) {
+      p.rows.forEach((r, i) => {
+        const tr = el("tr");
+        if (i === 0) {
+          tr.append(el("td", { rowspan: p.rows.length }, when(p.published_at)));
+          const q = el("td", { rowspan: p.rows.length, class: "quiz" }); q.append(el("div", {}, p.title));
+          const tags = Object.entries(p.tags).filter(([k]) => !["palette", "music", "test"].includes(k)).map(([k, v]) => `${k}: ${v}`).join(" · ");
+          q.append(el("div", { class: "tags" }, tags)); tr.append(q);
+        }
+        const pc = el("td", { class: "platform" }); const dot = el("span", { class: "pf" }); dot.style.setProperty("--c", pf(r.platform).color);
+        pc.append(dot);
+        if (r.url) { const a = el("a", { href: r.url, target: "_blank", rel: "noopener" }, pf(r.platform).name); pc.append(a); } else pc.append(document.createTextNode(pf(r.platform).name));
+        tr.append(pc);
+        for (const k of ["views", "likes", "comments", "shares", "saves"]) tr.append(el("td", { class: "n" }, fmt(r[k])));
+        tr.append(el("td", { class: "n" }, r.watched_pct != null ? fmt(r.watched_pct) + "%" : "–"));
+        tr.append(el("td", { class: "n" }, fmt(r.engagement_per_1k)));
+        t.append(tr);
+      });
+    }
+  }
+
+  function notices(list) {
+    const msgs = new Set();
+    for (const p of list) for (const r of p.rows) {
+      if (r.error) msgs.add(`${pf(r.platform).name}: ${r.error.split(":")[0]}`);
+      if (r.note) msgs.add(`${pf(r.platform).name}: ${r.note.split(":")[0]}`);
+      if (!r.at) msgs.add(`${pf(r.platform).name}: no numbers collected yet for some posts`);
+    }
+    const box = $("notice");
+    box.hidden = !msgs.size; box.replaceChildren();
+    if (!msgs.size) return;
+    box.append(el("strong", {}, "Some numbers are missing"));
+    const ul = el("ul"); for (const m of msgs) ul.append(el("li", {}, m)); box.append(ul);
+    box.append(el("div", {}, "Missing watch time or shares usually means the account needs reconnecting with the new permissions."));
+  }
+
+  function renderInsight() {
+    if (!insight) return;
+    $("insight-when").textContent = `Week of ${insight.week_of}, written ${when(insight.at)}`;
+    const body = $("insight-body"); body.className = ""; body.replaceChildren(el("div", { class: "summary" }, insight.summary));
+    for (const [title, items] of [["Next week's batch will", insight.recommendations], ["Experiments", insight.experiments]]) {
+      if (!items || !items.length) continue;
+      body.append(el("h2", { style: "margin-top:12px" }, title));
+      const ul = el("ul"); for (const i of items) ul.append(el("li", {}, i)); body.append(ul);
+    }
+  }
+
+  function tagOptions() {
+    const sel = $("c-tag"), cur = sel.value || "theme";
+    const keys = [...new Set(posts.flatMap(p => Object.keys(p.tags)))].filter(k => k !== "test").sort();
+    sel.replaceChildren(...keys.map(k => el("option", { value: k }, k)));
+    sel.value = keys.includes(cur) ? cur : keys[0] || "";
+  }
+
+  function render() {
+    const list = filtered();
+    tiles(list); viewsChart(list); compareChart(list); table(list); notices(list);
+  }
+
+  async function load() {
+    document.querySelector("main").style.opacity = posts.length ? 0.6 : 1;
+    const r = await fetch("/metrics", auth);
+    if (r.status === 401) { $("updated").textContent = "Open this page with ?token=<API token>."; return; }
+    posts = await r.json();
+    const ins = await fetch("/insights/latest", auth);
+    insight = ins.ok ? await ins.json() : null;
+    const stamps = posts.flatMap(p => Object.values(p.platforms).map(v => v.latest.at)).filter(Boolean).sort();
+    $("updated").textContent = stamps.length ? `Numbers as of ${when(stamps.at(-1))}` : "No numbers collected yet";
+    tagOptions(); render(); renderInsight();
+    document.querySelector("main").style.opacity = 1;
+  }
+
+  for (const id of ["f-days", "f-platform", "f-tests", "c-measure", "c-tag"]) $(id).addEventListener("change", render);
+  let lastW = 0;
+  new ResizeObserver(() => {  // charts are drawn at the column's real width, so text stays readable on phones
+    const w = $("chart-views").clientWidth;
+    if (posts.length && Math.abs(w - lastW) > 8) { lastW = w; render(); }
+  }).observe($("chart-views"));
+  $("refresh").addEventListener("click", async () => {
+    $("refresh").disabled = true; $("refresh").textContent = "Fetching…";
+    try { await fetch("/metrics/refresh", { method: "POST", ...auth }); await load(); }
+    finally { $("refresh").disabled = false; $("refresh").textContent = "Fetch fresh numbers"; }
+  });
+  load();
+})();
+</script>
+</body>
+</html>

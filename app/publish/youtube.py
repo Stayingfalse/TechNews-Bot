@@ -20,7 +20,9 @@ from ..config import settings
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
-SCOPES = "https://www.googleapis.com/auth/youtube.upload"
+# upload to post; readonly + analytics for the dashboard's numbers; force-ssl for comment replies
+SCOPES = " ".join("https://www.googleapis.com/auth/" + s for s in (
+    "youtube.upload", "youtube.readonly", "yt-analytics.readonly", "youtube.force-ssl"))
 CATEGORY_ENTERTAINMENT = "24"
 
 
@@ -57,6 +59,7 @@ def _token_request(form: dict) -> dict:
         # refresh responses don't repeat the refresh token
         "refresh_token": tok.get("refresh_token") or old.get("refresh_token"),
         "expires_at": int(time.time()) + int(tok.get("expires_in", 3600)) - 120,
+        "scope": tok.get("scope") or old.get("scope"),
     }
     if not data["refresh_token"]:
         raise RuntimeError("Google returned no refresh token; remove the app's access in your Google account and reconnect")
@@ -126,3 +129,31 @@ def publish(video: Path, spec, job: dict) -> dict:
         raise RuntimeError(f"YouTube upload error: {put.text[:500]}")
     vid = put.json()["id"]
     return {"video_id": vid, "url": f"https://youtube.com/shorts/{vid}", "privacy": settings.youtube_privacy}
+
+
+def metrics(video_id: str, published: str) -> dict:
+    """Counts for one Short (needs youtube.readonly), plus watch time from YouTube Analytics
+    (needs yt-analytics.readonly and the YouTube Analytics API enabled; it lags 1-2 days)."""
+    token = access_token()
+    h = {"Authorization": f"Bearer {token}"}
+    r = httpx.get("https://www.googleapis.com/youtube/v3/videos", headers=h, timeout=30,
+                  params={"part": "statistics", "id": video_id})
+    if r.status_code >= 400:
+        return {"error": f"stats unavailable: {r.text[:160]}"}
+    items = r.json().get("items") or []
+    if not items:
+        return {"error": "video not found (deleted or private to another channel)"}
+    st = items[0]["statistics"]
+    out = {"views": int(st.get("viewCount", 0)), "likes": int(st.get("likeCount", 0)),
+           "comments": int(st.get("commentCount", 0))}
+    end = time.strftime("%Y-%m-%d", time.gmtime())
+    a = httpx.get("https://youtubeanalytics.googleapis.com/v2/reports", headers=h, timeout=30, params={
+        "ids": "channel==MINE", "startDate": published[:10], "endDate": end,
+        "metrics": "averageViewDuration,averageViewPercentage,shares,subscribersGained",
+        "filters": f"video=={video_id}"})
+    if a.status_code < 400 and a.json().get("rows"):
+        avd, avp, shares, subs = a.json()["rows"][0]
+        out.update(avg_watch_s=avd, avg_view_pct=avp, shares=shares, followers_gained=subs)
+    elif a.status_code >= 400:
+        out["note"] = f"watch time unavailable: {a.text[:120]}"
+    return out

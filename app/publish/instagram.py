@@ -13,7 +13,9 @@ import httpx
 from .. import store
 from ..config import settings
 
-SCOPES = "instagram_business_basic,instagram_business_content_publish"
+# basic + publish to post; insights for the dashboard's numbers; comments for replies
+SCOPES = ("instagram_business_basic,instagram_business_content_publish,"
+          "instagram_business_manage_insights,instagram_business_manage_comments")
 
 
 def graph() -> str:
@@ -35,11 +37,12 @@ def authorize_url(state: str) -> str:
     return f"https://www.instagram.com/oauth/authorize?{urlencode(q)}"
 
 
-def _save(token: str, expires_in: int, user_id: str | None = None) -> dict:
+def _save(token: str, expires_in: int, user_id: str | None = None, permissions: list | None = None) -> dict:
     old = store.get_tokens("instagram") or {}
     data = {
         "access_token": token,
         "user_id": user_id or old.get("user_id"),
+        "permissions": permissions if permissions is not None else old.get("permissions"),
         "expires_at": int(time.time()) + int(expires_in),
     }
     store.set_tokens("instagram", data)
@@ -71,7 +74,10 @@ def exchange_code(code: str) -> dict:
     )
     r.raise_for_status()
     long = r.json()
-    return _save(long["access_token"], long.get("expires_in", 5184000), str(short["user_id"]))
+    perms = short.get("permissions")
+    if isinstance(perms, str):
+        perms = perms.split(",")
+    return _save(long["access_token"], long.get("expires_in", 5184000), str(short["user_id"]), perms or [])
 
 
 def refresh_if_needed(force: bool = False) -> None:
@@ -157,3 +163,25 @@ def configured() -> bool:
 def publish(video: Path, spec, job: dict) -> dict:
     # Instagram fetches the file itself from our public /media URL
     return publish_reel(job["video_url"], spec.full_caption(), job.get("cover_url"))
+
+
+def metrics(media_id: str) -> dict:
+    """Counts for one Reel. Likes and comments need only the basic permission; the rest come from
+    insights, which need instagram_business_manage_insights (reconnect to grant it)."""
+    out = {}
+    base = _get(media_id, "like_count,comments_count")
+    out["likes"], out["comments"] = base.get("like_count"), base.get("comments_count")
+    tok = store.get_tokens("instagram")
+    r = httpx.get(f"{graph()}/{media_id}/insights", timeout=30, params={
+        "metric": "views,reach,saved,shares,total_interactions,ig_reels_avg_watch_time",
+        "access_token": tok["access_token"]})
+    if r.status_code >= 400:
+        out["error"] = f"insights unavailable: {r.text[:160]}"
+        return out
+    names = {"views": "views", "reach": "reach", "saved": "saves", "shares": "shares",
+             "total_interactions": "interactions", "ig_reels_avg_watch_time": "avg_watch_s"}
+    for m in r.json().get("data", []):
+        v = (m.get("values") or [{}])[0].get("value", m.get("total_value", {}).get("value"))
+        if m.get("name") in names and v is not None:
+            out[names[m["name"]]] = v / 1000 if m["name"] == "ig_reels_avg_watch_time" else v  # ms → s
+    return out

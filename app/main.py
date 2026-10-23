@@ -6,14 +6,15 @@ import secrets
 import time
 import datetime as dt
 from contextlib import asynccontextmanager
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import notify, pipeline, store
+from . import metrics, notify, pipeline, store
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
@@ -51,7 +52,11 @@ def health():
 def status():
     def tok(name):
         t = store.get_tokens(name)
-        return None if not t else {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat()}
+        if not t:
+            return None
+        granted = t.get("permissions") or (t.get("scope") or "").split() or None
+        return {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat(),
+                **({"granted": granted} if granted else {})}
 
     return {
         "publish_enabled": settings.publish_enabled,
@@ -255,6 +260,57 @@ def get_job(job_id: str):
     if not job:
         raise HTTPException(404)
     return job
+
+
+# ------------------------------------------------------------------ performance
+
+@app.get("/metrics", dependencies=[Depends(require_token)])
+def get_metrics():
+    """Every posted quiz with its tags and per-platform numbers (latest + 1h/24h/7d snapshots)."""
+    return metrics.report()
+
+
+@app.post("/metrics/refresh", dependencies=[Depends(require_token)])
+def refresh_metrics():
+    """Fetch fresh numbers for every tracked post now, instead of waiting for the next round."""
+    return {"updated": metrics.collect(force=True)}
+
+
+class Insight(BaseModel):
+    week_of: dt.date = Field(description="Monday of the week the findings cover")
+    summary: str = Field(max_length=6000, description="What worked and what didn't, in plain words (markdown)")
+    recommendations: list[str] = Field(default_factory=list, max_length=12,
+                                       description="Concrete instructions for next week's batch")
+    experiments: list[str] = Field(default_factory=list, max_length=6,
+                                   description="What to test next week, one change each, with the tag to set")
+
+
+@app.post("/insights", status_code=201, dependencies=[Depends(require_token)])
+def post_insight(ins: Insight):
+    """The weekly review stores its findings here; the Monday batch reads the latest."""
+    rows = store._read("insights.json", [])
+    rows.append({"at": store.now_iso(), **ins.model_dump(mode="json")})
+    store._write("insights.json", rows[-52:])
+    return {"stored": len(rows[-52:])}
+
+
+@app.get("/insights", dependencies=[Depends(require_token)])
+def get_insights(limit: int = 8):
+    return store._read("insights.json", [])[-limit:][::-1]
+
+
+@app.get("/insights/latest", dependencies=[Depends(require_token)])
+def latest_insight():
+    rows = store._read("insights.json", [])
+    if not rows:
+        raise HTTPException(404, "no review yet")
+    return rows[-1]
+
+
+@app.get("/dashboard", dependencies=[Depends(require_token)])
+def dashboard():
+    """Performance dashboard (open with ?token=…; the page reuses it to load /metrics)."""
+    return FileResponse(Path(__file__).parent / "dashboard.html", media_type="text/html")
 
 
 @app.get("/history", dependencies=[Depends(require_token)])
