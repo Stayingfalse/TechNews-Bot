@@ -21,6 +21,7 @@ from .audio import SR
 log = logging.getLogger(__name__)
 
 NUMBERS = ("one", "two", "three", "four", "five")
+FALLBACK_VOICE = "TX3LPaxmHKxFdv7VOQHJ"  # "Liam", a built-in voice every plan can use through the API
 EXPRESSIVE = ("eleven_v3", "eleven_v4")  # models that understand [excited] and other delivery tags
 
 
@@ -99,9 +100,10 @@ def _fetch(text: str, cfg: VoiceConfig) -> Path:
     else:
         body = {"text": text, "model_id": cfg.model,
                 "voice_settings": {"stability": 0.35, "similarity_boost": 0.8, "style": 0.6}}
-    r = httpx.post(f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}",
-                   params={"output_format": "mp3_44100_128"}, timeout=60,
-                   headers={"xi-api-key": cfg.api_key}, json=body)
+    r = _tts(cfg.voice_id, body, cfg)
+    if r.status_code == 402 and cfg.voice_id != FALLBACK_VOICE:  # a library voice on a free plan
+        log.warning("ElevenLabs refused voice %s (%s); using the built-in fallback", cfg.voice_id, r.text[:120])
+        r = _tts(FALLBACK_VOICE, body, cfg)
     if r.status_code >= 400:
         raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
     cfg.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -109,6 +111,12 @@ def _fetch(text: str, cfg: VoiceConfig) -> Path:
     tmp.write_bytes(r.content)
     tmp.rename(path)
     return path
+
+
+def _tts(voice_id: str, body: dict, cfg: VoiceConfig) -> httpx.Response:
+    return httpx.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                      params={"output_format": "mp3_44100_128"}, timeout=60,
+                      headers={"xi-api-key": cfg.api_key}, json=body)
 
 
 def _decode(path: Path) -> np.ndarray:
