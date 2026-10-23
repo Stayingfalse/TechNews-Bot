@@ -1,7 +1,7 @@
 """Instagram extras beyond the daily Reel: a story when each quiz posts, and a weekly carousel.
 
 Story: today's title card with "new quiz out now", posted right after the Reel (INSTAGRAM_STORIES).
-Carousel: once a week (CAROUSEL_DAY at CAROUSEL_TIME), the week's most-viewed quiz again as swipeable
+Carousel: once a week (CAROUSEL_DAY at CAROUSEL_TIME, Monday 20:00), the week's most-viewed quiz again as swipeable
 slides, clue then answer (INSTAGRAM_CAROUSELS). Both are image posts, so they cost no rendering time.
 """
 from __future__ import annotations

@@ -64,9 +64,10 @@ class Settings:
         # Instagram extras: a "new quiz out now" story after each Reel, and a weekly carousel of the
         # week's most-viewed quiz on CAROUSEL_DAY (mon..sun) at CAROUSEL_TIME (local).
         self.instagram_stories = _bool("INSTAGRAM_STORIES", False)
-        self.instagram_carousels = _bool("INSTAGRAM_CAROUSELS", False)
-        self.carousel_day = os.environ.get("CAROUSEL_DAY", "sun").strip().lower()[:3]
-        self.carousel_time = os.environ.get("CAROUSEL_TIME", "18:00")
+        # Monday 20:00: after the week has run and the 19:05 routine has booked the next one
+        self.instagram_carousels = _bool("INSTAGRAM_CAROUSELS", True)
+        self.carousel_day = os.environ.get("CAROUSEL_DAY", "mon").strip().lower()[:3]
+        self.carousel_time = os.environ.get("CAROUSEL_TIME", "20:00")
 
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.

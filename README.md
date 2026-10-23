@@ -80,7 +80,7 @@ Engagement options:
   under it. `voice_name` picks the host (alex, liam, althea, milly), which the review compares. Needs `ELEVENLABS_API_KEY`; each line is cached in `/data/voice`. If ElevenLabs fails, the video
   goes out without it.
 - **Instagram extras** (switched on in env): a "New quiz out now" story after each Reel
-  (`INSTAGRAM_STORIES`), and a weekly carousel of the week's most-viewed quiz, clue then answer on
+  (`INSTAGRAM_STORIES`), and every Monday at 20:00 a carousel of the week's most-viewed quiz, clue then answer on
   alternate slides (`INSTAGRAM_CAROUSELS`). Both are still images made from the quiz, so they cost
   no rendering time. The API can't add stickers or links to stories.
 - **Loop ending** (every video): the outro clears back to the empty stage the video opens on, so an
