@@ -99,6 +99,10 @@ a { color: var(--ig); }
 .slot details ol { margin: 4px 0 0; padding-left: 20px; }
 .slot .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .slot .acts input { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.failed-post { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--ring); }
+.failed-post:first-of-type { border-top: 0; }
+.failed-post .err { font-size: 12px; overflow-wrap: anywhere; }
+.failed-post .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .free { color: var(--muted); font-size: 13px; padding: 4px 0; }
 button.primary { background: var(--ig); color: #fff; border-color: var(--ig); }
 button.danger { color: #d03b3b; }
@@ -124,6 +128,12 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
   </header>
 
   <div id="connect" class="notice" hidden></div>
+
+  <section id="failed" class="notice" hidden aria-labelledby="failed-h">
+    <strong id="failed-h">Didn't post everywhere</strong>
+    <div id="failed-msg" role="status"></div>
+    <div id="failed-list"></div>
+  </section>
 
   <div id="view-schedule" class="view" hidden>
     <section class="card">
@@ -445,6 +455,54 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     if (parts.length) { box.append(...parts); box.hidden = false; }
   }
 
+  // ------------------------------------------------------------ failed posts
+  const changeHeaders = { ...(auth.headers || {}), "X-Quizbot": "1" };
+  let failedPoll = null, wasRetrying = false;
+
+  function retryButton(jobId, platforms, retrying, onDone) {
+    const names = platforms.map(k => pf(k) ? pf(k).name : k).join(" and ");
+    const btn = el("button", { type: "button", class: "primary" }, retrying ? "Retrying…" : `Retry ${names}`);
+    btn.disabled = retrying;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Retrying…";
+      const r = await fetch(`/jobs/${encodeURIComponent(jobId)}/retry`, { method: "POST", headers: changeHeaders });
+      if (!r.ok) {
+        let d = `${r.status} ${r.statusText}`; try { d = (await r.json()).detail || d; } catch {}
+        btn.disabled = false; btn.textContent = `Retry ${names}`; onDone(`Not retried: ${d}`);
+        return;
+      }
+      onDone(`Posting to ${names} again. This can take a few minutes; the video is made again first if it was deleted.`, true);
+    });
+    return btn;
+  }
+
+  async function loadFailed(msg, started) {
+    const r = await fetch("/jobs/failed", auth);
+    if (!r.ok) return;
+    const jobs = await r.json();
+    const box = $("failed"), list = $("failed-list");
+    $("failed-msg").textContent = msg || "";
+    list.replaceChildren();
+    for (const j of jobs) {
+      const row = el("div", { class: "failed-post" });
+      row.append(el("div", {}, `${j.title} · ${when(j.published_at)}`));
+      for (const [k, err] of Object.entries(j.failed))
+        row.append(el("div", { class: "err" }, `${pf(k) ? pf(k).name : k}: ${err}`));
+      const acts = el("div", { class: "acts" });
+      acts.append(retryButton(j.job_id, Object.keys(j.failed), j.retrying, (m, ok) => { loadFailed(m, ok); if (!$("view-schedule").hidden) loadSchedule(); }));
+      row.append(acts); list.append(row);
+    }
+    box.hidden = !jobs.length && !msg;
+    // keep checking while a retry runs; once it has finished, reload so the new post shows up
+    const running = started || jobs.some(j => j.retrying);  // a quick retry may have finished already
+    clearTimeout(failedPoll);
+    if (running) { wasRetrying = true; failedPoll = setTimeout(() => loadFailed(), 15000); }
+    else if (wasRetrying) {
+      wasRetrying = false; load();
+      if (!$("view-schedule").hidden) loadSchedule();
+    }
+  }
+
   function renderInsight() {
     if (!insight) return;
     $("insight-when").textContent = `Week of ${insight.week_of}, written ${when(insight.at)}`;
@@ -477,7 +535,7 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     insight = ins.ok ? await ins.json() : null;
     const stamps = posts.flatMap(p => Object.values(p.platforms).map(v => v.latest.at)).filter(Boolean).sort();
     $("updated").textContent = stamps.length ? `Numbers as of ${when(stamps.at(-1))}` : "No numbers collected yet";
-    tagOptions(); render(); renderInsight(); connections();
+    tagOptions(); render(); renderInsight(); connections(); loadFailed();
     document.querySelector("main").style.opacity = 1;
   }
 

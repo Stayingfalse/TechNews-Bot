@@ -169,10 +169,11 @@ def after_publish(job: dict) -> None:
     if cliff:
         cliff["cliff_revealed_by"] = job["id"]
         store.save_job(cliff)
-    replies = []
+    replies = [r for r in reveal.get("replies", []) if r["ok"]]  # a retried post only replies where it's new
+    done = {(r["platform"], r["user"]) for r in replies}
     for i, w in enumerate(reveal.get("winners", []) if settings.next_link_comments else []):
         res = job["results"].get(w["platform"], {})
-        if not res.get("ok"):
+        if not res.get("ok") or (w["platform"], w["user"]) in done:
             continue
         text = REPLIES[w["platform"]][i % 3].format(url=res.get("url") or "")
         try:

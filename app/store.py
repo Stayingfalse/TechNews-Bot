@@ -71,6 +71,16 @@ def add_history(entry: dict) -> None:
         _write("history.json", hist[-1000:])
 
 
+def update_history(job_id: str, platforms: dict) -> None:
+    """Record a retry's outcome on the entry the first attempt wrote."""
+    with _lock:
+        hist = _read("history.json", [])
+        for h in hist:
+            if h.get("job_id") == job_id:
+                h["platforms"] = platforms
+        _write("history.json", hist)
+
+
 def history(limit: int = 60) -> list[dict]:
     return _read("history.json", [])[-limit:]
 

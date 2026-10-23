@@ -4,6 +4,7 @@ Docs: https://developers.facebook.com/docs/instagram-platform/content-publishing
 """
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -13,9 +14,12 @@ import httpx
 from .. import store
 from ..config import settings
 
+log = logging.getLogger(__name__)
+
 # basic + publish to post; insights for the dashboard's numbers; comments for replies
 SCOPES = ("instagram_business_basic,instagram_business_content_publish,"
           "instagram_business_manage_insights,instagram_business_manage_comments")
+CONTAINER_ATTEMPTS = 3  # fresh upload containers to try when Instagram's processing errors out
 
 
 def graph() -> str:
@@ -110,20 +114,29 @@ def publish_reel(video_url: str, caption: str, cover_url: str | None = None) -> 
     }
     if cover_url:
         params["cover_url"] = cover_url
-    r = httpx.post(f"{graph()}/{uid}/media", data=params, timeout=60)
-    if r.status_code >= 400:
-        raise RuntimeError(f"Instagram container error: {r.text}")
-    container = r.json()["id"]
 
-    status = None
-    for _ in range(60):  # up to ~5 minutes
-        time.sleep(5)
-        s = httpx.get(f"{graph()}/{container}", params={"fields": "status_code,status", "access_token": token}, timeout=30)
-        status = s.json().get("status_code")
-        if status in ("FINISHED", "ERROR", "EXPIRED"):
+    errors = []
+    for attempt in range(1, CONTAINER_ATTEMPTS + 1):
+        r = httpx.post(f"{graph()}/{uid}/media", data=params, timeout=60)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Instagram container error: {r.text}")
+        container = r.json()["id"]
+
+        status = None
+        for _ in range(60):  # up to ~5 minutes
+            time.sleep(5)
+            s = httpx.get(f"{graph()}/{container}", params={"fields": "status_code,status", "access_token": token}, timeout=30)
+            status = s.json().get("status_code")
+            if status in ("FINISHED", "ERROR", "EXPIRED"):
+                break
+        if status == "FINISHED":
             break
-    if status != "FINISHED":
-        raise RuntimeError(f"Instagram processing ended with {status}: {s.text}")
+        errors.append(f"attempt {attempt}: {status}: {s.text}")
+        # a bare ERROR is usually Instagram failing to fetch or transcode this time; a new container often works
+        if status != "ERROR" or attempt == CONTAINER_ATTEMPTS:
+            raise RuntimeError("Instagram processing failed. " + " | ".join(errors))
+        log.warning("Instagram container %s ended with ERROR (attempt %d), retrying", container, attempt)
+        time.sleep(30 * attempt)
 
     r = httpx.post(f"{graph()}/{uid}/media_publish", data={"creation_id": container, "access_token": token}, timeout=60)
     if r.status_code >= 400:

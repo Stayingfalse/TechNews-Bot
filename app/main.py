@@ -66,15 +66,17 @@ def is_authorised(request: Request, authorization: str = "", token: str = "") ->
     supplied = authorization.removeprefix("Bearer ").strip() or token
     if settings.api_token and supplied and secrets.compare_digest(supplied, settings.api_token):
         return True
-    # A sign-in cookie works for reading, the dashboard's refresh button, and changing single bookings
-    # (move, edit, cancel). Booking batches and posting still need the API token. Changes also need the
-    # dashboard's X-Quizbot header: another site can't send a custom header without a CORS preflight,
-    # which this server never grants, so it can't ride on the cookie.
+    # A sign-in cookie works for reading, the dashboard's refresh button, changing single bookings
+    # (move, edit, cancel) and retrying a failed post. Booking batches and new posts still need the API
+    # token. Changes also need the dashboard's X-Quizbot header: another site can't send a custom header
+    # without a CORS preflight, which this server never grants, so it can't ride on the cookie.
     cookie_ok = valid_session(request.cookies.get(SESSION_COOKIE, ""))
     if request.method in ("GET", "HEAD"):
         return cookie_ok
-    dashboard_change = request.url.path == "/metrics/refresh" or (
-        request.url.path.startswith("/schedule/") and request.method in ("PATCH", "DELETE"))
+    path = request.url.path
+    dashboard_change = path == "/metrics/refresh" or (
+        path.startswith("/schedule/") and request.method in ("PATCH", "DELETE")) or (
+        request.method == "POST" and re.fullmatch(r"/jobs/[^/]+/retry", path) is not None)
     return cookie_ok and dashboard_change and request.headers.get("x-quizbot") == "1"
 
 
@@ -336,6 +338,27 @@ def change_booking(job_id: str, change: BookingChange):
         raise HTTPException(409, {"errors": errors})
     job = pipeline.update_booking(job, day, at, change.spec)
     return {"job_id": job_id, **_booking(job), "date": job["slot"]}
+
+
+@app.get("/jobs/failed", dependencies=[Depends(require_token)])
+def get_failed_jobs(days: int = 14):
+    """Recent posts that didn't reach every platform, with each platform's error."""
+    return [{"job_id": j["id"], "title": QuizSpec.model_validate(j["spec"]).title.replace("*", ""),
+             "published_at": j["published_at"], "status": j["status"], "retrying": bool(j.get("retry")),
+             "failed": pipeline.failures(j)} for j in pipeline.failed_jobs(days)]
+
+
+@app.post("/jobs/{job_id}/retry", status_code=202, dependencies=[Depends(require_token)])
+def retry_job(job_id: str):
+    """Post a finished quiz again to the platforms it failed on. Its video is made again if it was deleted."""
+    job = store.get_job(job_id)
+    if not job:
+        raise HTTPException(404)
+    try:
+        platforms = pipeline.retry(job)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return {"job_id": job_id, "retrying": platforms}
 
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(require_token)])

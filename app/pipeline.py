@@ -115,12 +115,15 @@ def _render(job: dict) -> None:
     cover = settings.videos_dir / f"{stem}.jpg"
     job["status"] = "rendering"
     store.save_job(job)
-    try:  # yesterday's cliffhanger: read and judge its comments now, so the shout-outs are as fresh as possible
-        reveal = cliffhanger.prepare(job)
-    except Exception as e:  # never let comment reading stop a post
-        log.exception("cliffhanger prepare failed")
-        reveal = None
-        notify.error(f"couldn't prepare yesterday's cliffhanger reveal for `{job['id']}`: {e}")
+    if job.get("retry") and "reveal" in job:  # remaking a posted video: show the same reveal it went out with
+        reveal = job["reveal"]
+    else:
+        try:  # yesterday's cliffhanger: read and judge its comments now, so the shout-outs are as fresh as possible
+            reveal = cliffhanger.prepare(job)
+        except Exception as e:  # never let comment reading stop a post
+            log.exception("cliffhanger prepare failed")
+            reveal = None
+            notify.error(f"couldn't prepare yesterday's cliffhanger reveal for `{job['id']}`: {e}")
     job["reveal"] = reveal
     screen = {k: reveal[k] for k in ("answer", "note", "shoutouts")} if reveal else None
     info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
@@ -147,7 +150,8 @@ def _publish(job: dict) -> None:
     spec = QuizSpec.model_validate(job["spec"])
     video = settings.videos_dir / job.get("video", "")
     if not job.get("video") or not video.exists():  # never rendered, or the file was cleaned up
-        job["publish_at"] = None  # publish straight after this render
+        if not job.get("retry"):  # a retry's slot is already past, and the schedule still shows it
+            job["publish_at"] = None  # publish straight after this render
         _render(job)
         return
     job["status"] = "publishing"
@@ -169,7 +173,10 @@ def _publish(job: dict) -> None:
                 results[name] = {"ok": False, "error": str(e)[:500]}
             store.save_job(job)  # record each platform as it completes
 
-    if not job["dry_run"]:
+    retrying = job.pop("retry", False)
+    if retrying:
+        store.update_history(job["id"], {k: v.get("ok") for k, v in results.items()})
+    elif not job["dry_run"]:
         store.add_history({
             "date": store.now_iso(),
             "slot": job.get("slot"),
@@ -183,7 +190,8 @@ def _publish(job: dict) -> None:
             "platforms": {k: v.get("ok") for k, v in results.items()},
             "job_id": job["id"],
         })
-    job.update(status="done", published_at=store.now_iso())
+    # a retry keeps the first posting time, which the metrics' age and the dashboard go by
+    job.update(status="done", published_at=job.get("published_at") if retrying else store.now_iso())
     try:
         cliffhanger.after_publish(job)  # mark yesterday's cliffhanger revealed; reply under the winners' comments
     except Exception:
@@ -199,6 +207,34 @@ def _publish(job: dict) -> None:
         job["video_deleted"] = True
     store.save_job(job)
     _notify_published(job, spec, video)
+
+
+def failures(job: dict) -> dict[str, str]:
+    """Platforms this job failed on that could be tried again: platform -> error."""
+    return {name: res.get("error", "") for name, res in job.get("results", {}).items()
+            if not res.get("ok") and name in PUBLISHERS and PUBLISHERS[name].configured()}
+
+
+def failed_jobs(days: int = 14) -> list[dict]:
+    """Recent posts that missed a platform, plus any retry still running, newest first."""
+    since = (now() - timedelta(days=days)).isoformat()
+    jobs = [j for j in store.list_jobs(200) if not j.get("dry_run") and (j.get("published_at") or "") >= since
+            and ((j["status"] == "done" and failures(j)) or j.get("retry"))]
+    return sorted(jobs, key=lambda j: j["published_at"], reverse=True)
+
+
+def retry(job: dict) -> list[str]:
+    """Post a finished job again to the platforms it failed on; the others are skipped. Returns those platforms."""
+    failed = list(failures(job))
+    if not settings.publish_enabled:
+        raise ValueError("publishing is off (PUBLISH_ENABLED)")
+    if job["status"] != "done" or job.get("dry_run") or not failed:
+        raise ValueError("nothing to retry: this post has no failed platforms" if job["status"] == "done"
+                         else f"can't retry while the post is {job['status']}")
+    job.update(status="publishing", retry=True)  # publishing skips the platforms that already have it
+    store.save_job(job)
+    _queue.put(("publish", job["id"]))
+    return failed
 
 
 # ------------------------------------------------------------------ Discord
@@ -274,7 +310,10 @@ def _worker() -> None:
         except Exception as e:
             log.exception("job %s failed", job_id)
             job = store.get_job(job_id) or {"id": job_id}
-            job.update(status="failed", error=str(e)[:1000])
+            if job.pop("retry", False):  # the first attempt's posts stand; the failed platforms can be tried again
+                job["status"] = "done"
+            else:
+                job.update(status="failed", error=str(e)[:1000])
             store.save_job(job)
             when = f" (slot {job['slot']})" if job.get("slot") else ""
             notify.error(f"job `{job_id}`{when} failed during {action}: {e}")
