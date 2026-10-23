@@ -98,11 +98,11 @@ def status():
             return None
         granted = t.get("permissions") or (t.get("scope") or "").split() or None
         out = {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat()}
-        if granted:  # what it was given, and what it asks for now but wasn't given (→ reconnect)
-            mod = PUBLISHERS[name]
-            wanted = mod.SCOPES.replace(",", " ").split()
-            out.update(granted=granted, missing=[w for w in wanted if w not in granted],
-                       reconnect_url=f"/oauth/{name}/start")
+        # what it was given, and what it asks for now but wasn't given (→ reconnect); a connection made
+        # before permissions were recorded is unknown, so it's offered a reconnect too
+        wanted = PUBLISHERS[name].SCOPES.replace(",", " ").split()
+        out.update(granted=granted, missing=[w for w in wanted if w not in (granted or [])],
+                   permissions_unknown=not granted, reconnect_url=f"/oauth/{name}/start")
         return out
 
     return {
