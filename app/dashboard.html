@@ -100,6 +100,7 @@ a { color: var(--ig); }
     <button id="refresh" type="button">Fetch fresh numbers</button>
   </div>
 
+  <div id="connect" class="notice" hidden></div>
   <div id="notice" class="notice" hidden></div>
 
   <section class="tiles" id="tiles" aria-label="Totals"></section>
@@ -360,6 +361,28 @@ a { color: var(--ig); }
     box.append(el("div", {}, "Missing watch time or shares usually means the account needs reconnecting with the new permissions."));
   }
 
+  // Platforms whose connection lacks permissions the bot now asks for get a one-tap reconnect.
+  async function connections() {
+    const box = $("connect"); box.replaceChildren(); box.hidden = true;
+    const just = new URLSearchParams(location.search).get("connected");
+    const r = await fetch("/status", auth);
+    if (!r.ok) return;
+    const st = await r.json();
+    const parts = [];
+    if (just && pf(just)) parts.push(el("div", {}, `${pf(just).name} reconnected. New numbers appear after the next fetch.`));
+    for (const [k, v] of Object.entries(st.platforms || {})) {
+      const miss = v.token && v.token.missing;
+      if (!miss || !miss.length) continue;
+      const row = el("div", { style: "margin-top:6px" });
+      row.append(el("strong", {}, `${pf(k).name} needs reconnecting `), document.createTextNode(
+        `to give the bot ${miss.length} new permission${miss.length > 1 ? "s" : ""} (numbers${k === "youtube" ? ", watch time and comment replies" : " and comment replies"}). `));
+      if (k === "youtube") row.append(el("div", { class: "tags" }, "First, in Google Cloud: enable YouTube Analytics API, and add the youtube.readonly, yt-analytics.readonly and youtube.force-ssl scopes under Google Auth Platform → Data access."));
+      const a = el("a", { href: v.token.reconnect_url, style: "display:inline-block;margin-top:6px;font-weight:600" }, `Reconnect ${pf(k).name}`);
+      row.append(a); parts.push(row);
+    }
+    if (parts.length) { box.append(...parts); box.hidden = false; }
+  }
+
   function renderInsight() {
     if (!insight) return;
     $("insight-when").textContent = `Week of ${insight.week_of}, written ${when(insight.at)}`;
@@ -392,7 +415,7 @@ a { color: var(--ig); }
     insight = ins.ok ? await ins.json() : null;
     const stamps = posts.flatMap(p => Object.values(p.platforms).map(v => v.latest.at)).filter(Boolean).sort();
     $("updated").textContent = stamps.length ? `Numbers as of ${when(stamps.at(-1))}` : "No numbers collected yet";
-    tagOptions(); render(); renderInsight();
+    tagOptions(); render(); renderInsight(); connections();
     document.querySelector("main").style.opacity = 1;
   }
 

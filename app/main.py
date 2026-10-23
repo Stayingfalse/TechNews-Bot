@@ -90,8 +90,13 @@ def status():
         if not t:
             return None
         granted = t.get("permissions") or (t.get("scope") or "").split() or None
-        return {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat(),
-                **({"granted": granted} if granted else {})}
+        out = {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat()}
+        if granted:  # what it was given, and what it asks for now but wasn't given (→ reconnect)
+            mod = PUBLISHERS[name]
+            wanted = (getattr(mod, "SCOPES", None) or mod.scopes()).replace(",", " ").split()
+            out.update(granted=granted, missing=[w for w in wanted if w not in granted],
+                       reconnect_url=f"/oauth/{name}/start")
+        return out
 
     return {
         "publish_enabled": settings.publish_enabled,
@@ -452,7 +457,8 @@ def oauth_start(provider: str):
 
 
 @app.get("/oauth/{provider}/callback", response_class=HTMLResponse)
-def oauth_callback(provider: str, code: str = "", state: str = "", error: str = "", error_description: str = ""):
+def oauth_callback(request: Request, provider: str, code: str = "", state: str = "", error: str = "",
+                   error_description: str = ""):
     expected = _states.pop(state, None)
     if not expected or expected[0] != provider or expected[1] < time.time():
         raise HTTPException(400, "invalid or expired state; start again")
@@ -461,6 +467,8 @@ def oauth_callback(provider: str, code: str = "", state: str = "", error: str = 
     if expected[2] == "login":
         return _finish_login(provider, code.removesuffix("#_"), expected[3])
     PROVIDERS[provider].exchange_code(code.removesuffix("#_"))
+    if valid_session(request.cookies.get(SESSION_COOKIE, "")):  # started from the dashboard: go back there
+        return RedirectResponse(f"/dashboard?connected={provider}")
     return f"<h2>{LABELS[provider]} connected ✔</h2><p>You can close this tab.</p>"
 
 
@@ -471,7 +479,8 @@ def _finish_login(provider: str, code: str, nxt: str):
     except Exception as e:
         # 400, not 5xx: Cloudflare swaps an origin 502 for its own "Bad gateway" page, hiding this message
         logging.getLogger(__name__).warning("%s sign-in failed: %s", provider, e)
-        hint = (" Reconnect YouTube with the new permissions first (see docs/SETUP.md), or sign in with Instagram."
+        hint = (" The YouTube connection needs its new permissions first: sign in with Instagram, then press"
+                " Reconnect YouTube on the dashboard."
                 if provider == "youtube" and "scope" in str(e).lower() else "")
         return _page("Sign-in failed", f"<h1>Sign-in failed</h1><p class='note'>{escape(str(e)[:300])}{hint}</p>"
                      "<a class='btn plain' href='/login'>Try again</a>", 400)
