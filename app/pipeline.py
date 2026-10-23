@@ -16,10 +16,11 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cliffhanger, metrics, notify, store, themes
+from . import cliffhanger, metrics, notify, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
+from .render.voice import VoiceConfig
 from .spec import QuizSpec
 
 log = logging.getLogger(__name__)
@@ -126,8 +127,10 @@ def _render(job: dict) -> None:
             notify.error(f"couldn't prepare yesterday's cliffhanger reveal for `{job['id']}`: {e}")
     job["reveal"] = reveal
     screen = {k: reveal[k] for k in ("answer", "note", "shoutouts")} if reveal else None
+    vcfg = VoiceConfig(settings.elevenlabs_api_key, settings.elevenlabs_voice_id, settings.elevenlabs_model,
+                       settings.data_dir / "voice") if settings.elevenlabs_api_key else None
     info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
-                        reveal=screen)
+                        reveal=screen, voice=vcfg)
     if (store.get_job(job["id"]) or {}).get("status") == "cancelled":  # cancelled while rendering
         video.unlink(missing_ok=True)
         cover.unlink(missing_ok=True)
@@ -204,6 +207,10 @@ def _publish(job: dict) -> None:
         themes.after_publish(job)  # tell the viewer who picked this quiz's theme
     except Exception:
         log.exception("theme reply failed")
+    try:
+        social.after_publish(job)  # the "new quiz out now" story
+    except Exception:
+        log.exception("story failed")
     if results and all(r.get("ok") for r in results.values()):
         # every platform has its copy; keep the file only when something needs a retry
         video.unlink(missing_ok=True)
@@ -260,6 +267,7 @@ def _notify_scheduled(job: dict, spec: QuizSpec, video: Path) -> None:
         "fields": [_answers_field(spec),
                    {"name": "Length", "value": f"{job['render']['duration']} s", "inline": True},
                    {"name": "Music", "value": job["render"].get("music", "?"), "inline": True},
+                   {"name": "Voice", "value": job["render"].get("voice", "off"), "inline": True},
                    {"name": "Platforms", "value": ", ".join(settings.platforms) or "(none)", "inline": True}],
     }
     slot, at = slot_key(job)
@@ -293,6 +301,9 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
                      + ("replied under their comment" if pr.get("ok") else f"reply failed: {pr.get('error', 'not sent')}"))
     if spec.ask_theme:
         lines.append("**Theme ask:** this one asks viewers to comment a theme; Monday's batch reads them.")
+    st = job.get("story")
+    if st:
+        lines.append("**Instagram story:** " + ("posted" if st["ok"] else f"failed: {st['error']}"))
     lf = job.get("linked_from")
     if lf:
         done = [LABELS.get(p, p) for p, ok in lf.items() if p != "job" and ok]
@@ -336,6 +347,10 @@ def tick() -> None:
     """Hand due jobs to the worker; warn about an empty day and a short runway."""
     t = now()
     lead = timedelta(minutes=settings.render_lead_minutes)
+    try:
+        social.weekly_tick(t.astimezone(settings.tz))
+    except Exception:
+        log.exception("weekly carousel failed")
     for job in scheduled_jobs():
         due = datetime.fromisoformat(job["publish_at"])
         if job["status"] == "booked" and t >= due - lead:

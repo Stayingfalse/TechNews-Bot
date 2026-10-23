@@ -49,6 +49,18 @@ class Settings:
         # under each correct cliffhanger answer. Needs the comments permission on each platform.
         self.next_link_comments = _bool("NEXT_LINK_COMMENTS", True)
 
+        # Host voice-over for quizzes with "voice": true. Lines are cached in DATA_DIR/voice.
+        self.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", "")
+        self.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "dEc1rkm0ul0kDedEuETS")  # "Alex", lively announcer
+        self.elevenlabs_model = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+
+        # Instagram extras: a "new quiz out now" story after each Reel, and a weekly carousel of the
+        # week's most-viewed quiz on CAROUSEL_DAY (mon..sun) at CAROUSEL_TIME (local).
+        self.instagram_stories = _bool("INSTAGRAM_STORIES", False)
+        self.instagram_carousels = _bool("INSTAGRAM_CAROUSELS", False)
+        self.carousel_day = os.environ.get("CAROUSEL_DAY", "sun").strip().lower()[:3]
+        self.carousel_time = os.environ.get("CAROUSEL_TIME", "18:00")
+
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))

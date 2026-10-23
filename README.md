@@ -75,6 +75,14 @@ Engagement options:
 - **Next-quiz links** (every post, `NEXT_LINK_COMMENTS=true`): once a quiz is posted, the bot comments on the
   previous post pointing at it ("Next quiz is up", or "Answer revealed" under a cliffhanger), so every
   comment section leads to the next video.
+- `voice`: a game-show host voice-over (ElevenLabs): reads the title, calls each round, announces each
+  answer, asks for comments on a cliffhanger and reads yesterday's answer and shout-outs. The music ducks
+  under it. Needs `ELEVENLABS_API_KEY`; each line is cached in `/data/voice`. If ElevenLabs fails, the video
+  goes out without it.
+- **Instagram extras** (switched on in env): a "New quiz out now" story after each Reel
+  (`INSTAGRAM_STORIES`), and a weekly carousel of the week's most-viewed quiz, clue then answer on
+  alternate slides (`INSTAGRAM_CAROUSELS`). Both are still images made from the quiz, so they cost
+  no rendering time. The API can't add stickers or links to stories.
 - **Loop ending** (every video): the outro clears back to the empty stage the video opens on, so an
   autoplay replay runs on without a visible jump.
 - `ask_comment` (per round): a "Comment your guess!" sticker on that round's countdown; `pause_hint`: a
@@ -105,6 +113,8 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /metrics`, `POST /metrics/refresh` | Every posted quiz with its labels and per-platform numbers (latest + 1h/24h/7d snapshots); refresh fetches now |
 | `POST /insights`, `GET /insights/latest` | The weekly review's findings; the Monday batch reads the latest |
 | `GET /schema` | Spec JSON schema |
+| `POST /instagram/story/{job_id}` | Post the "new quiz out now" story for a quiz already on Instagram |
+| `POST /instagram/carousel?job_id=&dry_run=true` | Make the swipe-to-play carousel slides (default: the week's most viewed); `dry_run=false` posts it |
 | `GET /themes/suggestions?days=8` | Themes viewers commented on recent `ask_theme` posts, grouped and ranked |
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |

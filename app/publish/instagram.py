@@ -150,6 +150,59 @@ def publish_reel(video_url: str, caption: str, cover_url: str | None = None) -> 
     return out
 
 
+def _wait(container: str, token: str, tries: int = 24) -> None:
+    """Wait for a container to finish processing (images take seconds)."""
+    status, s = None, None
+    for _ in range(tries):
+        time.sleep(5)
+        s = httpx.get(f"{graph()}/{container}", params={"fields": "status_code,status", "access_token": token}, timeout=30)
+        status = s.json().get("status_code")
+        if status in ("FINISHED", "ERROR", "EXPIRED"):
+            break
+    if status != "FINISHED":
+        raise RuntimeError(f"Instagram processing failed: {status}: {s.text if s is not None else ''}"[:400])
+
+
+def _create(params: dict) -> str:
+    tok = store.get_tokens("instagram")
+    if not tok:
+        raise RuntimeError("Instagram not connected: visit /oauth/instagram/start")
+    r = httpx.post(f"{graph()}/{tok['user_id']}/media", data={**params, "access_token": tok["access_token"]}, timeout=60)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram container error: {r.text[:400]}")
+    return r.json()["id"]
+
+
+def _publish_container(container: str) -> dict:
+    tok = store.get_tokens("instagram")
+    _wait(container, tok["access_token"])
+    r = httpx.post(f"{graph()}/{tok['user_id']}/media_publish",
+                   data={"creation_id": container, "access_token": tok["access_token"]}, timeout=60)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram publish error: {r.text[:400]}")
+    media_id = r.json()["id"]
+    out = {"media_id": media_id}
+    try:
+        out["url"] = media_info(media_id).get("permalink")
+    except Exception:
+        pass
+    return out
+
+
+def publish_story(image_url: str) -> dict:
+    """A 9:16 image story (the API can't add stickers or links to stories)."""
+    return _publish_container(_create({"media_type": "STORIES", "image_url": image_url}))
+
+
+def publish_carousel(image_urls: list[str], caption: str) -> dict:
+    """An image carousel post (2-10 JPEGs)."""
+    children = [_create({"image_url": u, "is_carousel_item": "true"}) for u in image_urls]
+    tok = store.get_tokens("instagram")
+    for c in children:
+        _wait(c, tok["access_token"])
+    return _publish_container(_create({"media_type": "CAROUSEL", "children": ",".join(children), "caption": caption}))
+
+
 def _get(path: str, fields: str) -> dict:
     tok = store.get_tokens("instagram")
     if not tok:

@@ -13,7 +13,8 @@ from PIL import Image
 
 from ..spec import QuizSpec
 from . import music
-from .audio import write_sfx_track
+from . import voice as host
+from .audio import SR, voice_track, write_sfx_track, write_wav
 from .background import Background
 from .draw import blit, clamp, disc, ease_in_cubic, ease_in_out_cubic, ink_text, prog
 from .scenes import IntroScene, RoundScene, build_scenes
@@ -118,8 +119,9 @@ def _render_frame(idx: int) -> bytes:
 
 def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
                  cover_path: str | Path | None = None, music_dir: Path | None = None,
-                 reveal: dict | None = None) -> dict:
-    """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro."""
+                 reveal: dict | None = None, voice: host.VoiceConfig | None = None) -> dict:
+    """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro.
+    `voice` = ElevenLabs settings, used when the spec asks for the host voice-over."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     video = Video(spec, brand, reveal)
@@ -127,21 +129,36 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
     t0 = time.time()
     track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
 
+    voice_status, vo = "off", None
+    if getattr(spec, "voice", False):
+        if not voice:
+            voice_status = "skipped: no ELEVENLABS_API_KEY"
+        else:
+            try:  # never let the voice-over stop a post: without it the video goes out as before
+                vo = voice_track(host.clips(video, voice), int(SR * video.duration) + SR)
+                voice_status = "on"
+            except Exception as e:
+                log.warning("voice-over failed, rendering without it: %s", e)
+                voice_status = f"failed: {e}"[:200]
+
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "sfx.wav")
         bed = music.synth(video.duration, seed_of(spec)) if track == "synth" else None
-        write_sfx_track(video.sfx_events(), video.duration, wav, enabled=spec.sfx, bed=bed)
+        write_sfx_track(video.sfx_events(), video.duration, wav, enabled=spec.sfx, bed=bed, voice=vo)
         audio_in = ["-i", wav]
         master = f"loudnorm=I={LOUDNESS}:TP=-1.5:LRA=11,aresample=48000"
         graph = f"[1:a]{master}[a]"
         if isinstance(track, Path):
             fade = max(0.0, video.duration - 1.5)
             audio_in += ["-stream_loop", "-1", "-i", str(track)]
-            graph = (
-                f"[2:a]loudnorm=I=-16:TP=-1.5,aresample=48000,volume={MUSIC_GAIN},"
-                f"afade=t=in:d=0.3,afade=t=out:st={fade:.2f}:d=1.5[m];"
-                f"[1:a][m]amix=inputs=2:duration=first:normalize=0,{master}[a]"
-            )
+            music_chain = (f"[2:a]loudnorm=I=-16:TP=-1.5,aresample=48000,volume={MUSIC_GAIN},"
+                           f"afade=t=in:d=0.3,afade=t=out:st={fade:.2f}:d=1.5")
+            if vo is not None:  # the library track ducks under the host, keyed off the voice alone
+                key = os.path.join(tmp, "voice.wav")
+                write_wav(vo, key)
+                audio_in += ["-i", key]
+                music_chain += "[m0];[3:a]aresample=48000[k];[m0][k]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=350"
+            graph = f"{music_chain}[m];[1:a][m]amix=inputs=2:duration=first:normalize=0,{master}[a]"
         audio_map = ["-filter_complex", graph, "-map", "0:v", "-map", "[a]"]
         cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
@@ -184,6 +201,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
         "render_seconds": round(time.time() - t0, 1),
         "bytes": out_path.stat().st_size,
         "music": track.name if isinstance(track, Path) else (track or "none"),
+        "voice": voice_status,
     }
     log.info("rendered %s %s", out_path.name, info)
     return info

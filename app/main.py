@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import metrics, notify, pipeline, store, themes
+from . import metrics, notify, pipeline, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
@@ -113,6 +113,9 @@ def status():
         "scheduled": [{k: j.get(k) for k in ("slot", "status", "id")} for j in pipeline.scheduled_jobs()],
         "music_tracks": [p.name for p in music.library(settings.music_dir)],
         "discord": bool(settings.discord_webhook_url),
+        "voice_enabled": bool(settings.elevenlabs_api_key),
+        "instagram_stories": settings.instagram_stories,
+        "instagram_carousels": f"{settings.carousel_day} {settings.carousel_time}" if settings.instagram_carousels else False,
         "recent_jobs": [{k: j.get(k) for k in ("id", "status", "created_at", "video_url", "error")} for j in store.list_jobs(5)],
     }
 
@@ -426,6 +429,26 @@ def dashboard(request: Request, token: str = ""):
 @app.get("/history", dependencies=[Depends(require_token)])
 def get_history(limit: int = 60):
     return store.history(limit)
+
+
+@app.post("/instagram/story/{job_id}", dependencies=[Depends(require_token)])
+def instagram_story(job_id: str):
+    """Post the "new quiz out now" story for a quiz that's already on Instagram (also a test that
+    this account can post stories through the API)."""
+    job = store.get_job(job_id)
+    if not job or not job.get("results", {}).get("instagram", {}).get("ok"):
+        raise HTTPException(404, "no quiz with that id is on Instagram")
+    return social.post_story(job)
+
+
+@app.post("/instagram/carousel", dependencies=[Depends(require_token)])
+def instagram_carousel(job_id: str = "", dry_run: bool = True):
+    """Make the swipe-to-play carousel for a quiz (default: this week's most viewed). dry_run=true
+    (the default) only makes the slides and returns their URLs to look at; false posts it."""
+    job = store.get_job(job_id) if job_id else social.carousel_pick()
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "no posted quiz to make a carousel from")
+    return social.post_carousel(job, dry_run=dry_run)
 
 
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])

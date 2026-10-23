@@ -33,6 +33,12 @@ Environment variables:
 | `YOUTUBE_PRIVACY` | `public` (default), `unlisted` or `private` |
 | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 5 |
 | `NEXT_LINK_COMMENTS` | default `true`: after each post, comment on the previous one pointing at it, and reply under correct cliffhanger answers and picked theme suggestions (needs the comments permissions in step 5b) |
+| `INSTAGRAM_STORIES` | default `false`: after each Reel, post a "New quiz out now" story of its title card |
+| `INSTAGRAM_CAROUSELS` | default `false`: once a week, post the week's most-viewed quiz again as a swipe-to-play carousel (clue, then answer) |
+| `CAROUSEL_DAY`, `CAROUSEL_TIME` | when the weekly carousel goes out: default `sun` and `18:00` (local) |
+| `ELEVENLABS_API_KEY` | optional: turns on the host voice-over for quizzes with `"voice": true` (ElevenLabs → Developers → API keys; text-to-speech permission is enough) |
+| `ELEVENLABS_VOICE_ID` | default `dEc1rkm0ul0kDedEuETS` ("Alex", a lively announcer) |
+| `ELEVENLABS_MODEL` | default `eleven_multilingual_v2` |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |

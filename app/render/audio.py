@@ -82,15 +82,52 @@ def _make(kind: str, rng: np.random.Generator) -> np.ndarray:
     raise ValueError(kind)
 
 
+VOICE_GAIN = 0.95
+DUCK = 0.35  # music level while the host talks
+
+
+def voice_track(lines: list[tuple[float, np.ndarray]], n: int) -> np.ndarray:
+    """The host's lines placed in time; a line still going when the next starts is faded out under it."""
+    out = np.zeros(n, np.float32)
+    lines = sorted(lines, key=lambda x: x[0])
+    for k, (t, clip) in enumerate(lines):
+        i = int(t * SR)
+        end = int(lines[k + 1][0] * SR) if k + 1 < len(lines) else n
+        clip = clip[: max(0, min(len(clip), end - i, n - i))].copy()
+        fade = min(len(clip), int(0.06 * SR))
+        if fade:
+            clip[-fade:] *= np.linspace(1, 0, fade)
+        if 0 <= i < n:
+            out[i:i + len(clip)] += clip
+    return out
+
+
+def duck_envelope(voice: np.ndarray) -> np.ndarray:
+    """1 where the host is quiet, DUCK while they talk, with smooth 120 ms edges."""
+    win = int(0.12 * SR)
+    loud = (np.abs(voice) > 0.01).astype(np.float32)
+    held = (_window_mean(loud, 3 * win) > 0).astype(np.float32)  # bridge the gaps between words
+    return 1 - (1 - DUCK) * _window_mean(held, win)
+
+
+def _window_mean(x: np.ndarray, w: int) -> np.ndarray:
+    """Centred moving average over w samples (running sums, so long windows stay cheap)."""
+    c = np.concatenate(([0.0], np.cumsum(x, dtype=np.float64)))
+    lo = np.clip(np.arange(len(x)) - w // 2, 0, len(x))
+    hi = np.clip(lo + w, 0, len(x))
+    return ((c[hi] - c[lo]) / w).astype(np.float32)
+
+
 def write_sfx_track(events: list[tuple[float, str]], duration: float, path: str, enabled: bool = True,
-                    bed: np.ndarray | None = None) -> None:
-    """Mix the effects (and an optional mono music bed at SR) into a stereo WAV."""
+                    bed: np.ndarray | None = None, voice: np.ndarray | None = None) -> None:
+    """Mix the effects, an optional mono music bed and the optional host voice (both at SR) into a
+    stereo WAV. The bed ducks under the voice."""
     rng = np.random.default_rng(3)
     n = int(SR * duration) + SR
     mix = np.zeros(n, np.float32)
     if bed is not None:
         m = min(n, len(bed))
-        mix[:m] += bed[:m]
+        mix[:m] += bed[:m] * (duck_envelope(voice)[:m] if voice is not None else 1)
     if enabled:
         cache: dict[str, np.ndarray] = {}
         for t, kind in events:
@@ -99,8 +136,14 @@ def write_sfx_track(events: list[tuple[float, str]], duration: float, path: str,
             j = min(n, i + len(s))
             if 0 <= i < n:
                 mix[i:j] += s[: j - i]
+    if voice is not None:
+        mix += voice[:n] * VOICE_GAIN
     mix = np.tanh(mix * 1.2) * 0.8  # soft limiter
-    pcm = (np.clip(mix, -1, 1) * 32767).astype(np.int16)
+    write_wav(mix, path)
+
+
+def write_wav(mono: np.ndarray, path: str) -> None:
+    pcm = (np.clip(mono, -1, 1) * 32767).astype(np.int16)
     stereo = np.repeat(pcm[:, None], 2, axis=1)
     with wave.open(path, "wb") as w:
         w.setnchannels(2)
