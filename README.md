@@ -122,6 +122,11 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 
+## Profile pictures
+
+`python render_avatar.py assets/avatars` draws four profile pictures in the videos' style (question
+mark, 5/5 podium, split-flap timer, emoji round), one per palette, sized for the circle crop.
+
 ## Channels
 
 Built for one channel today (the quiz account) with the seams for several: jobs record their channel,
