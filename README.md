@@ -125,9 +125,11 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 ## Profile pictures
 
 `python render_avatar.py assets/avatars` draws four profile pictures in the videos' style (question
-mark, 5/5 podium, split-flap timer, emoji round), one per palette, sized for the circle crop.
-Every `AVATAR_EVERY_WEEKS` weeks (default 3), on Monday from 10:00, the bot sends the next one in the
-rotation to Discord to upload: neither Instagram's nor YouTube's API can change a profile picture.
+mark, 5/5 podium, split-flap timer, emoji round), one per palette, sized for the circle crop, and a
+matching YouTube banner for each (`banner-*.jpg`, 2560×1440, text inside the strip every device shows).
+Every `AVATAR_EVERY_WEEKS` weeks (default 3), on Monday from 10:00, the bot puts up the next banner on
+YouTube itself and sends the matching picture to Discord to upload: neither Instagram's nor YouTube's
+API can change a profile picture. `POST /avatars/banner` puts up the banner for the current picture.
 Add more by dropping `avatar-*.png` files into `/data/avatars`. `GET /avatars` shows the rotation,
 `POST /avatars/next` hands over the next one now.
 

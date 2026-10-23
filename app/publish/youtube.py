@@ -232,3 +232,27 @@ def comment(video_id: str, text: str) -> str:
     if r.status_code >= 400:
         raise RuntimeError(f"YouTube comment failed: {r.text[:200]}")
     return r.json().get("id", "")
+
+
+def set_banner(image: Path) -> str:
+    """Upload a channel banner (2560×1440 JPEG/PNG, up to 6 MB) and make it the channel's banner."""
+    h = {"Authorization": f"Bearer {access_token()}"}
+    ctype = "image/png" if image.suffix.lower() == ".png" else "image/jpeg"
+    r = httpx.post("https://www.googleapis.com/upload/youtube/v3/channelBanners/insert", params={"uploadType": "media"},
+                   headers={**h, "Content-Type": ctype}, content=image.read_bytes(), timeout=120)
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube banner upload failed: {r.text[:200]}")
+    url = r.json()["url"]
+    # brandingSettings is replaced as a whole, so send back what's there with only the banner changed
+    c = httpx.get("https://www.googleapis.com/youtube/v3/channels", headers=h, timeout=30,
+                  params={"part": "brandingSettings", "mine": "true"})
+    if c.status_code >= 400 or not c.json().get("items"):
+        raise RuntimeError(f"YouTube channel lookup failed: {c.text[:200]}")
+    item = c.json()["items"][0]
+    branding = item.get("brandingSettings", {})
+    branding["image"] = {"bannerExternalUrl": url}
+    u = httpx.put("https://www.googleapis.com/youtube/v3/channels", params={"part": "brandingSettings"}, headers=h,
+                  json={"id": item["id"], "brandingSettings": branding}, timeout=30)
+    if u.status_code >= 400:
+        raise RuntimeError(f"YouTube banner update failed: {u.text[:200]}")
+    return url

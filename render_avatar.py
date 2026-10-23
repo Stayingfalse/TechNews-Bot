@@ -1,7 +1,10 @@
-"""Profile pictures in the videos' game-show style: a sunburst set, a ring of marquee bulbs and one
-big sign-painted centrepiece, kept inside the circle Instagram and YouTube crop to.
+"""Profile pictures and matching YouTube banners in the videos' game-show style: a sunburst set,
+marquee bulbs and one big sign-painted centrepiece.
 
-    python render_avatar.py out/avatars        # writes avatar-*.png (1080×1080) and a preview sheet
+Avatars (1080×1080) keep everything inside the circle the platforms crop to. Banners (2560×1440)
+keep the title and centrepiece inside the 1546×423 strip every device shows; TVs show the rest.
+
+    python render_avatar.py assets/avatars     # writes avatar-*.png, banner-*.png and preview sheets
 """
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from app.render.draw import disc, ink_text, mix, slab
+from app.render.draw import disc, fit_size, ink_text, mix, slab, text_sprite
 from app.render.emoji import emoji_sprite
 from app.render.theme import PALETTES, Palette
 
@@ -121,6 +124,58 @@ DESIGNS = [  # name, palette, centrepiece, sunburst turn
 ]
 
 
+BW, BH = 2560, 1440
+SAFE_BW, SAFE_BH = 1546, 423  # shown on every device
+
+
+def _wide_stage(pal: Palette, turn: float) -> Image.Image:
+    """The sunburst across the banner, centred on the safe strip."""
+    lw, lh = BW // 2, BH // 2  # half resolution, scaled up
+    yy, xx = np.mgrid[0:lh, 0:lw].astype(np.float32) * 2
+    dx, dy = xx - BW / 2, yy - BH / 2
+    ang = np.arctan2(dy, dx) + turn
+    dist = np.sqrt(dx * dx + dy * dy)
+    x = (ang * 26 / (2 * np.pi)) % 2.0
+    ray = np.clip(x / 0.05, 0, 1) * np.clip((1 - x) / 0.05, 0, 1) * np.clip((dist - 160) / 300, 0, 1)
+    stage, rayc = np.array(pal.stage, np.float32), np.array(pal.ray, np.float32)
+    img = stage + (rayc - stage) * ray[..., None]
+    img *= (1 - 0.3 * np.clip((dist - 700) / 800, 0, 1))[..., None]
+    return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8), "RGB").resize((BW, BH), Image.BILINEAR).convert("RGBA")
+
+
+def banner(pal_name: str, make, turn: float, handle: str = "@mediaquiz.daily") -> Image.Image:
+    pal = PALETTES[pal_name]
+    img = _wide_stage(pal, turn)
+    cx, cy = BW / 2, BH / 2
+    # marquee bulb rows framing the strip every device shows
+    on, off = _bulb(pal, True), _bulb(pal, False)
+    d = ImageDraw.Draw(img)
+    for y in (cy - SAFE_BH / 2 - 34, cy + SAFE_BH / 2 + 34):
+        d.rectangle((0, y - 26, BW, y + 26), fill=pal.ink + (255,))
+        for k, x in enumerate(range(20, BW, 70)):
+            b = off if k % 3 == 2 else on
+            img.alpha_composite(b, (int(x - b.width / 2), int(y - b.height / 2)))
+    # left: the avatar's centrepiece; right: the show's name and when it's on
+    piece = make(pal)
+    scale = 360 / max(piece.height, piece.width * 0.75)
+    piece = piece.resize((int(piece.width * scale), int(piece.height * scale)), Image.LANCZOS)
+    left = cx - SAFE_BW / 2 + 40
+    img.alpha_composite(piece, (int(left), int(cy - piece.height / 2)))
+    tx = left + piece.width + 60
+    tw = cx + SAFE_BW / 2 - tx - 20
+    title = "DAILY QUIZ"
+    t = ink_text(title, "sign", fit_size(title, "sign", 170, int(tw), 1, 80), pal.sign, pal.ink, 8, 12)
+    sub = "A new quiz every day at noon"
+    s1 = ink_text(sub, "bold", fit_size(sub, "bold", 64, int(tw), 1, 36), pal.paper, pal.ink, 0, 5)
+    h = text_sprite(handle, "semi", 48, mix(pal.paper, pal.stage, 0.25))
+    total = t.height + s1.height + h.height - 10
+    y = cy - total / 2
+    for sprite in (t, s1, h):
+        img.alpha_composite(sprite, (int(tx), int(y)))
+        y += sprite.height - 5
+    return img
+
+
 def avatar(pal_name: str, make, turn: float) -> Image.Image:
     pal = PALETTES[pal_name]
     img = _stage(pal, turn)
@@ -147,6 +202,15 @@ def main(out_dir: str) -> None:
         sheet.paste(t.resize((280, 280), Image.LANCZOS), (k * 300 + 10, 10), mask)
         sheet.paste(t.resize((56, 56), Image.LANCZOS), (k * 300 + 122, 320), small)
     sheet.save(out / "avatars-preview.png")
+    banners = []
+    for name, pal, make, turn in DESIGNS:  # same name as the avatar it goes with
+        b = banner(pal, make, turn).convert("RGB")
+        b.save(out / f"banner-{name}.jpg", quality=90)  # YouTube takes up to 6 MB
+        banners.append(b)
+    sheet = Image.new("RGB", (2 * 660, 2 * 380), (245, 245, 245))
+    for k, b in enumerate(banners):
+        sheet.paste(b.resize((640, 360), Image.LANCZOS), ((k % 2) * 660 + 10, (k // 2) * 380 + 10))
+    sheet.save(out / "banners-preview.png")
 
 
 if __name__ == "__main__":

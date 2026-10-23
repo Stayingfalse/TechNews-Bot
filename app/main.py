@@ -484,6 +484,20 @@ def next_avatar():
     return social.send_next_avatar()
 
 
+@app.post("/avatars/banner", dependencies=[Depends(require_token)])
+def current_banner():
+    """Put up the YouTube banner that matches the current profile picture (the rotation doesn't move)."""
+    current = store._read("social.json", {}).get("avatar")
+    pic = next((p for p in social.avatars() if p.name == current), None)
+    banner = social._banner_for(pic) if pic else None
+    if not banner:
+        raise HTTPException(404, "no current picture with a matching banner-*.jpg")
+    try:
+        return {"banner": banner.name, "url": PUBLISHERS["youtube"].set_banner(banner)}
+    except Exception as e:
+        raise HTTPException(502, str(e)[:300])
+
+
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])
 def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked

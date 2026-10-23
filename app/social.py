@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import notify, store
 from .config import settings
-from .publish import instagram
+from .publish import instagram, youtube
 from .render.slides import carousel_images, story_image
 from .spec import QuizSpec
 
@@ -118,16 +118,31 @@ def send_next_avatar() -> dict:
     names = [p.name for p in pics]
     last = state.get("avatar")
     pick = pics[(names.index(last) + 1) % len(pics)] if last in names else pics[0]
+    banner_note, banner = "", _banner_for(pick)
+    if banner and "youtube" in settings.platforms and youtube.configured() and store.get_tokens("youtube"):
+        try:  # the banner, unlike the picture, the bot can change itself
+            youtube.set_banner(banner)
+            banner_note = "\nThe matching **YouTube banner** is already up."
+        except Exception as e:
+            log.warning("banner update failed: %s", e)
+            banner_note = f"\nThe matching YouTube banner couldn't be set ({str(e)[:150]}); it's `{banner.name}` in assets/avatars."
     notify.send(
         f"**Time for a fresh profile picture** ({names.index(pick.name) + 1} of {len(pics)} in the rotation). "
         "Neither platform lets the bot change it, so here it is to upload:\n"
         "• **Instagram:** profile → Edit profile → Edit picture\n"
-        "• **YouTube:** YouTube Studio → Customisation → Branding → Picture → Change\n"
-        f"Next one in {settings.avatar_every_weeks} weeks.",
+        "• **YouTube:** YouTube Studio → Customisation → Branding → Picture → Change"
+        f"{banner_note}\nNext one in {settings.avatar_every_weeks} weeks.",
         attach=pick)
-    state.update(avatar=pick.name, avatar_at=store.now_iso())
+    state.update(avatar=pick.name, avatar_at=store.now_iso(), banner_ok=bool(banner_note and "already up" in banner_note))
     store._write("social.json", state)
-    return {"sent": True, "picture": pick.name}
+    return {"sent": True, "picture": pick.name, "banner": banner.name if banner else None,
+            "banner_set": state["banner_ok"]}
+
+
+def _banner_for(avatar: Path) -> Path | None:
+    """banner-<name>.jpg (or .png) next to avatar-<name>.png."""
+    stem = avatar.stem.removeprefix("avatar-")
+    return next((p for p in (avatar.with_name(f"banner-{stem}.jpg"), avatar.with_name(f"banner-{stem}.png")) if p.exists()), None)
 
 
 def avatar_tick(now_local: datetime) -> None:
