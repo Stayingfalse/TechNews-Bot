@@ -434,8 +434,10 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
       const miss = v.token && v.token.missing;
       if (!miss || !miss.length) continue;
       const row = el("div", { style: "margin-top:6px" });
-      row.append(el("strong", {}, `${pf(k).name} needs reconnecting `), document.createTextNode(
-        `to give the bot ${miss.length} new permission${miss.length > 1 ? "s" : ""} (numbers${k === "youtube" ? ", watch time and comment replies" : " and comment replies"}). `));
+      row.append(el("strong", {}, `${pf(k).name} needs reconnecting `), document.createTextNode(v.token.permissions_unknown
+        ? "to make sure the bot can read and reply to comments (this connection is older than the bot's permission check). "
+        : `to give the bot ${miss.length} new permission${miss.length > 1 ? "s" : ""} (numbers${k === "youtube" ? ", watch time and comment replies" : " and comment replies"}). `));
+      if (k === "instagram") row.append(el("div", { class: "tags" }, "First, in the Meta app → Instagram → Permissions and features: make sure instagram_business_manage_comments and instagram_business_manage_insights are added."));
       if (k === "youtube") row.append(el("div", { class: "tags" }, "First, in Google Cloud: enable YouTube Analytics API, and add the youtube.readonly, yt-analytics.readonly and youtube.force-ssl scopes under Google Auth Platform → Data access."));
       const a = el("a", { href: v.token.reconnect_url, style: "display:inline-block;margin-top:6px;font-weight:600" }, `Reconnect ${pf(k).name}`);
       row.append(a); parts.push(row);
