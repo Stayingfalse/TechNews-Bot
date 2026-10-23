@@ -66,11 +66,16 @@ def is_authorised(request: Request, authorization: str = "", token: str = "") ->
     supplied = authorization.removeprefix("Bearer ").strip() or token
     if settings.api_token and supplied and secrets.compare_digest(supplied, settings.api_token):
         return True
-    # A sign-in cookie works for reading, and for the dashboard's refresh button. Anything else that
-    # changes state needs the API token, so a cookie can never be used to book, cancel or post.
-    if request.method in ("GET", "HEAD") or request.url.path == "/metrics/refresh":
-        return valid_session(request.cookies.get(SESSION_COOKIE, ""))
-    return False
+    # A sign-in cookie works for reading, the dashboard's refresh button, and changing single bookings
+    # (move, edit, cancel). Booking batches and posting still need the API token. Changes also need the
+    # dashboard's X-Quizbot header: another site can't send a custom header without a CORS preflight,
+    # which this server never grants, so it can't ride on the cookie.
+    cookie_ok = valid_session(request.cookies.get(SESSION_COOKIE, ""))
+    if request.method in ("GET", "HEAD"):
+        return cookie_ok
+    dashboard_change = request.url.path == "/metrics/refresh" or (
+        request.url.path.startswith("/schedule/") and request.method in ("PATCH", "DELETE"))
+    return cookie_ok and dashboard_change and request.headers.get("x-quizbot") == "1"
 
 
 def require_token(request: Request, authorization: str = Header(default=""), token: str = Query(default="")) -> None:
@@ -181,8 +186,10 @@ class ScheduleRequest(BaseModel):
 
 
 def _booking(j: dict) -> dict:
+    spec = QuizSpec.model_validate(j["spec"])
     return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
-            "title": j["spec"]["title"], "theme": j["spec"].get("theme", ""), "video_url": j.get("video_url")}
+            "title": spec.title, "theme": spec.theme, "video_url": j.get("video_url"), "tags": spec.tags,
+            "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]}
 
 
 def _schedule_view(days: int = 14) -> dict:
@@ -292,6 +299,43 @@ def delete_schedule(day: date, time: str | None = None):
         raise HTTPException(409, "it's being posted right now")
     pipeline.cancel(job)
     return {"cancelled": job["id"], "date": day.isoformat(), "time": pipeline.slot_key(job)[1]}
+
+
+class BookingChange(BaseModel):
+    date: dt.date | None = Field(default=None, description="Move to this local date")
+    time: str | None = Field(default=None, pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$", description="Move to this local HH:MM")
+    spec: QuizSpec | None = Field(default=None, description="Replace the quiz's content")
+
+
+@app.patch("/schedule/job/{job_id}", dependencies=[Depends(require_token)])
+def change_booking(job_id: str, change: BookingChange):
+    """Move a booked quiz to another slot and/or replace its content, with the same checks as booking."""
+    job = store.get_job(job_id)
+    if not job or not job.get("slot") or job["status"] in ("cancelled", "missed", "failed"):
+        raise HTTPException(404, "no such booking")
+    if job["status"] in ("done", "publishing"):
+        raise HTTPException(409, "it has already been posted" if job["status"] == "done" else "it's being posted right now")
+    if job["status"] in ("queued", "rendering"):
+        raise HTTPException(409, "its video is being made right now; try again in a few minutes")
+    day = change.date or date.fromisoformat(job["slot"])
+    at = change.time or pipeline.slot_key(job)[1]
+    errors = []
+    if pipeline.slot_time(day, at) <= datetime.now(timezone.utc):
+        errors.append(f"{day} {at} has already passed")
+    clash = next((j for j in pipeline.booked_jobs() if j["id"] != job_id and pipeline.slot_key(j) == (day.isoformat(), at)), None)
+    if clash:
+        errors.append(f"{day} {at} already has `{clash['id']}`; move or cancel that one first")
+    if change.spec is not None:
+        try:
+            Video(change.spec)
+        except Exception as e:
+            errors.append(f"can't be rendered: {type(e).__name__}: {e}"[:300])
+        if rep := _repeats(change.spec, _used_answers(exclude_jobs={job_id})):
+            errors.append("answers already used: " + "; ".join(rep))
+    if errors:
+        raise HTTPException(409, {"errors": errors})
+    job = pipeline.update_booking(job, day, at, change.spec)
+    return {"job_id": job_id, **_booking(job), "date": job["slot"]}
 
 
 @app.get("/jobs/{job_id}", dependencies=[Depends(require_token)])

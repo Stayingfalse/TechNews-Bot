@@ -65,14 +65,15 @@ Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6)
 
 All endpoints except `/health`, `/media/*`, `/login` and the OAuth callbacks need
 `Authorization: Bearer $API_TOKEN` (or `?token=` for browser use). In a browser you can instead
-sign in at `/login` with the connected Instagram or YouTube account; that cookie can read
-everything and refresh the dashboard's numbers, but booking, cancelling and posting still need
-the token.
+sign in at `/login` with the connected Instagram or YouTube account. That sign-in can read
+everything, refresh the numbers, and move, edit or cancel single bookings from the dashboard's
+Schedule tab; booking a batch and posting still need the token.
 
 | Endpoint | |
 |---|---|
 | `GET /schedule?days=` | The next posting slots: what's booked, `free_dates` |
 | `POST /schedule` | Book a batch: `{"items": [{"date": "YYYY-MM-DD", "time": "HH:MM", "spec": {...}}], "replace": false}`. All-or-nothing; 409 lists every problem (taken slot, repeated answer). `date` may be omitted to take the next free day; `time` defaults to `POST_TIME` (give one for extra posts on a day). |
+| `PATCH /schedule/job/{job_id}` | Move a booked quiz (`date`, `time`) and/or replace its content (`spec`), with the same checks as booking; a content change re-renders it |
 | `DELETE /schedule/{date}?time=HH:MM` | Cancel a booked quiz (`time` needed when the day has more than one) |
 | `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
 | `GET /jobs/{id}` | Job status, video URL, publish results |

@@ -78,16 +78,63 @@ a { color: var(--ig); }
 .insight ul { margin: 6px 0 0; padding-left: 18px; }
 .insight .summary { white-space: pre-wrap; }
 .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.tabs { display: flex; gap: 4px; background: var(--grid); padding: 3px; border-radius: 8px; }
+.tabs button { border: 0; background: none; padding: 5px 12px; border-radius: 6px; color: var(--ink-2); font-weight: 600; }
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.view { display: grid; gap: 16px; }
+.view[hidden] { display: none; }
+.day { display: grid; grid-template-columns: 92px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--grid); }
+.day:first-child { border-top: 0; }
+.day > .date { font-weight: 600; font-size: 13px; }
+.day > .date span { display: block; color: var(--muted); font-weight: 400; }
+.slots { display: grid; gap: 10px; min-width: 0; }
+.slot { border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.slot .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.slot .time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.slot .title { font-weight: 600; }
+.pill { font-size: 12px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--axis); color: var(--ink-2); white-space: nowrap; }
+.pill.ready { border-color: var(--tt); }
+.pill.special { border-color: var(--yt); }
+.slot details { font-size: 13px; color: var(--ink-2); }
+.slot details ol { margin: 4px 0 0; padding-left: 20px; }
+.slot .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.slot .acts input { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--axis); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.free { color: var(--muted); font-size: 13px; padding: 4px 0; }
+button.primary { background: var(--ig); color: #fff; border-color: var(--ig); }
+button.danger { color: #d03b3b; }
+dialog { width: min(760px, calc(100vw - 32px)); border: 1px solid var(--ring); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 20px; }
+dialog::backdrop { background: rgba(0,0,0,0.4); }
+#edit-json { width: 100%; height: 50vh; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--axis); border-radius: 8px; padding: 10px; background: var(--page); color: var(--ink); }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 560px) { .day { grid-template-columns: 1fr; gap: 6px; } }
 @media (prefers-reduced-motion: no-preference) { .chart svg rect.bar { transition: opacity .12s; } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Quiz performance</h1>
+    <h1>Quiz bot</h1>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button type="button" role="tab" id="tab-performance" aria-selected="true">Performance</button>
+      <button type="button" role="tab" id="tab-schedule" aria-selected="false">Schedule</button>
+    </nav>
     <span class="updated" id="updated">Loading…</span>
     <a href="/logout" style="margin-left:auto;font-size:13px">Sign out</a>
   </header>
+
+  <div id="connect" class="notice" hidden></div>
+
+  <div id="view-schedule" class="view" hidden>
+    <section class="card">
+      <h2>Coming up</h2>
+      <p class="sub">The next 14 days. Videos are made about 45 minutes before each post, so a change made before then is used. The Monday routine fills free days from Tuesday onwards.</p>
+      <div id="sched-msg" class="notice" hidden role="status"></div>
+      <div id="schedule"></div>
+    </section>
+  </div>
+
+  <div id="view-performance" class="view">
 
   <div class="filters card" role="group" aria-label="Filters">
     <label for="f-days">Posted in
@@ -100,7 +147,6 @@ a { color: var(--ig); }
     <button id="refresh" type="button">Fetch fresh numbers</button>
   </div>
 
-  <div id="connect" class="notice" hidden></div>
   <div id="notice" class="notice" hidden></div>
 
   <section class="tiles" id="tiles" aria-label="Totals"></section>
@@ -142,7 +188,22 @@ a { color: var(--ig); }
     <p class="sub">Newest first. Watched % = average watch time against the video's length.</p>
     <div class="table-wrap"><table id="posts"></table></div>
   </section>
+  </div>
 </main>
+
+<dialog id="edit">
+  <form method="dialog" id="edit-form">
+    <h2 id="edit-title">Edit quiz</h2>
+    <p class="sub">The quiz as the bot stores it. Change any text (title, caption, clues, answers) and save; it's checked the same way as a new booking.</p>
+    <label for="edit-json" class="sr">Quiz</label>
+    <textarea id="edit-json" spellcheck="false"></textarea>
+    <div id="edit-err" class="notice" hidden role="alert"></div>
+    <div class="actions">
+      <button type="button" id="edit-cancel">Close</button>
+      <button type="submit" id="edit-save" class="primary">Save changes</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 (() => {
@@ -427,9 +488,139 @@ a { color: var(--ig); }
   }).observe($("chart-views"));
   $("refresh").addEventListener("click", async () => {
     $("refresh").disabled = true; $("refresh").textContent = "Fetching…";
-    try { await fetch("/metrics/refresh", { method: "POST", ...auth }); await load(); }
+    try { await fetch("/metrics/refresh", { method: "POST", headers: { ...(auth.headers || {}), "X-Quizbot": "1" } }); await load(); }
     finally { $("refresh").disabled = false; $("refresh").textContent = "Fetch fresh numbers"; }
   });
+  // ------------------------------------------------------------ schedule
+  const change = { headers: { ...(auth.headers || {}), "X-Quizbot": "1", "Content-Type": "application/json" } };
+  const STATUS = {
+    booked: ["Booked", "video made ~45 min before"], queued: ["Making video", ""], rendering: ["Making video", ""],
+    scheduled: ["Video ready", ""], publishing: ["Posting now", ""], done: ["Posted", ""],
+  };
+  const londonDay = iso => new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" });
+
+  function schedMsg(text, ok) {
+    const box = $("sched-msg");
+    box.hidden = !text; box.textContent = text || "";
+    box.style.background = ok ? "var(--surface)" : "";
+    box.style.border = ok ? "1px solid var(--tt)" : "";
+  }
+
+  async function errorText(r) {
+    try {
+      const d = (await r.json()).detail;
+      if (d && d.errors) return d.errors.join(" · ");
+      if (Array.isArray(d)) return d.map(e => `${(e.loc || []).slice(1).join(".")}: ${e.msg}`).join(" · ");
+      return typeof d === "string" ? d : JSON.stringify(d);
+    } catch { return `${r.status} ${r.statusText}`; }
+  }
+
+  async function patchBooking(id, body, okText) {
+    const r = await fetch(`/schedule/job/${encodeURIComponent(id)}`, { method: "PATCH", ...change, body: JSON.stringify(body) });
+    if (!r.ok) { schedMsg(`Not changed: ${await errorText(r)}`); return false; }
+    schedMsg(okText, true); await loadSchedule(); return true;
+  }
+
+  function slotCard(day, b) {
+    const card = el("div", { class: "slot" });
+    const top = el("div", { class: "top" });
+    top.append(el("span", { class: "time" }, b.time), el("span", { class: "title" }, (b.title || "").replace(/\*/g, "")));
+    const [label, hint] = STATUS[b.status] || [b.status, ""];
+    top.append(el("span", { class: "pill" + (b.status === "scheduled" ? " ready" : ""), title: hint }, label));
+    if (b.tags && b.tags.special && b.tags.special !== "none")
+      top.append(el("span", { class: "pill special" }, b.tags.special === "hard" ? "Hard mode" : "Format special"));
+    card.append(top);
+    const meta = [b.theme || "General mix", ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
+    card.append(el("div", { class: "tags" }, meta.join(" · ")));
+    const det = el("details");
+    det.append(el("summary", {}, `${b.rounds.length} rounds and answers`));
+    const ol = el("ol"); for (const r of b.rounds) ol.append(el("li", {}, `${r.type.replace("_", " ")}: ${r.answer}`));
+    det.append(ol); card.append(det);
+
+    const editable = ["booked", "scheduled"].includes(b.status);
+    const acts = el("div", { class: "acts" });
+    if (b.video_url) acts.append(el("a", { href: b.video_url, target: "_blank", rel: "noopener" }, "Watch preview"));
+    if (editable) {
+      const d = el("input", { type: "date", value: day, "aria-label": "New date" });
+      const t = el("input", { type: "time", value: b.time, step: 60, "aria-label": "New time" });
+      const move = el("button", { type: "button" }, "Move");
+      move.addEventListener("click", () => {
+        if (d.value === day && t.value === b.time) { schedMsg("Pick a different date or time first."); return; }
+        patchBooking(b.job_id, { date: d.value, time: t.value }, `Moved to ${londonDay(d.value + "T12:00:00Z")} at ${t.value}.`);
+      });
+      const edit = el("button", { type: "button" }, "Edit");
+      edit.addEventListener("click", () => openEditor(b));
+      const cancel = el("button", { type: "button", class: "danger" }, "Cancel quiz");
+      cancel.addEventListener("click", async () => {
+        if (!confirm(`Cancel "${(b.title || "").replace(/\*/g, "")}" on ${londonDay(b.publish_at)} at ${b.time}? Its answers become free to reuse.`)) return;
+        const r = await fetch(`/schedule/${day}?time=${encodeURIComponent(b.time)}`, { method: "DELETE", ...change });
+        if (!r.ok) { schedMsg(`Not cancelled: ${await errorText(r)}`); return; }
+        schedMsg("Cancelled. That slot is free again.", true); loadSchedule();
+      });
+      acts.append(d, t, move, edit, cancel);
+    } else if (b.status !== "done") {
+      acts.append(el("span", { class: "tags" }, "Can't be changed while its video is being made or posted."));
+    }
+    card.append(acts);
+    return card;
+  }
+
+  async function loadSchedule() {
+    const box = $("schedule");
+    box.style.opacity = box.childElementCount ? 0.6 : 1;
+    const r = await fetch("/schedule?days=14", auth);
+    if (!r.ok) { box.replaceChildren(el("div", { class: "empty" }, "Couldn't load the schedule.")); return; }
+    const sched = await r.json();
+    box.replaceChildren();
+    for (const day of sched.slots) {
+      const row = el("div", { class: "day" });
+      const dt = el("div", { class: "date" }, londonDay(day.date + "T12:00:00Z"));
+      dt.append(el("span", {}, day.bookings.length ? `${day.bookings.length} quiz${day.bookings.length > 1 ? "zes" : ""}` : ""));
+      const slots = el("div", { class: "slots" });
+      if (!day.bookings.length) slots.append(el("div", { class: "free" }, `Free (posts at ${sched.post_time} once booked)`));
+      for (const b of day.bookings) slots.append(slotCard(day.date, b));
+      row.append(dt, slots); box.append(row);
+    }
+    box.style.opacity = 1;
+  }
+
+  let editing = null;
+  async function openEditor(b) {
+    const r = await fetch(`/jobs/${encodeURIComponent(b.job_id)}`, auth);
+    if (!r.ok) { schedMsg("Couldn't load that quiz."); return; }
+    editing = b;
+    $("edit-title").textContent = `Edit: ${londonDay(b.publish_at)} ${b.time}`;
+    $("edit-json").value = JSON.stringify((await r.json()).spec, null, 2);
+    $("edit-err").hidden = true;
+    $("edit").showModal();
+  }
+  $("edit-cancel").addEventListener("click", () => $("edit").close());
+  $("edit-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    let spec;
+    try { spec = JSON.parse($("edit-json").value); }
+    catch (err) { $("edit-err").hidden = false; $("edit-err").textContent = `That isn't valid JSON: ${err.message}`; return; }
+    $("edit-save").disabled = true;
+    const r = await fetch(`/schedule/job/${encodeURIComponent(editing.job_id)}`, { method: "PATCH", ...change, body: JSON.stringify({ spec }) });
+    $("edit-save").disabled = false;
+    if (!r.ok) { $("edit-err").hidden = false; $("edit-err").textContent = await errorText(r); return; }
+    $("edit").close(); schedMsg("Saved. The video will be made from the new version before it posts.", true); loadSchedule();
+  });
+
+  // ------------------------------------------------------------ tabs
+  function showTab(name) {
+    for (const t of ["performance", "schedule"]) {
+      $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
+      $(`view-${t}`).hidden = t !== name;
+    }
+    if (name === "schedule") loadSchedule();
+    history.replaceState(null, "", `#${name}`);
+    if (name === "performance" && posts.length) render();  // charts size to their now-visible column
+  }
+  $("tab-performance").addEventListener("click", () => showTab("performance"));
+  $("tab-schedule").addEventListener("click", () => showTab("schedule"));
+  if (location.hash === "#schedule") showTab("schedule");
+
   load();
 })();
 </script>

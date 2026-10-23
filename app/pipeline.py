@@ -85,6 +85,22 @@ def booked_jobs() -> list[dict]:
     return [j for j in store.list_jobs(200) if j.get("slot") and j["status"] in ACTIVE + ("done",)]
 
 
+def update_booking(job: dict, slot: date, at: str, spec: QuizSpec | None) -> dict:
+    """Move a booked quiz and/or replace its content. A content change drops any video already made,
+    so it is rendered again from the new spec before its slot."""
+    job.update(slot=slot.isoformat(), slot_time=at, publish_at=slot_time(slot, at).isoformat())
+    if spec is not None:
+        job["spec"] = spec.model_dump()
+        if job.get("video"):
+            (settings.videos_dir / job["video"]).unlink(missing_ok=True)
+            (settings.videos_dir / f"{Path(job['video']).stem}.jpg").unlink(missing_ok=True)
+        for k in ("video", "video_url", "cover_url", "render"):
+            job.pop(k, None)
+        job["status"] = "booked"
+    store.save_job(job)
+    return job
+
+
 def cancel(job: dict, reason: str = "cancelled") -> None:
     job.update(status="cancelled", error=reason)
     store.save_job(job)
