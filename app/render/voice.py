@@ -38,6 +38,12 @@ def _clean(text: str) -> str:
     return " ".join(text.split())
 
 
+def _sentence(text: str) -> str:
+    """The title as a sentence, so the host pauses before the next line."""
+    text = _clean(text)
+    return text if text[-1:] in ".!?" else text + "!"
+
+
 def _name(user: str) -> str:
     return " ".join(re.sub(r"[._-]+", " ", user).split())  # early_bird → "early bird"
 
@@ -59,11 +65,11 @@ def script(video) -> list[tuple[float, str]]:
     spec, out = video.spec, []
     for start, scene in zip(video.starts, video.scenes):
         if isinstance(scene, IntroScene):  # a short card has no room for both: title and round one run together
-            out.append((start + 0.15, _clean(spec.title) + (" Round one!" if spec.intro == "quick" else "")))
+            out.append((start + 0.15, _sentence(spec.title) + (" Round one!" if spec.intro == "quick" else "")))
         elif isinstance(scene, RoundScene):
             rnd = scene.item
             if scene.index == 1 and spec.intro == "banner":
-                out.append((start + 0.1, f"{_clean(spec.title)} Round one!"))
+                out.append((start + 0.1, f"{_sentence(spec.title)} Round one!"))
             elif not (scene.index == 1 and spec.intro == "quick"):
                 out.append((start + 0.1, f"Round {NUMBERS[scene.index - 1]}!"))
             if rnd.cliffhanger:
