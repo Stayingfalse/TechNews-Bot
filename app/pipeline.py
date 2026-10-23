@@ -71,7 +71,7 @@ def submit(spec: QuizSpec, dry_run: bool = False, slot: date | None = None, at: 
     }
     store.save_job(job)
     if not slot:  # booked jobs are rendered by the scheduler shortly before their slot
-        _queue.put(("render", job["id"]))
+        _enqueue("render", job["id"])
     return job
 
 
@@ -244,7 +244,7 @@ def retry(job: dict) -> list[str]:
                          else f"can't retry while the post is {job['status']}")
     job.update(status="publishing", retry=True)  # publishing skips the platforms that already have it
     store.save_job(job)
-    _queue.put(("publish", job["id"]))
+    _enqueue("publish", job["id"])
     return failed
 
 
@@ -317,27 +317,63 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
 
 # ------------------------------------------------------------------ threads
 
+_mine: set[str] = set()  # jobs this process has queued or is working on
+STALE = timedelta(minutes=20)  # in progress this long with no update and not ours: its process died
+
+
+def _enqueue(action: str, job_id: str) -> None:
+    _mine.add(job_id)
+    _queue.put((action, job_id))
+
+
+def _rescue_orphans() -> None:
+    """A deploy starts the new server before stopping the old one, so a job the old one was working on
+    can be left 'rendering' or 'publishing' with nobody on it. Pick those up again."""
+    cutoff = (now() - STALE).isoformat()
+    for job in store.list_jobs(200):
+        if job["status"] not in ("queued", "rendering", "publishing") or job["id"] in _mine:
+            continue
+        if (job.get("updated_at") or "") > cutoff:
+            continue
+        log.warning("job %s was left %s; picking it up again", job["id"], job["status"])
+        notify.error(f"job `{job['id']}` was left {job['status']} (the server restarted mid-way); picking it up again")
+        if job["status"] == "publishing":
+            _enqueue("publish", job["id"])
+        else:
+            job["status"] = "queued"
+            store.save_job(job)
+            _enqueue("render", job["id"])
+
+
 def _worker() -> None:
     while True:
         action, job_id = _queue.get()
-        job = store.get_job(job_id)
-        if not job or job["status"] in ("cancelled", "done"):
-            continue
         try:
-            if action == "render":
-                _render(job)
-            else:
-                _publish(job)
-        except Exception as e:
-            log.exception("job %s failed", job_id)
-            job = store.get_job(job_id) or {"id": job_id}
-            if job.pop("retry", False):  # the first attempt's posts stand; the failed platforms can be tried again
-                job["status"] = "done"
-            else:
-                job.update(status="failed", error=str(e)[:1000])
-            store.save_job(job)
-            when = f" (slot {job['slot']})" if job.get("slot") else ""
-            notify.error(f"job `{job_id}`{when} failed during {action}: {e}")
+            _work(action, job_id)
+        finally:
+            if job_id not in [j for _, j in list(_queue.queue)]:
+                _mine.discard(job_id)
+
+
+def _work(action: str, job_id: str) -> None:
+    job = store.get_job(job_id)
+    if not job or job["status"] in ("cancelled", "done"):
+        return
+    try:
+        if action == "render":
+            _render(job)
+        else:
+            _publish(job)
+    except Exception as e:
+        log.exception("job %s failed", job_id)
+        job = store.get_job(job_id) or {"id": job_id}
+        if job.pop("retry", False):  # the first attempt's posts stand; the failed platforms can be tried again
+            job["status"] = "done"
+        else:
+            job.update(status="failed", error=str(e)[:1000])
+        store.save_job(job)
+        when = f" (slot {job['slot']})" if job.get("slot") else ""
+        notify.error(f"job `{job_id}`{when} failed during {action}: {e}")
 
 
 _warned: set[str] = set()
@@ -347,6 +383,7 @@ def tick() -> None:
     """Hand due jobs to the worker; warn about an empty day and a short runway."""
     t = now()
     lead = timedelta(minutes=settings.render_lead_minutes)
+    _rescue_orphans()
     try:
         social.weekly_tick(t.astimezone(settings.tz))
     except Exception:
@@ -361,7 +398,7 @@ def tick() -> None:
             else:
                 job["status"] = "queued"
                 store.save_job(job)
-                _queue.put(("render", job["id"]))
+                _enqueue("render", job["id"])
             continue
         if job["status"] != "scheduled":
             continue
@@ -374,7 +411,7 @@ def tick() -> None:
             continue
         job["status"] = "publishing"  # claim it so the next tick doesn't queue it twice
         store.save_job(job)
-        _queue.put(("publish", job["id"]))
+        _enqueue("publish", job["id"])
 
     today = today_local()
     if t >= slot_time(today) and today.isoformat() not in _warned:
@@ -422,9 +459,9 @@ def _recover() -> None:
                 job["status"] = "booked"  # not due yet: the scheduler renders it nearer its slot
                 store.save_job(job)
             else:
-                _queue.put(("render", job["id"]))
+                _enqueue("render", job["id"])
         elif job["status"] == "publishing":
-            _queue.put(("publish", job["id"]))
+            _enqueue("publish", job["id"])
 
 
 def start_background() -> None:
