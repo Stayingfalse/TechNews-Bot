@@ -115,8 +115,8 @@ def _render(job: dict) -> None:
     cover = settings.videos_dir / f"{stem}.jpg"
     job["status"] = "rendering"
     store.save_job(job)
-    if job.get("retry") and "reveal" in job:  # remaking a posted video: show the same reveal it went out with
-        reveal = job["reveal"]
+    if job.get("retry"):  # remaking a posted video: show the same reveal it went out with (or none)
+        reveal = job.get("reveal")
     else:
         try:  # yesterday's cliffhanger: read and judge its comments now, so the shout-outs are as fresh as possible
             reveal = cliffhanger.prepare(job)
