@@ -469,8 +469,12 @@ def _finish_login(provider: str, code: str, nxt: str):
     try:
         who, owner = mod.login_identity(code), mod.connected_identity()
     except Exception as e:
-        return _page("Sign-in failed", f"<h1>Sign-in failed</h1><p class='note'>{escape(str(e))}</p>"
-                     "<a class='btn plain' href='/login'>Try again</a>", 502)
+        # 400, not 5xx: Cloudflare swaps an origin 502 for its own "Bad gateway" page, hiding this message
+        logging.getLogger(__name__).warning("%s sign-in failed: %s", provider, e)
+        hint = (" Reconnect YouTube with the new permissions first (see docs/SETUP.md), or sign in with Instagram."
+                if provider == "youtube" and "scope" in str(e).lower() else "")
+        return _page("Sign-in failed", f"<h1>Sign-in failed</h1><p class='note'>{escape(str(e)[:300])}{hint}</p>"
+                     "<a class='btn plain' href='/login'>Try again</a>", 400)
     if not owner or not secrets.compare_digest(who, owner):
         return _page("Not this account", f"<h1>That's a different account</h1><p class='note'>Sign in with the "
                      f"{LABELS[provider]} account this bot posts to.</p><a class='btn plain' href='/login'>Try again</a>", 403)
