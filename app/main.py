@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import health as monitoring  # "health" is the /health endpoint below
 from . import metrics, notify, pipeline, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS
@@ -115,6 +116,7 @@ def status():
         "music_tracks": [p.name for p in music.library(settings.music_dir)],
         "discord": bool(settings.discord_webhook_url),
         "voice_enabled": bool(settings.elevenlabs_api_key),
+        "healthchecks": sorted(k for k in store._read("health.json", {}) if not k.startswith("warned:")),
         "voices": sorted(settings.voices),
         "instagram_stories": settings.instagram_stories,
         "instagram_carousels": f"{settings.carousel_day} {settings.carousel_time}" if settings.instagram_carousels else False,
@@ -284,6 +286,8 @@ def post_schedule(req: ScheduleRequest):
         job = pipeline.submit(spec, slot=d, at=at)
         out.append({"date": d.isoformat(), "time": at, "publish_at": job["publish_at"], "job_id": job["id"]})
     _notify_booked(plan)
+    if len(plan) >= 3:  # the weekly routine's batch (a one-off booking isn't)
+        monitoring.ping("weekly-batch")
     return {"scheduled": out}
 
 

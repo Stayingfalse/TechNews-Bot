@@ -74,6 +74,9 @@ class Settings:
         # avatar-*.png files in assets/avatars, plus any added to DATA_DIR/avatars.
         self.avatar_every_weeks = int(os.environ.get("AVATAR_EVERY_WEEKS", "3"))
 
+        # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
+        self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")
+
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))

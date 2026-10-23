@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import channels, cliffhanger, lease, metrics, notify, social, store, themes
+from . import channels, cliffhanger, health, lease, metrics, notify, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -216,6 +216,11 @@ def _publish(job: dict) -> None:
         social.after_publish(job)  # the "new quiz out now" story
     except Exception:
         log.exception("story failed")
+    if job.get("slot") and not job["dry_run"] and settings.publish_enabled and not retrying:
+        if any(r.get("ok") for r in results.values()):
+            health.ping("daily-post")
+        elif results:
+            health.ping("daily-post", fail=True)
     if results and all(r.get("ok") for r in results.values()):
         # every platform has its copy; keep the file only when something needs a retry
         video.unlink(missing_ok=True)
@@ -436,6 +441,7 @@ def _scheduler() -> None:
         try:
             if lease.held():  # an older server still running mid-deploy leaves the scheduling to the new one
                 tick()
+                health.heartbeat()
         except Exception:
             log.exception("scheduler tick failed")
         time.sleep(30)
@@ -453,7 +459,8 @@ def _maintenance() -> None:
             except Exception as e:
                 log.exception("%s token refresh failed", name)
                 notify.error(f"{name} token refresh failed ({e}); reconnect via /oauth/{name}/start")
-        keep = {Path(j["video"]).stem for j in scheduled_jobs() if j.get("video")}
+        health.daily_checks()
+        keep ={Path(j["video"]).stem for j in scheduled_jobs() if j.get("video")}
         cutoff = time.time() - settings.keep_videos_days * 86400
         for f in settings.videos_dir.glob("*"):
             if f.stat().st_mtime < cutoff and f.stem not in keep:
@@ -483,6 +490,7 @@ def start_background() -> None:
     settings.videos_dir.mkdir(parents=True, exist_ok=True)
     lease.claim()  # the newest server runs the background jobs from now on
     _recover()
+    threading.Thread(target=health.setup, daemon=True, name="healthchecks").start()
     threading.Thread(target=_worker, daemon=True, name="worker").start()
     threading.Thread(target=_scheduler, daemon=True, name="scheduler").start()
     threading.Thread(target=_maintenance, daemon=True, name="maintenance").start()
