@@ -122,6 +122,16 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 
+## Tests
+
+`pip install -r requirements-dev.txt && python -m pytest` runs the suite (about 45 s; it renders one
+short video, so it needs ffmpeg and the emoji font, as in the Dockerfile). It covers cliffhanger
+judging, shout-outs and replies, next-quiz links, viewer themes, the scheduler and deploy safety
+(lease, restart recovery, stuck-job watchdog), per-channel tokens, the voice-over fallback and mix,
+the API's booking checks, every scene and opening, the story/carousel images and the profile picture
+rotation. Nothing talks to a real platform. GitHub Actions runs it on every push and pull request
+(`.github/workflows/tests.yml`); deploy only when it's green.
+
 ## Profile pictures
 
 `python render_avatar.py assets/avatars` draws four profile pictures in the videos' style (question
