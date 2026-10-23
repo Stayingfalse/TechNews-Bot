@@ -15,15 +15,16 @@ from ..spec import QuizSpec
 from . import music
 from .audio import write_sfx_track
 from .background import Background
-from .draw import blit, clamp, disc, ease_in_cubic, ink_text, prog
-from .scenes import build_scenes
+from .draw import blit, clamp, disc, ease_in_cubic, ease_in_out_cubic, ink_text, prog
+from .scenes import IntroScene, RoundScene, build_scenes
 from .theme import FPS, H, PALETTES, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, W
 
 log = logging.getLogger(__name__)
 
 OUTRO = 0.22  # seconds each scene spends leaving
+LOOP = 0.45  # the last scene clears and the stage eases back to frame 0, so an autoplay replay loops seamlessly
 MUSIC_GAIN = float(os.environ.get("MUSIC_GAIN", "0.32"))  # library tracks, after loudness normalisation
-LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-15"))  # final mix target, about what TikTok/Reels play at
+LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-15"))  # final mix target, about what Reels/Shorts play at
 
 
 def seed_of(spec: QuizSpec) -> int:
@@ -31,11 +32,11 @@ def seed_of(spec: QuizSpec) -> int:
 
 
 class Video:
-    def __init__(self, spec: QuizSpec, brand: str = ""):
+    def __init__(self, spec: QuizSpec, brand: str = "", reveal: dict | None = None):
         self.spec = spec
         self.pal = PALETTES[spec.palette]
         self.bg = Background(self.pal, seed=seed_of(spec))
-        self.scenes = build_scenes(spec, self.pal, seed_of(spec))
+        self.scenes = build_scenes(spec, self.pal, seed_of(spec), reveal)
         self.starts = []
         acc = 0.0
         for s in self.scenes:
@@ -46,6 +47,7 @@ class Video:
         self.brand = ink_text(brand, "sign", 28, self.pal.paper, self.pal.ink, 0, 3, 1) if brand else None
         self.lamp_on = disc(11, self.pal.sign + (255,), self.pal.ink, 4, 3)
         self.lamp_off = disc(11, self.pal.stage + (255,), self.pal.ink, 4, 3)
+        self.start_bg = self.bg.render(0.0)
 
     def sfx_events(self) -> list[tuple[float, str]]:
         ev = []
@@ -69,7 +71,12 @@ class Video:
         frame = self.bg.render(T, energy)
 
         last = i == len(self.scenes) - 1
-        out_p = 0.0 if last else ease_in_cubic(prog(t, scene.duration - OUTRO, OUTRO))
+        if last:  # fully cleared two frames before the end, so the final frames match frame 0
+            out_p = ease_in_out_cubic(prog(t, scene.duration - LOOP, LOOP - 2 / FPS))
+        else:
+            out_p = ease_in_cubic(prog(t, scene.duration - OUTRO, OUTRO))
+        if last and out_p > 0:
+            frame = Image.blend(frame, self.start_bg, out_p)
 
         fg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         scene.render(fg, t)
@@ -78,19 +85,19 @@ class Video:
         else:
             frame.alpha_composite(fg)
 
-        self._chrome(frame, T)
+        self._chrome(frame, T, looping=last and out_p > 0.5)
         return frame
 
-    def _chrome(self, frame: Image.Image, T: float) -> None:
+    def _chrome(self, frame: Image.Image, T: float, looping: bool = False) -> None:
         # Brand top-left; one lamp per round top-right, lit once that round has started
         y = SAFE_TOP - 70
         if self.brand:
             blit(frame, self.brand, SAFE_LEFT - 6, y, anchor="lm")
-        rounds = range(1, len(self.scenes) - 1)
+        rounds = [k for k, s in enumerate(self.scenes) if isinstance(s, RoundScene)]
         step = 34
         x0 = SAFE_RIGHT - (len(rounds) - 1) * step - 10
         for k, si in enumerate(rounds):
-            lamp = self.lamp_on if T >= self.starts[si] else self.lamp_off
+            lamp = self.lamp_on if T >= self.starts[si] and not looping else self.lamp_off
             blit(frame, lamp, x0 + k * step, y)
 
 
@@ -99,9 +106,9 @@ class Video:
 _WORKER: Video | None = None
 
 
-def _init_worker(spec_json: str, brand: str) -> None:
+def _init_worker(spec_json: str, brand: str, reveal: dict | None = None) -> None:
     global _WORKER
-    _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand)
+    _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand, reveal)
 
 
 def _render_frame(idx: int) -> bytes:
@@ -110,10 +117,12 @@ def _render_frame(idx: int) -> bytes:
 
 
 def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
-                 cover_path: str | Path | None = None, music_dir: Path | None = None) -> dict:
+                 cover_path: str | Path | None = None, music_dir: Path | None = None,
+                 reveal: dict | None = None) -> dict:
+    """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    video = Video(spec, brand)
+    video = Video(spec, brand, reveal)
     workers = workers or max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4"))))
     t0 = time.time()
     track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
@@ -148,12 +157,12 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
         assert proc.stdin
         try:
             if workers == 1:
-                _init_worker(spec.model_dump_json(), brand)
+                _init_worker(spec.model_dump_json(), brand, reveal)
                 for i in range(video.n_frames):
                     proc.stdin.write(_render_frame(i))
             else:
                 ctx = mp.get_context("spawn")  # safe inside the threaded web server
-                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand)) as pool:
+                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand, reveal)) as pool:
                     for buf in pool.imap(_render_frame, range(video.n_frames), chunksize=4):
                         proc.stdin.write(buf)
         finally:
@@ -163,8 +172,10 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
             raise RuntimeError(f"ffmpeg exited with {rc}")
 
     if cover_path:
-        # Cover = end of the intro, when the title is fully on screen.
-        cover_idx = min(video.n_frames - 1, int((video.scenes[0].duration - OUTRO - 0.1) * FPS))
+        # Cover = end of the title card; with no card, round 1's clue under the title banner (never an answer).
+        first = video.scenes[0]
+        at = first.duration - OUTRO - 0.1 if isinstance(first, IntroScene) else 1.8
+        cover_idx = min(video.n_frames - 1, int(at * FPS))
         video.frame(cover_idx).convert("RGB").save(cover_path, quality=90)
 
     info = {

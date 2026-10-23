@@ -192,3 +192,43 @@ def connected_identity() -> str | None:
         tok["channel_id"] = _channel_id(access_token())  # needs youtube.readonly on the posting token
         store.set_tokens("youtube", {**store.get_tokens("youtube"), "channel_id": tok["channel_id"]})
     return tok["channel_id"]
+
+
+def comments(video_id: str, limit: int = 300) -> list[dict]:
+    """Top-level comments on a video, oldest first: {id, user, channel, text, at}."""
+    h = {"Authorization": f"Bearer {access_token()}"}
+    params = {"part": "snippet", "videoId": video_id, "maxResults": 100, "order": "time", "textFormat": "plainText"}
+    out = []
+    while len(out) < limit:
+        r = httpx.get("https://www.googleapis.com/youtube/v3/commentThreads", params=params, headers=h, timeout=30)
+        if r.status_code >= 400:
+            raise RuntimeError(f"YouTube comments unavailable: {r.text[:200]}")
+        d = r.json()
+        for item in d.get("items", []):
+            sn = item["snippet"]["topLevelComment"]["snippet"]
+            out.append({"id": item["snippet"]["topLevelComment"]["id"], "user": sn.get("authorDisplayName", "").lstrip("@"),
+                        "channel": (sn.get("authorChannelId") or {}).get("value", ""),
+                        "text": sn.get("textOriginal") or sn.get("textDisplay", ""), "at": sn.get("publishedAt", "")})
+        if not d.get("nextPageToken"):
+            break
+        params["pageToken"] = d["nextPageToken"]
+    return sorted(out, key=lambda c: c["at"])
+
+
+def reply(comment_id: str, text: str) -> str:
+    r = httpx.post("https://www.googleapis.com/youtube/v3/comments", params={"part": "snippet"}, timeout=30,
+                   headers={"Authorization": f"Bearer {access_token()}"},
+                   json={"snippet": {"parentId": comment_id, "textOriginal": text}})
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube reply failed: {r.text[:200]}")
+    return r.json().get("id", "")
+
+
+def comment(video_id: str, text: str) -> str:
+    """A top-level comment on a video, as the channel."""
+    r = httpx.post("https://www.googleapis.com/youtube/v3/commentThreads", params={"part": "snippet"}, timeout=30,
+                   headers={"Authorization": f"Bearer {access_token()}"},
+                   json={"snippet": {"videoId": video_id, "topLevelComment": {"snippet": {"textOriginal": text}}}})
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube comment failed: {r.text[:200]}")
+    return r.json().get("id", "")

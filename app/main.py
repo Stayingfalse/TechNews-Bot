@@ -100,7 +100,7 @@ def status():
         out = {"expires_at": datetime.fromtimestamp(t["expires_at"], timezone.utc).isoformat()}
         if granted:  # what it was given, and what it asks for now but wasn't given (→ reconnect)
             mod = PUBLISHERS[name]
-            wanted = (getattr(mod, "SCOPES", None) or mod.scopes()).replace(",", " ").split()
+            wanted = mod.SCOPES.replace(",", " ").split()
             out.update(granted=granted, missing=[w for w in wanted if w not in granted],
                        reconnect_url=f"/oauth/{name}/start")
         return out
@@ -109,7 +109,6 @@ def status():
         "publish_enabled": settings.publish_enabled,
         "platforms": {name: {"configured": PUBLISHERS[name].configured(), "token": tok(name), **_account(name)}
                       for name in settings.platforms},
-        "tiktok_mode": settings.tiktok_mode,
         "post_time": f"{settings.post_time} {settings.tz.key}",
         "scheduled": [{k: j.get(k) for k in ("slot", "status", "id")} for j in pipeline.scheduled_jobs()],
         "music_tracks": [p.name for p in music.library(settings.music_dir)],
@@ -191,6 +190,7 @@ def _booking(j: dict) -> dict:
     spec = QuizSpec.model_validate(j["spec"])
     return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
             "title": spec.title, "theme": spec.theme, "video_url": j.get("video_url"), "tags": spec.tags,
+            "intro": spec.intro, "cliffhanger": spec.rounds[-1].cliffhanger,
             "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]}
 
 

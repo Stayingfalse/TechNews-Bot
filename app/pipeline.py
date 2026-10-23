@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import metrics, notify, store
+from . import cliffhanger, metrics, notify, store
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -115,7 +115,19 @@ def _render(job: dict) -> None:
     cover = settings.videos_dir / f"{stem}.jpg"
     job["status"] = "rendering"
     store.save_job(job)
-    info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir)
+    if job.get("retry") and "reveal" in job:  # remaking a posted video: show the same reveal it went out with
+        reveal = job["reveal"]
+    else:
+        try:  # yesterday's cliffhanger: read and judge its comments now, so the shout-outs are as fresh as possible
+            reveal = cliffhanger.prepare(job)
+        except Exception as e:  # never let comment reading stop a post
+            log.exception("cliffhanger prepare failed")
+            reveal = None
+            notify.error(f"couldn't prepare yesterday's cliffhanger reveal for `{job['id']}`: {e}")
+    job["reveal"] = reveal
+    screen = {k: reveal[k] for k in ("answer", "note", "shoutouts")} if reveal else None
+    info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
+                        reveal=screen)
     if (store.get_job(job["id"]) or {}).get("status") == "cancelled":  # cancelled while rendering
         video.unlink(missing_ok=True)
         cover.unlink(missing_ok=True)
@@ -148,8 +160,8 @@ def _publish(job: dict) -> None:
     results = job["results"]
     if settings.publish_enabled and not job["dry_run"]:
         for name in job.get("platforms") or settings.platforms:
-            if results.get(name, {}).get("ok"):
-                continue  # already posted there (resuming after a restart)
+            if name not in PUBLISHERS or results.get(name, {}).get("ok"):
+                continue  # retired platform, or already posted there (resuming after a restart)
             mod = PUBLISHERS[name]
             if not mod.configured():
                 results[name] = {"ok": False, "error": "not configured (missing app credentials)"}
@@ -180,6 +192,14 @@ def _publish(job: dict) -> None:
         })
     # a retry keeps the first posting time, which the metrics' age and the dashboard go by
     job.update(status="done", published_at=job.get("published_at") if retrying else store.now_iso())
+    try:
+        cliffhanger.after_publish(job)  # mark yesterday's cliffhanger revealed; reply under the winners' comments
+    except Exception:
+        log.exception("cliffhanger replies failed")
+    try:
+        cliffhanger.link_previous(job)  # yesterday's comment section points at today's quiz
+    except Exception:
+        log.exception("next-video comment failed")
     if results and all(r.get("ok") for r in results.values()):
         # every platform has its copy; keep the file only when something needs a retry
         video.unlink(missing_ok=True)
@@ -248,17 +268,27 @@ def _notify_published(job: dict, spec: QuizSpec, video: Path) -> None:
         lines.append("_Publishing is off; nothing was uploaded._")
     for name, res in job["results"].items():
         if not res["ok"]:
-            lines.append(f"**{LABELS[name]}:** failed: {res['error']}")
-        elif name == "tiktok" and res.get("mode") == "draft":
-            lines.append("**TikTok:** in your inbox; open it and tap post")
+            lines.append(f"**{LABELS.get(name, name)}:** failed: {res['error']}")
         else:
-            lines.append(f"**{LABELS[name]}:** posted {res.get('url') or res.get('privacy') or ''}".rstrip())
+            lines.append(f"**{LABELS.get(name, name)}:** posted {res.get('url') or res.get('privacy') or ''}".rstrip())
     embed = {
         "title": f"Posted: {spec.title.replace('*', '')}",
         "url": job["video_url"],
         "color": 0xFF5A3C,
         "fields": [_answers_field(spec)],
     }
+    rv = job.get("reveal")
+    if rv:
+        names = rv.get("shoutouts")
+        who = ", ".join("@" + n for n in names) if names else ("nobody got it" if names == [] else "comments not readable")
+        ok = sum(1 for r in rv.get("replies", []) if r["ok"])
+        lines.append(f"**Cliffhanger revealed:** {rv['answer']} · shout-outs: {who} · replies sent: {ok}")
+    lf = job.get("linked_from")
+    if lf:
+        done = [LABELS.get(p, p) for p, ok in lf.items() if p != "job" and ok]
+        lines.append(f"**Linked from {lf['job']}:** " + (", ".join(done) if done else "comment failed (check the comments permission)"))
+    if spec.rounds[-1].cliffhanger:
+        lines.append("**Cliffhanger:** the last round's answer is held back for the next quiz.")
     content = "\n".join(lines) + f"\n\n**Caption:**\n```\n{spec.full_caption()[:1500]}\n```"
     # scheduled posts already had the video attached to their preview
     notify.send(content, embed, attach=None if job.get("slot") else video)

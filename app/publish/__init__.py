@@ -3,10 +3,10 @@ authorize_url(state) / exchange_code(code), and refresh_if_needed()."""
 from __future__ import annotations
 
 from ..config import settings
-from . import instagram, tiktok, youtube
+from . import instagram, youtube
 
-PUBLISHERS = {"tiktok": tiktok, "youtube": youtube, "instagram": instagram}
-LABELS = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram"}
+PUBLISHERS = {"youtube": youtube, "instagram": instagram}
+LABELS = {"youtube": "YouTube", "instagram": "Instagram"}
 
 
 def refreshers():

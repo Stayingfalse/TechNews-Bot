@@ -10,7 +10,7 @@
   color-scheme: light;
   --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
   --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
-  --ig: #2a78d6; --yt: #eb6834; --tt: #1baf7a;
+  --ig: #2a78d6; --yt: #eb6834; --ok: #1baf7a;
   --warn-bg: #fff4dc; --warn-ink: #6b4a00;
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -19,7 +19,7 @@
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
-    --ig: #3987e5; --yt: #d95926; --tt: #199e70;
+    --ig: #3987e5; --yt: #d95926; --ok: #199e70;
     --warn-bg: #2b2412; --warn-ink: #f0d79a;
   }
 }
@@ -27,7 +27,7 @@
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
   --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
-  --ig: #3987e5; --yt: #d95926; --tt: #199e70;
+  --ig: #3987e5; --yt: #d95926; --ok: #199e70;
   --warn-bg: #2b2412; --warn-ink: #f0d79a;
 }
 * { box-sizing: border-box; }
@@ -93,7 +93,7 @@ a { color: var(--ig); }
 .slot .time { font-weight: 600; font-variant-numeric: tabular-nums; }
 .slot .title { font-weight: 600; }
 .pill { font-size: 12px; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--axis); color: var(--ink-2); white-space: nowrap; }
-.pill.ready { border-color: var(--tt); }
+.pill.ready { border-color: var(--ok); }
 .pill.special { border-color: var(--yt); }
 .slot details { font-size: 13px; color: var(--ink-2); }
 .slot details ol { margin: 4px 0 0; padding-left: 20px; }
@@ -151,7 +151,7 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
       <select id="f-days"><option value="7">last 7 days</option><option value="30" selected>last 30 days</option><option value="90">last 90 days</option><option value="0">all time</option></select>
     </label>
     <label for="f-platform">Platform
-      <select id="f-platform"><option value="all">All</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="tiktok">TikTok</option></select>
+      <select id="f-platform"><option value="all">All</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option></select>
     </label>
     <label for="f-tests"><input type="checkbox" id="f-tests"> Include test posts</label>
     <button id="refresh" type="button">Fetch fresh numbers</button>
@@ -223,7 +223,6 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
   const PLATFORMS = [
     { key: "instagram", name: "Instagram", color: "var(--ig)" },
     { key: "youtube", name: "YouTube", color: "var(--yt)" },
-    { key: "tiktok", name: "TikTok", color: "var(--tt)" },
   ];
   const pf = k => PLATFORMS.find(p => p.key === k);
   const $ = id => document.getElementById(id);
@@ -561,7 +560,7 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     const box = $("sched-msg");
     box.hidden = !text; box.textContent = text || "";
     box.style.background = ok ? "var(--surface)" : "";
-    box.style.border = ok ? "1px solid var(--tt)" : "";
+    box.style.border = ok ? "1px solid var(--ok)" : "";
   }
 
   async function errorText(r) {
@@ -587,8 +586,9 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     top.append(el("span", { class: "pill" + (b.status === "scheduled" ? " ready" : ""), title: hint }, label));
     if (b.tags && b.tags.special && b.tags.special !== "none")
       top.append(el("span", { class: "pill special" }, b.tags.special === "hard" ? "Hard mode" : "Format special"));
+    if (b.cliffhanger) top.append(el("span", { class: "pill special" }, "Cliffhanger"));
     card.append(top);
-    const meta = [b.theme || "General mix", ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
+    const meta = [b.theme || "General mix", `intro: ${b.intro || "card"}`, ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
     card.append(el("div", { class: "tags" }, meta.join(" · ")));
     const det = el("details");
     det.append(el("summary", {}, `${b.rounds.length} rounds and answers`));

@@ -1,7 +1,7 @@
 # Setup
 
-Order: deploy the app with publishing off → Discord → music → the platforms you want (TikTok,
-YouTube, Instagram) → switch publishing on → switch the Routine to the weekly quiz prompt. You can stop after any step; everything before it keeps working.
+Order: deploy the app with publishing off → Discord → music → the platforms you want (YouTube,
+Instagram) → switch publishing on → switch the Routine to the weekly quiz prompt. You can stop after any step; everything before it keeps working.
 
 `APP_URL` below is the app's public URL, `https://quiz.cezz.co.uk`.
 
@@ -25,16 +25,14 @@ Environment variables:
 | `PUBLIC_BASE_URL` | `APP_URL` |
 | `BRAND_HANDLE` | e.g. `@yourhandle` (shown top-left; blank to hide) |
 | `PUBLISH_ENABLED` | `false` until the platforms are connected and tested |
-| `PLATFORMS` | where to post, comma-separated: any of `tiktok,youtube,instagram` (default all three) |
+| `PLATFORMS` | where to post, comma-separated: `youtube`, `instagram` or both (default both) |
 | `TIMEZONE` | default `Europe/London` |
 | `POST_TIME` | default `12:00`: daily posting time in `TIMEZONE` |
 | `DISCORD_WEBHOOK_URL` | see step 2 |
-| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | step 4 |
-| `TIKTOK_MODE` | `draft` (inbox, you tap post; default) or `direct` (posts itself; see step 4) |
-| `TIKTOK_PRIVACY` | for `direct`: `PUBLIC_TO_EVERYONE` (default), `MUTUAL_FOLLOW_FRIENDS`, `SELF_ONLY` |
-| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | step 5 |
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | step 4 |
 | `YOUTUBE_PRIVACY` | `public` (default), `unlisted` or `private` |
-| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 6 |
+| `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` | step 5 |
+| `NEXT_LINK_COMMENTS` | default `true`: after each post, comment on the previous one pointing at it, and reply under correct cliffhanger answers (needs the comments permissions in step 5b) |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |
@@ -66,35 +64,11 @@ curl -H "Authorization: Bearer $API_TOKEN" APP_URL/music          # list
 
 Each video picks one at random (or the spec names one), loops it if short, normalises its
 loudness and fades it out. Only upload music you're allowed to use in social videos: your own,
-or royalty-free with a licence that covers TikTok/Instagram (e.g. YouTube Audio Library tracks
+or royalty-free with a licence that covers Instagram and YouTube (e.g. YouTube Audio Library tracks
 marked "no attribution required", Pixabay Music, or a paid library like Epidemic Sound or
 Artlist). Platforms can mute or remove videos with unlicensed commercial music.
 
-## 4. TikTok
-
-1. https://developers.tiktok.com → log in → **Manage apps → Connect an app**. Fill in name, icon,
-   category, description. It asks for Terms of Service and Privacy Policy URLs; simple pages on
-   cezz.co.uk are fine.
-2. Products: add **Login Kit** and **Content Posting API**. Scopes: `user.info.basic`,
-   `video.upload`, plus `video.publish` with **Direct Post** enabled if you want `TIKTOK_MODE=direct`.
-3. Login Kit → Redirect URI: `APP_URL/oauth/tiktok/callback`.
-4. Copy **Client key / Client secret** → `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`, redeploy.
-5. While the app is in development/sandbox, add your TikTok account as a **target user / tester**.
-   If TikTok requires review before your own account can authorise, submit it: the demo video
-   is a screen recording of you visiting `/oauth/tiktok/start`, approving, and the draft
-   appearing in TikTok's inbox.
-6. In a browser: `APP_URL/oauth/tiktok/start?token=API_TOKEN` → approve → "TikTok connected".
-
-The app refreshes the token twice a day; the refresh token lasts a year from last use.
-
-**Fully automatic posting (`TIKTOK_MODE=direct`)**: TikTok only allows public direct posts from
-apps that have passed its Content Posting API audit. Until then, direct posts are forced to
-private (`SELF_ONLY`). So: run with `TIKTOK_MODE=draft` (one tap a day in the TikTok inbox), apply
-for the audit in the developer portal (Content Posting API → Direct Post → request audit; the
-demo video is a screen recording of the app posting a quiz), then switch to `direct` and
-reconnect via `/oauth/tiktok/start` so the token includes `video.publish`.
-
-## 5. YouTube Shorts
+## 4. YouTube Shorts
 
 Vertical videos under 3 minutes are filed as Shorts automatically.
 
@@ -115,7 +89,7 @@ locked to private. Submit the audit form (use case: posting your own channel's v
 approved, uploads stay private and you can make them public in YouTube Studio. The default quota
 (10,000 units a day; an upload costs 1,600) is plenty for one video a day.
 
-## 6. Instagram
+## 5. Instagram
 
 The Reel is published through the API with the video's own music.
 
@@ -131,7 +105,7 @@ The Reel is published through the API with the video's own music.
 The app stays in development mode (posting to your own account doesn't need Meta App Review).
 Long-lived tokens last 60 days and are refreshed automatically.
 
-## 6b. Performance numbers (dashboard + weekly review)
+## 5b. Performance numbers and comments (dashboard, weekly review, cliffhangers)
 
 The bot collects each post's numbers at about 1 hour, 24 hours and 7 days, and refreshes them
 every 4 hours for 14 days. See them at `APP_URL/dashboard`: sign in with the Instagram or
@@ -140,7 +114,7 @@ extra permissions for this, granted by reconnecting once:
 
 - **Instagram:** in the Meta app → Instagram → **Permissions and features**, add
   `instagram_business_manage_insights` (views, reach, shares, saves, watch time) and
-  `instagram_business_manage_comments` (for comment replies later). Then reconnect at
+  `instagram_business_manage_comments` (reading cliffhanger answers, replying to winners, and the "next quiz" comment on each post). Then reconnect at
   `APP_URL/oauth/instagram/start?token=API_TOKEN`. Without it you still get likes and comments.
 - **YouTube:** in Google Cloud → **APIs & Services → Library**, enable **YouTube Analytics
   API**. In **Google Auth Platform → Data access**, add the scopes `youtube.readonly`,
@@ -149,7 +123,7 @@ extra permissions for this, granted by reconnecting once:
 
 `APP_URL/status?token=API_TOKEN` lists the permissions each connection was granted (`granted`).
 
-## 7. Turn on publishing
+## 6. Turn on publishing
 
 Set `PUBLISH_ENABLED=true`, redeploy, then test (posts immediately to every platform in `PLATFORMS`):
 ```bash
@@ -158,7 +132,7 @@ curl -X POST "APP_URL/jobs?force=true" -H "Authorization: Bearer $API_TOKEN" \
 ```
 (Delete the sample post afterwards.)
 
-## 8. Weekly quiz Routine (Claude Code)
+## 7. Weekly quiz Routine (Claude Code)
 
 1. In the Claude Code cloud environment's settings (environment menu in the session's title
    bar → Edit), add `SHORTS_API_TOKEN` = the `API_TOKEN` value (or a network secret for the app's

@@ -1,7 +1,7 @@
 """Background music: a track from your own library, or a game-show loop synthesised from the seed.
 
 The library is any .mp3/.m4a/.wav/.ogg/.flac files in MUSIC_DIR (default /data/music). Only add
-tracks you have the rights to use on TikTok/Instagram (your own, or royalty-free with a licence
+tracks you have the rights to use on Instagram/YouTube (your own, or royalty-free with a licence
 that allows social video). With no library the synth is used, so the bot never needs anything.
 """
 from __future__ import annotations

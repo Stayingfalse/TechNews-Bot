@@ -51,6 +51,11 @@ def tags_for(job: dict) -> dict[str, str]:
         "palette": spec.palette,
         "music": str(job.get("render", {}).get("music") or spec.music),
         "test": "yes" if job["id"].startswith("test-") else "no",
+        "intro": spec.intro,
+        "cliffhanger": "yes" if spec.rounds[-1].cliffhanger else "no",
+        "reveals_yesterday": "yes" if job.get("reveal") else "no",
+        "ask_comment": "yes" if any(r.ask_comment for r in spec.rounds) else "no",
+        "pause_hint": "yes" if spec.pause_hint else "no",
     }
     return {**auto, **spec.tags}
 

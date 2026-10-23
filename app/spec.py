@@ -18,6 +18,23 @@ MEDIA = ("Movie", "TV show", "Song", "Book", "Video game", "Cartoon", "Band", "C
 class _Round(BaseModel):
     think: float = Field(default=5.0, ge=3.0, le=10.0, description="Seconds the clue is up with the countdown")
     reveal: float = Field(default=2.6, ge=1.8, le=6.0, description="Seconds the answer stays on screen")
+    cliffhanger: bool = Field(default=False, description=(
+        "Last round only: no reveal. Viewers comment their answer; the next quiz reveals it and gives the "
+        "first correct commenters a shout-out"))
+    accept: list[str] = Field(default_factory=list, max_length=6, description=(
+        "Other spellings that count as correct when judging cliffhanger comments, e.g. ['Lion King']"))
+    ask_comment: bool = Field(default=False, description="Show a 'Comment your guess!' sticker during this round's countdown")
+
+    @field_validator("accept")
+    @classmethod
+    def _accept(cls, v: list[str]) -> list[str]:
+        if any(not a.strip() or len(a) > 40 for a in v):
+            raise ValueError("accept: each alternative 1-40 chars")
+        return v
+
+    def correct_texts(self) -> list[str]:
+        """What a comment must say to be right (plus `accept`)."""
+        return [self.answer_text(), *self.accept]
 
     def answer_text(self) -> str:  # pragma: no cover - interface
         raise NotImplementedError
@@ -69,6 +86,9 @@ class TrueFalseRound(_Round):
     def answer_text(self) -> str:
         return f"{'TRUE' if self.answer else 'FALSE'}: {self.statement.replace('*', '')}"
 
+    def correct_texts(self) -> list[str]:
+        return ["real", "true"] if self.answer else ["fake", "false"]
+
 
 class ChoiceRound(_Round):
     """Multiple choice (3-4 options). Also covers 'which came first', 'guess the year', etc."""
@@ -95,6 +115,9 @@ class ChoiceRound(_Round):
     def answer_text(self) -> str:
         return f"{self.question} {self.options[self.correct]}"
 
+    def correct_texts(self) -> list[str]:
+        return [self.options[self.correct], *self.accept]
+
 
 class OddOneOutRound(_Round):
     """Four items, one doesn't belong."""
@@ -113,6 +136,9 @@ class OddOneOutRound(_Round):
 
     def answer_text(self) -> str:
         return f"odd one out {self.items[self.odd]} ({', '.join(self.items)})"
+
+    def correct_texts(self) -> list[str]:
+        return [self.items[self.odd], *self.accept]
 
 
 class UnscrambleRound(_Round):
@@ -155,6 +181,9 @@ class QuizSpec(BaseModel):
     follow: str = Field(default="Follow for a daily quiz", max_length=32)
     caption: str = Field(max_length=2000)
     hashtags: list[str] = Field(default_factory=list, max_length=8)
+    intro: Literal["card", "quick", "banner"] = Field(default="card", description=(
+        "card = 2.8 s title card; quick = 1.2 s title card; banner = no card, the title rides a banner over round 1"))
+    pause_hint: bool = Field(default=False, description="Show a 'Pause to answer' sticker during countdowns")
     music: str = Field(
         default="auto",
         description="'auto' (random track from the music library, else synth), 'synth', 'none', or a library file name",
@@ -177,6 +206,12 @@ class QuizSpec(BaseModel):
                 raise ValueError(f"invalid hashtag: {tag!r}")
             out.append(tag)
         return out
+
+    @model_validator(mode="after")
+    def _cliffhanger_last(self) -> "QuizSpec":
+        if any(r.cliffhanger for r in self.rounds[:-1]):
+            raise ValueError("only the last round can be the cliffhanger")
+        return self
 
     @field_validator("tags")
     @classmethod

@@ -2,7 +2,7 @@
 
 A daily quiz short (guess the movie from emojis, badly described films, real-or-fake, odd one
 out, unscramble, multiple choice), rendered entirely in code with its own music and posted to
-TikTok, YouTube Shorts and Instagram Reels with no manual steps.
+YouTube Shorts and Instagram Reels with no manual steps.
 
 ```
 Claude Code Routine (Mondays 19:05)        Easypanel app (this repo)
@@ -13,7 +13,7 @@ Claude Code Routine (Mondays 19:05)        Easypanel app (this repo)
                                             │    music: your library, or synthesised
                                             └─ at the slot (12:00 Europe/London by default):
                                                  post to each platform in PLATFORMS
-                                                 (TikTok, YouTube, Instagram) → result in Discord
+                                                 (YouTube, Instagram) → result in Discord
                                                  → delete the video file
 ```
 
@@ -57,7 +57,23 @@ See `app/spec.py` (or `GET /schema`). A spec has a `title` (intro hook), 3-5 `ro
 | `odd_one_out` | 2×2 grid of items | odd one lights up + reason |
 | `unscramble` | shuffled letter tiles | tiles hop into place |
 
-Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6). Wrap a word in
+Each round has `think` (countdown seconds, default 5) and `reveal` (default 2.6).
+
+Engagement options:
+- `intro`: `card` (2.8 s title card), `quick` (1.2 s) or `banner` (no card; the title rides a banner over round 1).
+- **Cliffhanger** (`"cliffhanger": true` on the last round): the video asks viewers to comment their answer
+  instead of revealing it. Shortly before the next quiz is rendered, the server reads that post's Instagram
+  and YouTube comments, judges them (typos forgiven; `accept` lists other correct forms), and the next
+  video shows the answer plus a shout-out to the first 5 correct commenters. Once it's posted, each of
+  them gets a reply under their comment pointing at it (a link on YouTube; Instagram comments can't
+  carry clickable links). Needs the comments permissions (reconnect from the dashboard).
+- **Next-quiz links** (every post, `NEXT_LINK_COMMENTS=true`): once a quiz is posted, the bot comments on the
+  previous post pointing at it ("Next quiz is up", or "Answer revealed" under a cliffhanger), so every
+  comment section leads to the next video.
+- **Loop ending** (every video): the outro clears back to the empty stage the video opens on, so an
+  autoplay replay runs on without a visible jump.
+- `ask_comment` (per round): a "Comment your guess!" sticker on that round's countdown; `pause_hint`: a
+  "Pause to answer" sticker. Wrap a word in
 `*asterisks*` in the title, outro, descriptions and statements to highlight it. `music`: `auto`
 (library, else synth), `synth`, `none`, or a library file name.
 
@@ -87,12 +103,12 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
-| `GET /oauth/{tiktok,youtube,instagram}/start?token=…` | One-time account connection |
+| `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 
 ## Configuration
 
-See [docs/SETUP.md](docs/SETUP.md). The key switches: `PLATFORMS=tiktok,youtube,instagram` (any
-subset), `POST_TIME=12:00`, `TIMEZONE=Europe/London`, `PUBLISH_ENABLED`.
+See [docs/SETUP.md](docs/SETUP.md). The key switches: `PLATFORMS=youtube,instagram` (either or
+both), `POST_TIME=12:00`, `TIMEZONE=Europe/London`, `PUBLISH_ENABLED`.
 
 Fonts: Bungee and Bricolage Grotesque (SIL Open Font License, in `assets/fonts`).
