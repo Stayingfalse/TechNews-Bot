@@ -110,13 +110,52 @@ def _ribbon(text: str, pal: Palette, size=30, fill=None, color=None, angle=-3.0)
     return r.rotate(angle, resample=Image.BICUBIC, expand=True)
 
 
+def _printable(text: str) -> str:
+    """Drop what the fonts can't draw (emoji, other scripts), so a comment never shows boxes."""
+    text = re.sub(r"[^\x20-\x7E\u00A0-\u024F\u2018-\u201D\u2026]", "", text)
+    return " ".join(text.split())
+
+
 def _credit(spec, pal: Palette) -> Image.Image | None:
-    """'THEME PICKED BY @NAME' for a quiz whose theme came from a viewer's comment."""
+    """For a quiz whose theme came from a viewer: their comment, drawn as a comment card (avatar
+    initial, @name, 'picked this theme', and what they wrote)."""
     picked = getattr(spec, "picked_by", None)
     if not picked:
         return None
-    text = f"THEME PICKED BY @{picked.user}".upper()
-    return _ribbon(text, pal, fit_size(text, "sign", 30, SAFE_W - 80, 1, 18), fill=pal.cool, color=pal.ink, angle=2)
+    said = _printable(picked.text) or _printable(spec.theme) or "this theme"
+    said = said if said[0] in "\"“" else f"“{said}”"
+    w = SAFE_W - 40
+    av = 40
+    grey = tuple(int(i * 0.55 + p * 0.45) for i, p in zip(pal.ink, pal.paper))
+    name = text_sprite("@" + picked.user, "bold", 32, pal.ink)
+    tail = text_sprite("  picked this theme", "semi", 27, grey)
+    text_w = w - (2 * av + 54)
+    size = 40
+    while size > 28 and font("semi", size).getlength(said) > text_w:
+        size -= 1
+    if font("semi", size).getlength(said) > text_w:  # still too long: cut it with an ellipsis
+        while font("semi", size).getlength(said + "…”") > text_w:
+            said = said[:-1].rstrip()
+        said += "…”"
+    body = text_sprite(said, "semi", size, pal.ink)
+    h = max(2 * av + 28, name.height + body.height + 26)
+    card = slab(w, h, pal.paper + (255,), pal.ink, radius=26, border=5, shadow=8).copy()
+    face = disc(av, pal.cool + (255,), pal.ink, 4, 0)
+    place(face, text_sprite(picked.user[0].upper(), "sign", int(av * 1.1), pal.ink), face.width / 2 - 2, face.height / 2)
+    s = 8  # slab padding
+    card.alpha_composite(face, (s + 18, s + (h - face.height) // 2))
+    x = s + 18 + face.width + 16
+    y = s + (h - name.height - body.height + 4) // 2
+    card.alpha_composite(name, (x, y))
+    if name.width + tail.width <= text_w:  # a long name keeps the line to itself
+        card.alpha_composite(tail, (x + name.width, y + (name.height - tail.height) // 2 + 2))
+    card.alpha_composite(body, (x, y + name.height - 4))
+    # a speech-bubble tail under the avatar
+    d = ImageDraw.Draw(card)
+    bx, by = s + 18 + av, s + h - 3
+    d.polygon([(bx - 4, by - 2), (bx + 26, by - 2), (bx - 6, by + 22)], fill=pal.ink + (255,))
+    d.polygon([(bx - 1, by - 6), (bx + 19, by - 6), (bx - 3, by + 13)], fill=pal.paper + (255,))
+    return card.rotate(-1.5, resample=Image.BICUBIC, expand=True)
 
 
 def _sticker(lines: list[str], pal: Palette, fill, color, angle: float) -> Image.Image:
@@ -313,7 +352,8 @@ class IntroScene(Scene):
         blit(fg, self.ticket, SAFE_CX, y + 50, scale=pi, alpha=clamp(pi))
         if self.credit:
             pc = ease_out_back(prog(t, 1.25, 0.45), 2.4)
-            blit(fg, self.credit, SAFE_CX, y + 160, scale=pc, alpha=clamp(pc))
+            cy = min(y + 190, SAFE_BOTTOM - self.credit.height / 2)
+            blit(fg, self.credit, SAFE_CX, cy, scale=pc, alpha=clamp(pc))
 
     def sfx(self):
         ev = [(0.12 + 0.085 * i, "pop") for i in range(min(len(self.words), 10))] + [(1.0, "swipe")]
@@ -409,15 +449,18 @@ class RoundScene(Scene):
 
     # -- shared pieces
     def _header(self, fg, t):
-        start = 0.0  # the prelude (quiz title, who picked the theme) first, then this round's ribbon
+        start, hide = 0.0, 0.0  # the prelude (quiz title, who picked the theme) first, then this round's ribbon
         for sprite, secs in self.prelude:
+            tall = sprite.height > 100  # the comment card: the heading steps aside while it's up
             if start <= t < start + secs + 0.4:
                 pb = ease_out_back(prog(t, start, 0.35), 2.2) * (1 - ease_out_cubic(prog(t, start + secs, 0.3)))
-                blit(fg, sprite, SAFE_CX, SAFE_TOP + 40, scale=pb, alpha=clamp(pb))
+                blit(fg, sprite, SAFE_CX, SAFE_TOP + 40 + (sprite.height - 90) / 2 * tall, scale=pb, alpha=clamp(pb))
+                if tall:
+                    hide = max(hide, clamp(min(prog(t, start - 0.1, 0.2), 1 - prog(t, start + secs + 0.1, 0.25))))
             start += secs + 0.15
         p = ease_out_back(prog(t, start, 0.3 if self.prelude else 0.4), 2.2)
         blit(fg, self.ribbon, SAFE_CX, SAFE_TOP + 40, scale=p, alpha=clamp(p))
-        ph = ease_out_back(prog(t, 0.1, 0.45), 1.8)
+        ph = ease_out_back(prog(t, 0.1, 0.45), 1.8) * (1 - hide)
         blit(fg, self.head, SAFE_CX, SAFE_TOP + 140, scale=lerp(0.6, 1, ph), alpha=clamp(ph))
 
     def _timer(self, fg, t):

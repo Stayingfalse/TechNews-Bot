@@ -172,6 +172,7 @@ class PickedBy(BaseModel):
     user: str = Field(pattern=r"^[A-Za-z0-9._-]{2,28}$", description="Their username, exactly as the suggestions list gives it")
     platform: Literal["instagram", "youtube"]
     comment_id: str = Field(min_length=1, max_length=120, description="The suggestion's comment_id; they get a reply there once it posts")
+    text: str = Field(default="", max_length=120, description="Their comment as the suggestions list gives it, shown on screen as a comment card")
 
 
 class QuizSpec(BaseModel):

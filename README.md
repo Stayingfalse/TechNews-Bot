@@ -69,7 +69,8 @@ Engagement options:
   carry clickable links). Needs the comments permissions (reconnect from the dashboard).
 - **Viewer-picked themes:** `ask_theme` makes the outro ask viewers to comment a theme for next week;
   `GET /themes/suggestions` groups and ranks what they suggested. Monday's batch picks one and sets
-  `picked_by` on that quiz: the video shows "Theme picked by @name" and the viewer gets a reply under
+  `picked_by` on that quiz: the video shows their comment as a comment card ("@name picked this theme")
+  and the viewer gets a reply under
   their suggestion once it posts.
 - **Next-quiz links** (every post, `NEXT_LINK_COMMENTS=true`): once a quiz is posted, the bot comments on the
   previous post pointing at it ("Next quiz is up", or "Answer revealed" under a cliffhanger), so every

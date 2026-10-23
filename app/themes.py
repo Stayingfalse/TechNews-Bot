@@ -51,7 +51,7 @@ def suggestions(days: int = 8) -> dict:
             theme, user = _theme_text(c["text"]), safe_name(c["user"])
             if theme and user:
                 found.append({"theme": theme, "user": user, "platform": c["platform"], "comment_id": c["id"],
-                              "at": c["at"], "job_id": job["id"]})
+                              "text": " ".join(c["text"].split())[:120], "at": c["at"], "job_id": job["id"]})
     groups: dict[str, dict] = {}
     for f in sorted(found, key=lambda f: f["at"]):  # earliest suggester of each theme first
         g = groups.setdefault(norm(f["theme"]), {"theme": f["theme"], "count": 0, "users": [], "first": f})
