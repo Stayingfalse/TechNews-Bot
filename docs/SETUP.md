@@ -38,6 +38,7 @@ Environment variables:
 | `CAROUSEL_DAY`, `CAROUSEL_TIME` | when the weekly carousel goes out: default `sun` and `18:00` (local) |
 | `ELEVENLABS_API_KEY` | optional: turns on the host voice-over for quizzes with `"voice": true` (ElevenLabs → Developers → API keys; text-to-speech permission is enough) |
 | `ELEVENLABS_VOICE_ID` | default `TX3LPaxmHKxFdv7VOQHJ` ("Liam", a built-in energetic voice). For another, copy its ID in ElevenLabs (the voice's ⋯ menu → Copy voice ID). On the free plan only built-in voices work through the API; a refused library voice falls back to Liam |
+| `ELEVENLABS_VOICES` | the host voices quizzes pick by `voice_name`, as `name=id,…`; default `alex`, `liam`, `althea` (female, game-show host), `milly` (female, Australian presenter) |
 | `ELEVENLABS_MODEL` | default `eleven_v3`; `eleven_v3` and `eleven_v4` read each line in an `[excited]` delivery, `eleven_multilingual_v2` is steadier |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |

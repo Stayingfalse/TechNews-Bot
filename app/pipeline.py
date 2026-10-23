@@ -127,7 +127,8 @@ def _render(job: dict) -> None:
             notify.error(f"couldn't prepare yesterday's cliffhanger reveal for `{job['id']}`: {e}")
     job["reveal"] = reveal
     screen = {k: reveal[k] for k in ("answer", "note", "shoutouts")} if reveal else None
-    vcfg = VoiceConfig(settings.elevenlabs_api_key, settings.elevenlabs_voice_id, settings.elevenlabs_model,
+    voice_id = settings.voices.get(spec.voice_name.lower(), settings.elevenlabs_voice_id)
+    vcfg = VoiceConfig(settings.elevenlabs_api_key, voice_id, settings.elevenlabs_model,
                        settings.data_dir / "voice") if settings.elevenlabs_api_key else None
     info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
                         reveal=screen, voice=vcfg)
@@ -135,6 +136,9 @@ def _render(job: dict) -> None:
         video.unlink(missing_ok=True)
         cover.unlink(missing_ok=True)
         return
+    if info.get("voice_id"):  # label by name, as the routine and the review talk about voices
+        names = {v: k for k, v in settings.voices.items()}
+        info["voice_name"] = ",".join(names.get(v, v) for v in info["voice_id"].split(","))
     job.update(render=info, video=video.name, video_url=media_url(video.name), cover_url=media_url(cover.name))
 
     publish_at = datetime.fromisoformat(job["publish_at"]) if job.get("publish_at") else None
@@ -267,7 +271,7 @@ def _notify_scheduled(job: dict, spec: QuizSpec, video: Path) -> None:
         "fields": [_answers_field(spec),
                    {"name": "Length", "value": f"{job['render']['duration']} s", "inline": True},
                    {"name": "Music", "value": job["render"].get("music", "?"), "inline": True},
-                   {"name": "Voice", "value": job["render"].get("voice", "off"), "inline": True},
+                   {"name": "Voice", "value": f'{job["render"].get("voice", "off")} {job["render"].get("voice_name", "")}'.strip(), "inline": True},
                    {"name": "Platforms", "value": ", ".join(settings.platforms) or "(none)", "inline": True}],
     }
     slot, at = slot_key(job)

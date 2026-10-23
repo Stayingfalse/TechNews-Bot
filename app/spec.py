@@ -194,6 +194,8 @@ class QuizSpec(BaseModel):
     pause_hint: bool = Field(default=False, description="Show a 'Pause to answer' sticker during countdowns")
     voice: bool = Field(default=False, description=(
         "Game-show host voice-over (ElevenLabs): reads the title, calls each round and announces the answers"))
+    voice_name: str = Field(default="", max_length=24, description=(
+        "Which host voice (GET /status lists `voices`); empty = the default voice"))
     ask_theme: bool = Field(default=False, description="The outro asks viewers to comment a theme for next week")
     picked_by: PickedBy | None = Field(default=None, description=(
         "This quiz's theme came from a viewer's comment: credited on screen, and they get a reply once it posts"))

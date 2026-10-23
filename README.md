@@ -77,7 +77,7 @@ Engagement options:
   comment section leads to the next video.
 - `voice`: a game-show host voice-over (ElevenLabs): reads the title, calls each round, announces each
   answer, asks for comments on a cliffhanger and reads yesterday's answer and shout-outs. The music ducks
-  under it. Needs `ELEVENLABS_API_KEY`; each line is cached in `/data/voice`. If ElevenLabs fails, the video
+  under it. `voice_name` picks the host (alex, liam, althea, milly), which the review compares. Needs `ELEVENLABS_API_KEY`; each line is cached in `/data/voice`. If ElevenLabs fails, the video
   goes out without it.
 - **Instagram extras** (switched on in env): a "New quiz out now" story after each Reel
   (`INSTAGRAM_STORIES`), and a weekly carousel of the week's most-viewed quiz, clue then answer on

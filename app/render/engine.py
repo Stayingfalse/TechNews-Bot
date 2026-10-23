@@ -129,7 +129,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
     t0 = time.time()
     track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
 
-    voice_status, vo = "off", None
+    voice_status, vo, voice_used = "off", None, ""
     if getattr(spec, "voice", False):
         if not voice:
             voice_status = "skipped: no ELEVENLABS_API_KEY"
@@ -137,6 +137,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
             try:  # never let the voice-over stop a post: without it the video goes out as before
                 vo = voice_track(host.clips(video, voice), int(SR * video.duration) + SR)
                 voice_status = "on"
+                voice_used = ",".join(sorted(voice.used))
             except Exception as e:
                 log.warning("voice-over failed, rendering without it: %s", e)
                 voice_status = f"failed: {e}"[:200]
@@ -202,6 +203,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
         "bytes": out_path.stat().st_size,
         "music": track.name if isinstance(track, Path) else (track or "none"),
         "voice": voice_status,
+        "voice_id": voice_used,
     }
     log.info("rendered %s %s", out_path.name, info)
     return info

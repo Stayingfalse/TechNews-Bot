@@ -114,6 +114,7 @@ def status():
         "music_tracks": [p.name for p in music.library(settings.music_dir)],
         "discord": bool(settings.discord_webhook_url),
         "voice_enabled": bool(settings.elevenlabs_api_key),
+        "voices": sorted(settings.voices),
         "instagram_stories": settings.instagram_stories,
         "instagram_carousels": f"{settings.carousel_day} {settings.carousel_time}" if settings.instagram_carousels else False,
         "recent_jobs": [{k: j.get(k) for k in ("id", "status", "created_at", "video_url", "error")} for j in store.list_jobs(5)],
@@ -152,6 +153,8 @@ def create_job(spec: QuizSpec, dry_run: bool = False, force: bool = False, only:
     platforms = [p.strip() for p in only.split(",") if p.strip()] or None
     if platforms and set(platforms) - set(PUBLISHERS):
         raise HTTPException(400, f"only: use any of {sorted(PUBLISHERS)}")
+    if vp := _voice_problem(spec):
+        raise HTTPException(422, vp)
     if not force and not dry_run:
         repeats = _repeats(spec, _used_answers())
         if repeats:
@@ -169,6 +172,12 @@ def _used_answers(exclude_jobs: set[str] = frozenset()) -> dict[str, str]:
             for a in QuizSpec.model_validate(j["spec"]).answer_keys():
                 used[a] = f"scheduled for {j['slot']}"
     return used
+
+
+def _voice_problem(spec: QuizSpec) -> str | None:
+    if spec.voice_name and spec.voice_name.lower() not in settings.voices:
+        return f"voice_name {spec.voice_name!r} isn't one of {sorted(settings.voices)}"
+    return None
 
 
 def _repeats(spec: QuizSpec, used: dict[str, str]) -> list[str]:
@@ -194,6 +203,7 @@ def _booking(j: dict) -> dict:
     return {"time": pipeline.slot_key(j)[1], "publish_at": j["publish_at"], "status": j["status"], "job_id": j["id"],
             "title": spec.title, "theme": spec.theme, "video_url": j.get("video_url"), "tags": spec.tags,
             "intro": spec.intro, "cliffhanger": spec.rounds[-1].cliffhanger, "ask_theme": spec.ask_theme,
+            "voice": (spec.voice_name or "default") if spec.voice else None,
             "picked_by": spec.picked_by.user if spec.picked_by else None,
             "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]}
 
@@ -259,6 +269,8 @@ def post_schedule(req: ScheduleRequest):
             errors.append(f"item {n} ({d} {at}): can't be rendered: {type(e).__name__}: {e}"[:300])
         if rep := _repeats(spec, used):
             errors.append(f"item {n} ({d} {at}): answers already used: " + "; ".join(rep))
+        if vp := _voice_problem(spec):
+            errors.append(f"item {n} ({d} {at}): {vp}")
         for a in spec.answer_keys():
             used.setdefault(a, f"item {n} of this batch")
     if errors:
@@ -338,6 +350,8 @@ def change_booking(job_id: str, change: BookingChange):
             errors.append(f"can't be rendered: {type(e).__name__}: {e}"[:300])
         if rep := _repeats(change.spec, _used_answers(exclude_jobs={job_id})):
             errors.append("answers already used: " + "; ".join(rep))
+        if vp := _voice_problem(change.spec):
+            errors.append(vp)
     if errors:
         raise HTTPException(409, {"errors": errors})
     job = pipeline.update_booking(job, day, at, change.spec)

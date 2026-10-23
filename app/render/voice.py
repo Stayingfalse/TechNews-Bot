@@ -10,7 +10,7 @@ import hashlib
 import re
 import logging
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -31,6 +31,7 @@ class VoiceConfig:
     voice_id: str
     model: str
     cache_dir: Path
+    used: set = field(default_factory=set)  # the voice ids that actually spoke (after any fallback)
 
 
 def _clean(text: str) -> str:
@@ -90,26 +91,37 @@ def script(video) -> list[tuple[float, str]]:
     return out
 
 
+def _cached(voice: str, text: str, cfg: VoiceConfig) -> Path:
+    return cfg.cache_dir / (hashlib.sha1(f"{voice}|{cfg.model}|{text}".encode()).hexdigest()[:20] + ".mp3")
+
+
 def _fetch(text: str, cfg: VoiceConfig) -> Path:
-    key = hashlib.sha1(f"{cfg.voice_id}|{cfg.model}|{text}".encode()).hexdigest()[:20]
-    path = cfg.cache_dir / f"{key}.mp3"
+    path = _cached(cfg.voice_id, text, cfg)
     if path.exists():
+        cfg.used.add(cfg.voice_id)
         return path
     if cfg.model in EXPRESSIVE:  # these read delivery tags; they take only 0, 0.5 or 1 for stability
         body = {"text": f"[excited] {text}", "model_id": cfg.model, "voice_settings": {"stability": 0.5}}
     else:
         body = {"text": text, "model_id": cfg.model,
                 "voice_settings": {"stability": 0.35, "similarity_boost": 0.8, "style": 0.6}}
-    r = _tts(cfg.voice_id, body, cfg)
-    if r.status_code == 402 and cfg.voice_id != FALLBACK_VOICE:  # a library voice on a free plan
-        log.warning("ElevenLabs refused voice %s (%s); using the built-in fallback", cfg.voice_id, r.text[:120])
-        r = _tts(FALLBACK_VOICE, body, cfg)
+    voice = cfg.voice_id
+    r = _tts(voice, body, cfg)
+    if r.status_code == 402 and voice != FALLBACK_VOICE:  # a library voice on a free plan
+        log.warning("ElevenLabs refused voice %s (%s); using the built-in fallback", voice, r.text[:120])
+        voice = FALLBACK_VOICE
+        path = _cached(voice, text, cfg)  # filed under the voice that spoke, so the refused one is tried again next time
+        if path.exists():
+            cfg.used.add(voice)
+            return path
+        r = _tts(voice, body, cfg)
     if r.status_code >= 400:
         raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
     cfg.cache_dir.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".part")
     tmp.write_bytes(r.content)
     tmp.rename(path)
+    cfg.used.add(voice)
     return path
 
 

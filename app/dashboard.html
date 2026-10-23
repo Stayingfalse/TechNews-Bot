@@ -591,6 +591,7 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     if (b.cliffhanger) top.append(el("span", { class: "pill special" }, "Cliffhanger"));
     if (b.picked_by) top.append(el("span", { class: "pill special" }, `Theme by @${b.picked_by}`));
     if (b.ask_theme) top.append(el("span", { class: "pill" }, "Asks for themes"));
+    if (b.voice) top.append(el("span", { class: "pill" }, `Voice: ${b.voice}`));
     card.append(top);
     const meta = [b.theme || "General mix", `intro: ${b.intro || "card"}`, ...Object.entries(b.tags || {}).filter(([k]) => k !== "special").map(([k, v]) => `${k}: ${v}`)];
     card.append(el("div", { class: "tags" }, meta.join(" · ")));

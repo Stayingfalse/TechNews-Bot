@@ -54,6 +54,12 @@ class Settings:
         # Default "Liam" (built-in, energetic). Library voices need a paid ElevenLabs plan for API use.
         self.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "TX3LPaxmHKxFdv7VOQHJ")
         self.elevenlabs_model = os.environ.get("ELEVENLABS_MODEL", "eleven_v3")  # v3/v4 read in an [excited] delivery
+        # Host voices a quiz can pick by name (`voice_name`), being tested against each other.
+        # ELEVENLABS_VOICES=name=id,name=id replaces the list.
+        voices = os.environ.get("ELEVENLABS_VOICES", "alex=dEc1rkm0ul0kDedEuETS,liam=TX3LPaxmHKxFdv7VOQHJ,"
+                                                     "althea=UDYENShoqlMksjDyKqGV,milly=rSeWUeOepJe3YA3pacAe")
+        pairs = [v.split("=", 1) for v in voices.split(",") if "=" in v]
+        self.voices = {name.strip().lower(): vid.strip() for name, vid in pairs}  # ids are case-sensitive
 
         # Instagram extras: a "new quiz out now" story after each Reel, and a weekly carousel of the
         # week's most-viewed quiz on CAROUSEL_DAY (mon..sun) at CAROUSEL_TIME (local).

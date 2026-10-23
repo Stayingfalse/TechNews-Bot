@@ -58,9 +58,20 @@ def tags_for(job: dict) -> dict[str, str]:
         "pause_hint": "yes" if spec.pause_hint else "no",
         "ask_theme": "yes" if spec.ask_theme else "no",
         "voice": "yes" if job.get("render", {}).get("voice") == "on" else "no",
+        "voice_name": _voice_name(job),
         "picked_theme": "yes" if spec.picked_by else "no",
     }
     return {**auto, **spec.tags}
+
+
+def _voice_name(job: dict) -> str:
+    r = job.get("render", {})
+    if r.get("voice") != "on":
+        return "none"
+    if r.get("voice_name"):
+        return r["voice_name"]
+    # rendered before voices were named: it spoke with the default voice
+    return {v: k for k, v in settings.voices.items()}.get(settings.elevenlabs_voice_id, "default")
 
 
 def _fetch(platform: str, job: dict) -> dict:
