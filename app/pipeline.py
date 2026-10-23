@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import cliffhanger, metrics, notify, social, store, themes
+from . import cliffhanger, lease, metrics, notify, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -431,7 +431,8 @@ def tick() -> None:
 def _scheduler() -> None:
     while True:
         try:
-            tick()
+            if lease.held():  # an older server still running mid-deploy leaves the scheduling to the new one
+                tick()
         except Exception:
             log.exception("scheduler tick failed")
         time.sleep(30)
@@ -440,6 +441,9 @@ def _scheduler() -> None:
 def _maintenance() -> None:
     """Twice a day: keep OAuth tokens fresh and delete old videos (never ones still to be posted)."""
     while True:
+        if not lease.held():
+            time.sleep(600)
+            continue
         for name, fn in refreshers():
             try:
                 fn()
@@ -451,25 +455,30 @@ def _maintenance() -> None:
         for f in settings.videos_dir.glob("*"):
             if f.stat().st_mtime < cutoff and f.stem not in keep:
                 f.unlink(missing_ok=True)
+        # cached host lines a script hasn't used for 60 days (re-rendering a video re-uses them)
+        voice_cutoff = time.time() - 60 * 86400
+        for f in (settings.data_dir / "voice").glob("*.mp3"):
+            if f.stat().st_atime < voice_cutoff and f.stat().st_mtime < voice_cutoff:
+                f.unlink(missing_ok=True)
         time.sleep(12 * 3600)
 
 
 def _recover() -> None:
-    """After a restart, re-queue unfinished work. Publishing resumes with the platforms not yet done."""
+    """After a restart: a render that isn't due yet goes back to waiting for its slot. Anything else
+    left mid-way (rendering, or posting with some platforms done) is resumed by _rescue_orphans once
+    it has sat untouched for STALE, because during a deploy the old server may still be finishing it,
+    and doing it twice could double-post. Slots render RENDER_LEAD_MINUTES early, so they still make it."""
     lead = timedelta(minutes=settings.render_lead_minutes)
-    for job in sorted(store.list_jobs(200), key=lambda j: j.get("created_at", "")):
-        if job["status"] in ("queued", "rendering"):
-            if job.get("publish_at") and datetime.fromisoformat(job["publish_at"]) - lead > now():
-                job["status"] = "booked"  # not due yet: the scheduler renders it nearer its slot
-                store.save_job(job)
-            else:
-                _enqueue("render", job["id"])
-        elif job["status"] == "publishing":
-            _enqueue("publish", job["id"])
+    for job in store.list_jobs(200):
+        if (job["status"] in ("queued", "rendering") and job.get("publish_at")
+                and datetime.fromisoformat(job["publish_at"]) - lead > now()):
+            job["status"] = "booked"  # the scheduler renders it nearer its slot
+            store.save_job(job)
 
 
 def start_background() -> None:
     settings.videos_dir.mkdir(parents=True, exist_ok=True)
+    lease.claim()  # the newest server runs the background jobs from now on
     _recover()
     threading.Thread(target=_worker, daemon=True, name="worker").start()
     threading.Thread(target=_scheduler, daemon=True, name="scheduler").start()

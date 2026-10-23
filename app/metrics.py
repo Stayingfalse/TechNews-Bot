@@ -113,8 +113,9 @@ def collect(force: bool = False) -> int:
             for name in due:
                 rec["snapshots"][name] = m
             updated += 1
-    with _lock:
-        store._write("metrics.json", data)
+    if updated:
+        with _lock:
+            store._write("metrics.json", data)
     return updated
 
 
@@ -157,9 +158,11 @@ def report() -> list[dict]:
 
 
 def run_forever() -> None:
+    from . import lease
+
     while True:
         try:
-            n = collect()
+            n = collect() if lease.held() else 0
             if n:
                 log.info("metrics: updated %d platform posts", n)
         except Exception:
