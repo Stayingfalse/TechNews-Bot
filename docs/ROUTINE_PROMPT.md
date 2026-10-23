@@ -1,9 +1,11 @@
 # Weekly quiz routine
 
 The Claude Code Routine "Weekly quiz batch (TechNews-Bot)" (`trig_01AXXtZJkcAtdC4iAk7T2cYm`)
-runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud session. It writes the next 7 days of quizzes in one go and books them on the server; the server
-renders each one 45 minutes before its slot (preview in Discord), posts it at `POST_TIME`
-(12:00) and deletes the video. Claude is only involved once a week. Keep this file and the trigger in sync.
+runs this prompt every **Monday at 19:05 Europe/London** in a fresh cloud session, 30 minutes
+after the weekly review ([REVIEW_PROMPT.md](REVIEW_PROMPT.md)), whose findings it follows. It
+writes the next 7 days of quizzes in one go and books them on the server; the server renders each
+one 45 minutes before its slot (preview in Discord), posts it at `POST_TIME` (12:00) and deletes
+the video. Keep this file and the trigger in sync.
 
 ---
 
@@ -16,32 +18,38 @@ If GET APP_URL/schedule returns 404, the old tech-news version of the app is sti
 
 1. Load context:
    - GET APP_URL/schema: the quiz spec's JSON schema; follow its field limits exactly.
+   - GET APP_URL/insights/latest: the weekly review written 30 minutes ago from last week's numbers (404 = no review yet). Follow its recommendations and run its experiments exactly as described, including the tags it asks for; where they conflict with the defaults below, the review wins (but never the safety and fact-checking rules).
    - GET APP_URL/schedule?days=7: the posting slots. `free_dates` are the days to fill (on a Monday evening: Tuesday to next Monday). Days already booked are left alone.
-   - GET APP_URL/history?limit=60: past quizzes with their theme, palette, round types and answers. Never reuse an answer from the history or from quizzes already booked.
+   - GET APP_URL/history?limit=60: past quizzes with their theme, title, palette, round types and answers. Never reuse an answer from the history or from quizzes already booked.
 
 2. Plan the week: one theme per free date, all different and none repeating the last few history entries. Mix broad themes (e.g. 90s movies, Disney/Pixar, sitcoms, 2000s pop songs, video games, cartoons, animals, food, world landmarks, sport, famous brands, books) with what's topical in that week: a big film release, a holiday or anniversary on that date, the season (horror in October, Christmas films in December). One day a week can be a general-knowledge mix with no theme. Give weekends the easier, broader themes. Rotate the 5 palettes so neighbouring days differ.
+   Every week also include two special quizzes, on different days (not back to back):
+   - HARD MODE (one a week, ideally midweek): genuinely tougher trivia for people who think they know it all. Use `choice`, `true_false` and `odd_one_out` rounds (an `emoji` or `unscramble` round is fine only if it is properly hard), with less obvious answers: deep cuts, exact years, "which came first", behind-the-scenes facts. Still fair: every answer must be checkable, nothing obscure for its own sake; aim for a typical score of 2/5. Give it 7-8 s of think time per round. Say so in the title, e.g. "*Hard* mode: only 1% get 5/5", and in the caption.
+   - FORMAT SPECIAL (one a week, ideally at the weekend): every round uses the same round type, e.g. all `emoji`, all `bad_description`, all `unscramble`, all `true_false` ("Real or fake?") or all `odd_one_out`. Pick a different format from the last format special (check the history's round types), and say it in the title, e.g. "5 *scrambled* movies: can you solve them?", "Badly described *Disney* films".
+   The other five quizzes follow the normal mix below.
 
-3. For each quiz write 4-5 rounds (3 is allowed for long clues). Mix the types; every quiz should have at least one `emoji` and one `bad_description` round, then add others:
+3. For each quiz write 4-5 rounds (3 is allowed for long clues, or when the review asks for shorter quizzes). In normal quizzes mix the types: at least one `emoji` and one `bad_description` round, then add others (the format special uses one type throughout; hard mode follows step 2):
    - `emoji`: 2-7 emojis that spell out a famous title. Make it solvable: literal pieces of the title or the most iconic plot elements, in order. Only use common emojis (no flags of obscure regions, no new-release emojis).
    - `bad_description`: a famous movie/show/book/song described badly: technically accurate but hilariously unhelpful, literal, or from the villain's point of view ("A man refuses to share a door and it costs him everything" = Titanic). Max 120 chars, one *highlighted* word.
    - `true_false` (shown as "Real or fake?"): a surprising statement plus a one-line explanation. About half should be fake, but fakes must be plausible.
    - `choice`: a question with 3-4 short options ("Which came out first?", "What year…?", "Who voiced…?").
    - `odd_one_out`: four items, one doesn't belong for a clear, checkable reason.
    - `unscramble`: just give the answer (4-22 letters); the renderer scrambles it. Best for short, well-known titles.
-   Order rounds from easiest to hardest, with the most fun one last. Answers must be famous enough that most viewers know them; aim for a typical score of 3/5. No answer may appear twice in the week.
+   Order rounds from easiest to hardest, with the most fun one last. In normal quizzes, answers must be famous enough that most viewers know them; aim for a typical score of 3/5. No answer may appear twice in the week.
 
-4. Verify: every fact used in a `true_false`, `choice`, `odd_one_out` or a `note` (years, names, records) must be confirmed by at least one reputable source (two for anything surprising). If you can't confirm it, replace the round. Nothing rude, political, tragic or about private individuals.
+4. Verify: every fact used in a `true_false`, `choice`, `odd_one_out` or a `note` (years, names, records) must be confirmed by at least one reputable source (two for anything surprising, and two for every fact in the hard-mode quiz). If you can't confirm it, replace the round. Nothing rude, political, tragic or about private individuals.
 
 5. Write each spec (validate against the schema):
    - id: YYYY-MM-DD-short-slug (the date it posts; add -pm for an evening slot on the same day).
    - title: a hook of max ~8 words with exactly one *highlighted* word, e.g. "Only *real* 90s kids get 5/5", "Guess the Disney film from *emojis*". subtitle: short, e.g. "Guess before the timer runs out".
-   - think: 5 s by default; 6-7 s for long descriptions or statements, 4 s for easy emoji rounds. reveal: leave the default.
+   - think: 5 s by default; 6-7 s for long descriptions or statements, 4 s for easy emoji rounds, 7-8 s in hard mode. reveal: leave the default.
    - palette: one of the schema's palettes, different from the quiz before.
    - music: "auto" (picks from the uploaded library, else built-in synth music).
-   - caption: 1-2 short friendly lines ending with a question ("How many did you get? 👇"), no answers in the caption. 3-6 hashtags (#quiz plus theme tags).
+   - caption: 1-2 short friendly lines ending with a question or call to action ("How many did you get? 👇"), no answers in the caption. 3-6 hashtags (#quiz plus theme tags; add #hardquiz for hard mode).
+   - tags: labels the dashboard and next week's review compare by. Always set `special` (`hard`, `format` or `none`) and `cta` (a 1-3 word label for the call to action you used, e.g. `comment-score`, `answer-before-reveal`, `tag-a-friend`), plus every tag an experiment from the review asks for. Lowercase keys, short values.
 
-6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. Leave out `time` (each posts at the default time); only add `"time": "HH:MM"` if a human asked for extra posts on a day. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken slot, a quiz that can't be rendered); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
+6. Book the week in one request: POST APP_URL/schedule with `{"items": [{"date": "YYYY-MM-DD", "spec": {...}}, ...]}` (Content-Type: application/json), one item per free date. Leave out `time` (each posts at the default time); add `"time": "HH:MM"` only if a human asked for extra posts on a day or the review recommends a posting-time test. It's all-or-nothing: on 409 the response lists every problem (a repeated answer, a taken slot, a quiz that can't be rendered); fix those quizzes and resend the whole batch. On 422 fix the spec it names and resend. Never pass `replace: true` unless a human asked you to.
 
 7. Confirm: GET APP_URL/schedule?days=7 and check every slot you sent shows `booked` in its day's `bookings` (videos are made shortly before each post, not now). The server posts each one at its time and sends previews and results to Discord itself.
 
-8. Report in one short message: a table of date, time, theme and the answers, the sources for factual rounds, and anything that failed.
+8. Report in one short message: which of the review's recommendations and experiments you applied (and where), then a table of date, time, theme, tags and the answers (mark the hard-mode and format-special quizzes), the sources for factual rounds, and anything that failed.
