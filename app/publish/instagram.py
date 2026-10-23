@@ -163,14 +163,22 @@ def _wait(container: str, token: str, tries: int = 24) -> None:
         raise RuntimeError(f"Instagram processing failed: {status}: {s.text if s is not None else ''}"[:400])
 
 
-def _create(params: dict) -> str:
+FETCH_FAILED = (2207003, 2207052)  # Instagram timed out or failed fetching our media; usually fine on a retry
+
+
+def _create(params: dict, tries: int = 3) -> str:
     tok = store.get_tokens("instagram")
     if not tok:
         raise RuntimeError("Instagram not connected: visit /oauth/instagram/start")
-    r = httpx.post(f"{graph()}/{tok['user_id']}/media", data={**params, "access_token": tok["access_token"]}, timeout=60)
-    if r.status_code >= 400:
-        raise RuntimeError(f"Instagram container error: {r.text[:400]}")
-    return r.json()["id"]
+    for attempt in range(1, tries + 1):
+        r = httpx.post(f"{graph()}/{tok['user_id']}/media", data={**params, "access_token": tok["access_token"]}, timeout=90)
+        if r.status_code < 400:
+            return r.json()["id"]
+        sub = (r.json().get("error", {}) if r.headers.get("content-type", "").startswith("application/json") else {}).get("error_subcode")
+        if sub not in FETCH_FAILED or attempt == tries:
+            raise RuntimeError(f"Instagram container error: {r.text[:400]}")
+        log.warning("Instagram couldn't fetch %s (attempt %d): %s", params.get("image_url") or params.get("video_url"), attempt, r.text[:200])
+        time.sleep(10 * attempt)
 
 
 def _publish_container(container: str) -> dict:
@@ -196,7 +204,10 @@ def publish_story(image_url: str) -> dict:
 
 def publish_carousel(image_urls: list[str], caption: str) -> dict:
     """An image carousel post (2-10 JPEGs)."""
-    children = [_create({"image_url": u, "is_carousel_item": "true"}) for u in image_urls]
+    children = []
+    for u in image_urls:  # one at a time, spaced out: ten fetches at once is what Instagram trips over
+        children.append(_create({"image_url": u, "is_carousel_item": "true"}))
+        time.sleep(2)
     tok = store.get_tokens("instagram")
     for c in children:
         _wait(c, tok["access_token"])
