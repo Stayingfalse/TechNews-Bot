@@ -37,8 +37,8 @@ Environment variables:
 | `INSTAGRAM_CAROUSELS` | default `false`: once a week, post the week's most-viewed quiz again as a swipe-to-play carousel (clue, then answer) |
 | `CAROUSEL_DAY`, `CAROUSEL_TIME` | when the weekly carousel goes out: default `sun` and `18:00` (local) |
 | `ELEVENLABS_API_KEY` | optional: turns on the host voice-over for quizzes with `"voice": true` (ElevenLabs → Developers → API keys; text-to-speech permission is enough) |
-| `ELEVENLABS_VOICE_ID` | default `dEc1rkm0ul0kDedEuETS` ("Alex", a lively announcer) |
-| `ELEVENLABS_MODEL` | default `eleven_multilingual_v2` |
+| `ELEVENLABS_VOICE_ID` | default `dEc1rkm0ul0kDedEuETS` ("Alex", a lively announcer); for another voice, copy its ID in ElevenLabs (the voice's ⋯ menu → Copy voice ID) |
+| `ELEVENLABS_MODEL` | default `eleven_v3`; `eleven_v3` and `eleven_v4` read each line in an `[excited]` delivery, `eleven_multilingual_v2` is steadier |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |

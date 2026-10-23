@@ -52,7 +52,7 @@ class Settings:
         # Host voice-over for quizzes with "voice": true. Lines are cached in DATA_DIR/voice.
         self.elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", "")
         self.elevenlabs_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "dEc1rkm0ul0kDedEuETS")  # "Alex", lively announcer
-        self.elevenlabs_model = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+        self.elevenlabs_model = os.environ.get("ELEVENLABS_MODEL", "eleven_v3")  # v3/v4 read in an [excited] delivery
 
         # Instagram extras: a "new quiz out now" story after each Reel, and a weekly carousel of the
         # week's most-viewed quiz on CAROUSEL_DAY (mon..sun) at CAROUSEL_TIME (local).

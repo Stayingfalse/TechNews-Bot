@@ -7,6 +7,7 @@ synthesised once and cached on disk, so a re-render costs nothing.
 from __future__ import annotations
 
 import hashlib
+import re
 import logging
 import subprocess
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from .audio import SR
 log = logging.getLogger(__name__)
 
 NUMBERS = ("one", "two", "three", "four", "five")
+EXPRESSIVE = ("eleven_v3", "eleven_v4")  # models that understand [excited] and other delivery tags
 
 
 @dataclass
@@ -31,7 +33,13 @@ class VoiceConfig:
 
 
 def _clean(text: str) -> str:
-    return " ".join(text.replace("*", "").split())
+    """Written text as the host should say it: "5/5" → "5 out of 5"."""
+    text = re.sub(r"(\d)\s*/\s*(\d)", r"\1 out of \2", text.replace("*", ""))
+    return " ".join(text.split())
+
+
+def _name(user: str) -> str:
+    return " ".join(re.sub(r"[._-]+", " ", user).split())  # early_bird → "early bird"
 
 
 def _spoken_answer(rnd) -> str:
@@ -66,7 +74,8 @@ def script(video) -> list[tuple[float, str]]:
             names = scene.item.get("shoutouts")
             line = f"Yesterday's cliffhanger? It was... {scene.item['answer']}!"
             if names:
-                line += " Well done, " + (", ".join(names[:3]) + (" and the rest of you!" if len(names) > 3 else "!"))
+                spoken = [_name(n) for n in names]
+                line += " Well done, " + (", ".join(spoken[:3]) + (" and the rest of you!" if len(spoken) > 3 else "!"))
             out.append((start + 0.2, line))
         elif isinstance(scene, OutroScene):
             out.append((start + 0.1, _clean(spec.outro)
@@ -79,11 +88,14 @@ def _fetch(text: str, cfg: VoiceConfig) -> Path:
     path = cfg.cache_dir / f"{key}.mp3"
     if path.exists():
         return path
+    if cfg.model in EXPRESSIVE:  # these read delivery tags; they take only 0, 0.5 or 1 for stability
+        body = {"text": f"[excited] {text}", "model_id": cfg.model, "voice_settings": {"stability": 0.5}}
+    else:
+        body = {"text": text, "model_id": cfg.model,
+                "voice_settings": {"stability": 0.35, "similarity_boost": 0.8, "style": 0.6}}
     r = httpx.post(f"https://api.elevenlabs.io/v1/text-to-speech/{cfg.voice_id}",
                    params={"output_format": "mp3_44100_128"}, timeout=60,
-                   headers={"xi-api-key": cfg.api_key},
-                   json={"text": text, "model_id": cfg.model,
-                         "voice_settings": {"stability": 0.35, "similarity_boost": 0.8, "style": 0.6}})
+                   headers={"xi-api-key": cfg.api_key}, json=body)
     if r.status_code >= 400:
         raise RuntimeError(f"ElevenLabs {r.status_code}: {r.text[:200]}")
     cfg.cache_dir.mkdir(parents=True, exist_ok=True)
