@@ -20,10 +20,12 @@ Nothing here changes the quiz channel, except the shared voice budget (§7).
 | Renderer | **Skia canvas** (`@napi-rs/canvas`), not Remotion (§2). |
 | Script | **Lean script** (§7): story and aftermath ≤ 14 words each, choices on screen only, stock clips for everything that repeats. |
 | Out of credits | **Post without narration** (§7). |
-| Narrator | **Obsidian – A Dark Fantasy Storyteller** (ElevenLabs library, `acrqYoDVmcpJemOxjC39`), Cormac as the backup; test clips made, final pick by ear (§7). |
+| Narrator | **Obsidian – A Dark Fantasy Storyteller** (ElevenLabs library, `acrqYoDVmcpJemOxjC39`), chosen after the voice test (§7). |
 | Story | Our own campaign on **SRD 5.2.1** (CC BY 4.0), each week adapting one openly licensed **one-page dungeon** (§8). **Seasons** of ~6 weeks; season 1 follows ***Childe Rowland***. **Teen and up.** |
 | Dice | **Real rolls**: the AI sets skill and DC, the server rolls d20 + the hero's modifier on the day, odds shown on screen (§5). |
 | Quiz voice | **2,000 credits a month**, a hard allowance (§7). |
+| Hero death | **Permanent.** 0 hearts = a death episode, then a one-video Episode 0 for the next hero (§5, §10). |
+| Launch | **Episode 0 as four videos** teaching the format, each with a default vote (§10). |
 | Music | **CC0 tracks** from OpenGameArt per scene type, mixed with **synthesised** drones and sound effects; dice from Kenney's CC0 packs (§9). |
 
 ## 1. What already exists and gets reused
@@ -379,7 +381,7 @@ generating costs credits):
 **Test done** (26 Oct 2026, 144 credits): one take each of `[whispers] The iron door groans open…
 [dramatically] something BREATHES.` on eleven_v3 (5.8 s Obsidian, 5.6 s Cormac). The pick is
 confirmed by ear before the stock library is recorded, since every stock clip is tied to the voice;
-changing voice later means re-recording the library (~3,000 credits). Library voices need a paid ElevenLabs plan for API use,
+changing voice later means re-recording the library (~3,000 credits). **Chosen: Obsidian.** Library voices need a paid ElevenLabs plan for API use,
 which the quiz's voices already need.
 
 ### Guard rails
@@ -514,15 +516,29 @@ walk and the scene's props. CC0, so no credit needed.
 Licences are recorded in `assets/adventure/LICENSES.md` with each file's source URL, author and
 licence as downloaded, so a claim can be answered.
 
-## 10. Episode 0: character creator
+## 10. Episode 0
 
-A fixed template, not AI-written, voiced once into the stock library: three hero classes (rogue,
-wizard, fighter: the existing creatures) each shown in three looks (palette variants of the
-creature's part colours), the dice-less "Comment class + look, like B2" CTA, and a 3×3 card grid
-inside the safe zone. The tally picks class and look independently; the result becomes
-`state.hero` and every later node's `hero: "$hero"` resolves to it, together with the class's
-character sheet (§5, Dice), so the class viewers pick changes their odds all season: a rogue sneaks
-well, a fighter breaks doors, a wizard reads runes. Each class card shows its best skills.
+### At launch: a four-part series (built: `adventure/`)
+
+Reach is tiny at launch, so the first Episode 0 teaches the format over four short videos, one a
+day, each ending in an easy vote that works with zero comments (the default is stated on screen:
+"No votes? We go with B."):
+
+| Part | Teaches | Vote → effect (default) |
+|---|---|---|
+| 1 How it works | a new episode daily at 9am, comment A/B/C, most votes wins, the dice are real and the odds are shown (a live demo roll), no votes = the default path | "What scares you most?" skeletons / goblins / wraiths → season 1's first foe (A) |
+| 2 Pick a hero | fighter, rogue, wizard with their best skill; 3 hearts; heroes die for good | class (B, rogue) |
+| 3 Pick a look | the chosen class in three looks; a fallen hero is replaced | look (A) |
+| 4 The quest | Ellen vanished; the crypt below the church; the hero's sheet | the first real choice (force the gate / pick the lock / search), each card showing the skill and the hero's odds (the best odds) |
+
+Fixed templates: the inputs are only the previous part's vote (`recap`), the fear, and the hero,
+validated so the recap can't disagree with what it decided. Voiced once into the stock library.
+Episode 1 (the first AI-written week) follows part 4.
+
+### Later: one video
+
+Each new season, and the day after a hero dies, a single Episode 0 video: the three classes ×
+three looks on one screen and one comment like `B2` (class + look), default B1.
 
 ## 11. Milestones
 
@@ -530,7 +546,7 @@ Stop for review after each.
 
 | | Scope | Done when |
 |---|---|---|
-| **M1** | `adventure/` workspace; port of engine (dsl, gen, standee, die, plan, segs, cues) to TS with explicit PRNG; Skia backend; `render ep.json --audio clip.mp3 --out out.mp4`; safe-zone layout change; bundled fonts | EP1 from the prototype renders 1080×1920 30 fps with the prototype's audio in sync; golden frames at t = 1, 6, 12, 18.5 (die mid-air), 20 (landed), 30, 38 s; render time reported on 4 cores; side-by-side frames vs. prototype for sign-off |
+| **M1** (in progress) | `adventure/` workspace; port of engine (dsl, gen, standee, die, plan, segs, cues) to TS with explicit PRNG; Skia backend; `render ep.json --audio clip.mp3 --out out.mp4`; safe-zone layout change; bundled fonts. **Done so far:** workspace, map generator, DSL, standees, d20, character sheet and odds, Skia + ffmpeg renderer with 4 workers, the four Episode 0 videos, safe-zone and determinism tests, CI. **Left:** the story-episode template (`plan`/`segs`/cues, EP1) and audio sync | EP1 from the prototype renders 1080×1920 30 fps with the prototype's audio in sync; golden frames at t = 1, 6, 12, 18.5 (die mid-air), 20 (landed), 30, 38 s; render time reported on 4 cores (**measured: Episode 0 renders 20-29 s per 26-41 s video**); side-by-side frames vs. prototype for sign-off |
 | **M2** | zod schemas + JSON Schema export; content library (built-ins + payload merge); generator tests | Same seed ⇒ byte-identical map; props never overlap (min distance); path stays on floor pixels; all 4 `dir`s for all scenes; payload smoke render; `validate` CLI |
 | **M3** | Voice test (Obsidian vs Cormac, ~120 credits); lean script; stock library generation; daily clip with timestamps + `fromAlign` + fallback; clip assembly; credit ledger + budget guard; music folder, synth beds and effects, Kenney dice synced to the throw | Measured credits per character for v3 (and whether tags count); stock library made once; a daily clip ≤ 240 credits; cues exact on the assembled track; audio mix signed off |
 | **M4** | `kind=adventure` channel (MULTI_ACCOUNT steps 1-3, 5 for this channel only: Instagram only, 09:00 slot, 60-min lead); `POST /adventure/arc` with all checks; map pre-bake + booking; source briefs + credit lines (§8) for season 1; `docs/ADVENTURE_ROUTINE_PROMPT.md` + the Tuesday 00:05 routine | A hand-written 7-layer arc books and every node renders in dry run (placeholder voice); bad arcs get every problem back in one response; captions carry the right credits |
@@ -540,18 +556,15 @@ Stop for review after each.
 
 ## 12. Open questions
 
-**Still need your call**
+**Need your call:** none right now.
 
-1. **Narrator**: Obsidian or Cormac, from the two test clips?
-2. **Hero death**: OK that a hero who loses all 3 hearts dies for good (death episode, then a new
-   Episode 0 the next day), or should a fall only cost something (an item, a rule broken) and the
-   same hero carry on?
+**Technical: answered during the milestones**
 
-**Technical: answered during the milestones, nothing needed from you**
-
-3. ~~Whether eleven_v3 bills audio tags~~: measured, 1 credit per character including tags.
-4. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
-5. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5: confirm;
+1. ~~Whether eleven_v3 bills audio tags~~: measured, 1 credit per character including tags.
+2. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
+3. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5: confirm;
    otherwise a manual pin from the Discord link).
-6. Votes in replies to other comments: top-level only unless numbers show people vote in replies.
-7. Each one-page dungeon's own licence statement, at intake (§8).
+4. Votes in replies to other comments: top-level only unless numbers show people vote in replies.
+5. Each one-page dungeon's own licence statement, at intake (§8).
+6. The server image is Python-only: M4 adds Node 22 to the Dockerfile (or a second container) so
+   the server can call the renderer.

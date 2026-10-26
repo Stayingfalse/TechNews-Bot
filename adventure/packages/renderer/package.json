@@ -1,0 +1,1 @@
+{ "name": "@adventure/renderer", "private": true, "type": "module", "main": "src/cli.ts", "dependencies": { "@napi-rs/canvas": "1.0.9" } }
