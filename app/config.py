@@ -74,6 +74,15 @@ class Settings:
         # avatar-*.png files in assets/avatars, plus any added to DATA_DIR/avatars.
         self.avatar_every_weeks = int(os.environ.get("AVATAR_EVERY_WEEKS", "3"))
 
+        # The adventure channel (docs/ADVENTURE_PLAN.md): its renderer lives in adventure/ (Node).
+        self.adventure_dir = Path(os.environ.get("ADVENTURE_DIR", Path(__file__).resolve().parents[1] / "adventure"))
+        # Narrator: "Obsidian - A Dark Fantasy Storyteller" from the ElevenLabs library, on eleven_v3.
+        self.adventure_voice_id = os.environ.get("ADVENTURE_VOICE_ID", "acrqYoDVmcpJemOxjC39")
+        self.adventure_voice_model = os.environ.get("ADVENTURE_VOICE_MODEL", "eleven_v3")
+        # Voice credits the adventure channel may spend per calendar month (1 credit per character,
+        # tags included); past it, videos go out without narration.
+        self.adventure_voice_budget = int(os.environ.get("ADVENTURE_VOICE_BUDGET", "7200"))
+
         # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
         self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")
 

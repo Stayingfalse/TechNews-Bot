@@ -2,3 +2,6 @@
 out
 data
 __pycache__
+adventure/node_modules
+adventure/out
+adventure/.cache
