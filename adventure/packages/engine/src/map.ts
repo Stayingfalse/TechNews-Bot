@@ -2,15 +2,19 @@
 // stains, folds, warm light and upright 3D props. Baked once per request into a bitmap; frames only
 // crop it. World space is 600×600; the bitmap is 600·K pixels square.
 import { type Defs, STY } from "./defs.ts";
-import { dsl } from "./dsl.ts";
+import { dsl, markers } from "./dsl.ts";
 import { prng, type Rnd } from "./prng.ts";
-import { type Canvas, type MakeCanvas, FP, cl, lp } from "./util.ts";
+import { paperTexture } from "./tex.ts";
+import { type Canvas, type MakeCanvas, DISPLAY, cl, lp } from "./util.ts";
 
 export type MapRequest = {
   type: string; seed: number; dir?: "N" | "E" | "S" | "W"; size?: number; style?: string;
   accessories?: string[]; name?: string; stains?: number;
 };
-export type BakedMap = { cv: Canvas; k: number; tp: number[][]; len: number[] };
+/** A light the frame lighting opens up (map coordinates); `rgb` is "r,g,b". Flames are drawn live. */
+export type MapLight = { x: number; y: number; r: number; rgb: string };
+export type MapFlame = { x: number; y: number; s: number };
+export type BakedMap = { cv: Canvas; k: number; tp: number[][]; len: number[]; lights: MapLight[]; flames: MapFlame[] };
 
 type Pt = [number, number];
 
@@ -46,30 +50,33 @@ function stain(g: CanvasRenderingContext2D, rnd: Rnd, x: number, y: number, r: n
   g.restore();
 }
 
-/** An upright prop: glow for fire, contact shadow, slanted silhouette shadow, then the shaded prop. */
+/** An upright prop: soft contact shadow, a faint cast silhouette, then the shaded solid. */
 export function prop(g: CanvasRenderingContext2D, df: Defs, name: string, x: number, y: number, sc: number) {
   const parts = df.props[name];
+  const xs = parts.flatMap((p) => (typeof p[1] === "number" ? [p[1] as number] : []));
+  const foot = Math.max(8, (Math.max(...xs) - Math.min(...xs)) / 2 + 6) * sc;
   g.save();
   g.translate(x, y);
-  if (name === "torch" || name === "campfire") {
-    const gr = g.createRadialGradient(0, -18 * sc, 2, 0, -18 * sc, 64 * sc);
-    gr.addColorStop(0, "rgba(255,170,60,.4)");
-    gr.addColorStop(1, "rgba(255,170,60,0)");
-    g.fillStyle = gr;
-    g.fillRect(-70 * sc, -90 * sc, 140 * sc, 140 * sc);
-  }
-  g.fillStyle = "rgba(30,15,0,.3)";
-  g.beginPath();
-  g.ellipse(0, 0, 14 * sc, 5 * sc, 0, 0, 7);
-  g.fill();
+  const sh = g.createRadialGradient(foot * 0.35, foot * 0.12, 0, foot * 0.35, foot * 0.12, foot * 1.2);
+  sh.addColorStop(0, "rgba(25,12,0,.42)");
+  sh.addColorStop(0.6, "rgba(25,12,0,.18)");
+  sh.addColorStop(1, "rgba(25,12,0,0)");
+  g.fillStyle = sh;
   g.save();
+  g.scale(1, 0.45);
+  g.beginPath();
+  g.arc(foot * 0.35, foot * 0.12 / 0.45, foot * 1.2, 0, 7);
+  g.fill();
+  g.restore();
+  g.save();
+  g.globalAlpha = 0.55;
   g.scale(sc, sc);
-  g.transform(1, 0, -0.6, -0.3, 0, 0);
+  g.transform(1, 0, 0.75, -0.32, 0, 0);
   dsl(g, parts, { sil: true });
   g.restore();
   g.save();
   g.scale(sc, sc * 0.9);
-  dsl(g, parts, { ink: "#2a2418", lw: 1.6, sh: true });
+  dsl(g, parts, { lw: 1.1, sh: true });
   g.restore();
   g.restore();
 }
@@ -145,61 +152,39 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
   const tr = (q: number[]): Pt => [Tm[0] * q[0] + Tm[2] * q[1] + Tm[4], Tm[1] * q[0] + Tm[3] * q[1] + Tm[5]];
   const TS = Tm.map((v) => v * k) as [number, number, number, number, number, number];
 
+  const hatch = sd.out === "hatch";
   const M = make(SZ, SZ), g = M.getContext("2d");
-  g.scale(k, k);
+  // paper
   g.fillStyle = sty.paper;
-  g.fillRect(0, 0, 600, 600);
-  g.lineWidth = 1;
-  for (let i = 0; i <= 600; i += 20) {
-    g.strokeStyle = `rgba(${sty.grid},${i % 100 ? 0.3 : 0.6})`;
-    g.beginPath();
-    g.moveTo(i, 0);
-    g.lineTo(i, 600);
-    g.moveTo(0, i);
-    g.lineTo(600, i);
-    g.stroke();
-  }
-  for (let i = 0; i < 5000; i++) {
-    g.fillStyle = `rgba(120,90,50,${0.03 + rnd() * 0.05})`;
-    g.fillRect(rnd() * 600, rnd() * 600, 0.8, 0.8);
-  }
-  const L = make(SZ, SZ), l = L.getContext("2d");
-  l.setTransform(...TS);
-  if (sd.out === "hatch") {
-    l.fillStyle = sty.tint;
-    l.fillRect(0, 0, 600, 600);
-    l.strokeStyle = sty.ink;
-    l.globalAlpha = 0.3;
-    l.lineWidth = 1;
-    for (let i = -600; i < 1200; i += 9) {
-      l.beginPath();
-      l.moveTo(i, -10);
-      l.lineTo(i + 610, 600);
-      l.stroke();
+  g.fillRect(0, 0, SZ, SZ);
+  g.drawImage(paperTexture(make, rq.seed, SZ) as unknown as CanvasImageSource, 0, 0);
+  g.scale(k, k);
+  const grid = (alpha: number) => {
+    g.lineWidth = 0.6;
+    for (let i = 0; i <= 600; i += 20) {
+      g.strokeStyle = `rgba(${sty.grid},${i % 100 ? alpha : alpha * 1.8})`;
+      g.beginPath();
+      g.moveTo(i, 0);
+      g.lineTo(i, 600);
+      g.moveTo(0, i);
+      g.lineTo(600, i);
+      g.stroke();
     }
-    l.globalAlpha = 1;
-  }
-  l.strokeStyle = sty.ink;
-  l.lineWidth = 9;
-  l.lineJoin = "round";
-  fl.forEach((p) => {
-    pp(l, p);
-    l.stroke();
-  });
-  l.globalCompositeOperation = "destination-out";
-  fl.forEach((p) => {
-    pp(l, p);
-    l.fill();
-  });
+  };
+  grid(0.07);
+  // floors: a light wash and a firmer grid (in the rotated frame, like the walls)
   g.save();
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.shadowColor = "rgba(30,15,0,.5)";
-  g.shadowBlur = 26 * h;
-  g.shadowOffsetX = 9 * h;
-  g.shadowOffsetY = 13 * h;
-  g.drawImage(L as unknown as CanvasImageSource, 0, 0);
+  g.setTransform(...TS);
+  g.beginPath();
+  fl.forEach((p) => p.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))));
+  g.clip("nonzero");
+  g.fillStyle = sd.path || sty.wash;
+  g.fillRect(-10, -10, 620, 620);
+  g.setTransform(k, 0, 0, k, 0, 0);
+  grid(0.22);
   g.restore();
 
+  // masks (unrotated world space): the floor, and a band just outside it
   const K = make(600, 600), kc = K.getContext("2d");
   kc.fillStyle = "#000";
   fl.forEach((p) => {
@@ -208,16 +193,95 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
   });
   const D = kc.getImageData(0, 0, 600, 600).data;
   const inF = (x: number, y: number) => x >= 0 && y >= 0 && x < 600 && y < 600 && D[((y | 0) * 600 + (x | 0)) * 4 + 3] > 40;
+  const NB = make(600, 600), nb = NB.getContext("2d");
+  nb.strokeStyle = "#000";
+  nb.lineJoin = "round";
+  nb.lineWidth = hatch ? 34 : 24;
+  fl.forEach((p) => {
+    pp(nb, p);
+    nb.stroke();
+  });
+  const DN = nb.getImageData(0, 0, 600, 600).data;
+  const near = (x: number, y: number) => x >= 0 && y >= 0 && x < 600 && y < 600 && DN[((y | 0) * 600 + (x | 0)) * 4 + 3] > 40;
+
+  // walls: ink line, hatching tufts outside (old-school dungeon maps) or grass stipple outdoors
+  const rh = prng(rq.seed * 13 + 7);
+  const L = make(SZ, SZ), l = L.getContext("2d");
+  l.setTransform(...TS);
+  l.strokeStyle = sty.ink;
+  l.lineCap = "round";
+  if (hatch) {
+    l.fillStyle = sty.rock;
+    l.fillRect(0, 0, 600, 600);
+    for (let i = 0; i < 9000; i++) {
+      const x = rh() * 600, y = rh() * 600;
+      if (inF(x, y) || !near(x, y)) continue;
+      const a = rh() * Math.PI, n = 3 + ((rh() * 3) | 0), len = 4 + rh() * 4, gap = 1.5;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      l.globalAlpha = 0.5 + rh() * 0.4;
+      l.lineWidth = 0.45 + rh() * 0.35;
+      l.beginPath();
+      for (let j = 0; j < n; j++) {
+        const o = (j - (n - 1) / 2) * gap, cx = x - uy * o, cy = y + ux * o, h = len * (0.75 + rh() * 0.25) / 2;
+        l.moveTo(cx - ux * h, cy - uy * h);
+        l.lineTo(cx + ux * h, cy + uy * h);
+      }
+      l.stroke();
+    }
+    l.globalAlpha = 1;
+  } else {
+    if (sd.ground) {
+      l.fillStyle = sd.ground;
+      l.fillRect(0, 0, 600, 600);
+    }
+    for (let i = 0; i < 1800; i++) {
+      const x = rh() * 600, y = rh() * 600;
+      if (inF(x, y) || !near(x, y)) continue;
+      l.globalAlpha = 0.35 + rh() * 0.4;
+      l.lineWidth = 0.7;
+      l.beginPath();
+      l.moveTo(x - 2, y);
+      l.lineTo(x - 0.5, y - 3 - rh() * 2);
+      l.moveTo(x + 2, y);
+      l.lineTo(x + 0.5, y - 3 - rh() * 2);
+      l.stroke();
+    }
+    l.globalAlpha = 1;
+  }
+  l.lineWidth = hatch ? 6 : 3.5;
+  l.lineJoin = "round";
+  fl.forEach((p) => {
+    pp(l, p);
+    l.stroke();
+  });
+  l.globalCompositeOperation = "destination-out";
+  l.fillStyle = "#000";
+  fl.forEach((p) => {
+    pp(l, p);
+    l.fill();
+  });
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.shadowColor = "rgba(40,22,5,.7)";
+  g.shadowBlur = 16 * h;
+  g.shadowOffsetX = 5 * h;
+  g.shadowOffsetY = 8 * h;
+  g.drawImage(L as unknown as CanvasImageSource, 0, 0);
+  g.restore();
 
   g.setTransform(...TS);
   const placed: number[][] = [LP], ups: [string, number, number, number][] = [];
+  const lights: MapLight[] = [], flames: MapFlame[] = [];
   const put = (n: string, x: number, y: number, sc: number, r: number) => {
+    const parts = df.items[n] || [];
     g.save();
     g.translate(x, y);
     g.rotate(r);
     g.scale(sc, sc);
-    dsl(g, df.items[n] || [], { ink: sty.ink, lw: 2.2 / sc });
+    dsl(g, parts, { lw: 0.9 / sc, sh: true });
     g.restore();
+    const [mx, my] = tr([x, y]);
+    for (const [, , lr, rgb] of markers(parts).lights) lights.push({ x: mx, y: my, r: lr * sc, rgb });
   };
   const spot = (w: string): Pt | null => {
     for (let i = 0; i < 70; i++) {
@@ -233,8 +297,13 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
     return null;
   };
   const drop = (n: string, x: number, y: number, sc: number) => {
-    if (df.props[n]) ups.push([n, ...tr([x, y]), sc]);
-    else put(n, x, y, sc, n === "torch" ? 0 : rnd() * 6.28);
+    if (df.props[n]) {
+      const [mx, my] = tr([x, y]);
+      ups.push([n, mx, my, sc]);
+      const m = markers(df.props[n]);
+      for (const [fx, fy, fs] of m.flames) flames.push({ x: mx + fx * sc, y: my + fy * sc * 0.9, s: fs * sc });
+      for (const [lx, ly, lr, rgb] of m.lights) lights.push({ x: mx + lx * sc, y: my + ly * sc * 0.9, r: lr * sc, rgb });
+    } else put(n, x, y, sc, n === "torch" ? 0 : rnd() * 6.28);
   };
   drop(sd.landmark[0], LP[0], LP[1], 1.6);
   const extra = (rq.accessories || []).map((a): [string, number, string] => [a, 1 + ((rnd() * 2) | 0), "floor"]);
@@ -245,44 +314,38 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
     }
   }
   g.setTransform(k, 0, 0, k, 0, 0);
-  const ns = rq.stains == null ? 2 : rq.stains;
+  const ns = rq.stains == null ? 1 : rq.stains;
   for (let i = 0; i < ns; i++) stain(g, rnd, 70 + rnd() * 460, 70 + rnd() * 460, i ? 26 + rnd() * 8 : 40 + rnd() * 14);
+  // folds: a soft valley with a lit edge
   for (const [a, b, c, d] of [[300, 0, 300, 600], [0, 300, 600, 300]]) {
-    g.lineWidth = 1.4;
-    g.strokeStyle = "rgba(60,40,10,.14)";
-    g.beginPath();
-    g.moveTo(a, b);
-    g.lineTo(c, d);
-    g.stroke();
-    g.strokeStyle = "rgba(255,255,255,.4)";
-    g.beginPath();
-    g.moveTo(a + 1.4, b + 1.4);
-    g.lineTo(c + 1.4, d + 1.4);
-    g.stroke();
+    const vert = a === c, gr = vert ? g.createLinearGradient(a - 6, 0, a + 6, 0) : g.createLinearGradient(0, b - 6, 0, b + 6);
+    gr.addColorStop(0, "rgba(60,35,10,0)");
+    gr.addColorStop(0.45, "rgba(60,35,10,.12)");
+    gr.addColorStop(0.55, "rgba(255,250,235,.25)");
+    gr.addColorStop(1, "rgba(255,250,235,0)");
+    g.fillStyle = gr;
+    if (vert) g.fillRect(a - 6, 0, 12, 600);
+    else g.fillRect(0, b - 6, 600, 12);
   }
   g.fillStyle = sty.ink;
-  g.font = `15px ${FP}`;
+  g.font = `700 13px ${DISPLAY}`;
   g.textAlign = "center";
   const lt = tr(LP), st = tr(path[0]);
   g.fillText(rq.name || sd.landmark[1], cl(lt[0], 80, 520), lt[1] > 540 ? lt[1] - 52 : cl(lt[1] + 38, 16, 584));
-  g.font = `12px ${FP}`;
-  g.fillText("ENTER ▸", cl(st[0], 40, 560), st[1] > 300 ? st[1] - 20 : st[1] + 26);
+  g.font = `700 10px ${DISPLAY}`;
+  g.fillText("ENTER »", cl(st[0], 40, 560), st[1] > 300 ? st[1] - 20 : st[1] + 26);
   ups.sort((a, b) => a[2] - b[2]).forEach(([n, x, y, sc]) => prop(g, df, n, x, y, sc));
   g.setTransform(1, 0, 0, 1, 0, 0);
-  let lg = g.createRadialGradient(380 * h, 300 * h, 40 * h, 380 * h, 300 * h, 1000 * h);
-  lg.addColorStop(0, "rgba(255,236,190,.26)");
-  lg.addColorStop(1, "rgba(255,236,190,0)");
-  g.fillStyle = lg;
-  g.fillRect(0, 0, SZ, SZ);
-  lg = g.createRadialGradient(600 * h, 600 * h, 420 * h, 600 * h, 600 * h, 900 * h);
-  lg.addColorStop(0, "rgba(30,10,0,0)");
-  lg.addColorStop(1, "rgba(30,10,0,.5)");
-  g.fillStyle = lg;
+  // age: darker towards the sheet's edges
+  const vg = g.createRadialGradient(SZ / 2, SZ / 2, SZ * 0.35, SZ / 2, SZ / 2, SZ * 0.75);
+  vg.addColorStop(0, "rgba(70,40,10,0)");
+  vg.addColorStop(1, "rgba(70,40,10,.28)");
+  g.fillStyle = vg;
   g.fillRect(0, 0, SZ, SZ);
 
   const tp = path.map(tr), len = [0];
   for (let i = 1; i < tp.length; i++) len.push(len[i - 1] + Math.hypot(tp[i][0] - tp[i - 1][0], tp[i][1] - tp[i - 1][1]));
-  return { cv: M, k, tp, len };
+  return { cv: M, k, tp, len, lights, flames };
 }
 
 /** A point a fraction f of the way along the map's path, and the direction of travel there. */

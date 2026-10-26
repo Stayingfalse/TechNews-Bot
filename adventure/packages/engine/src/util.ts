@@ -8,13 +8,27 @@ export type MakeCanvas = (w: number, h: number) => Canvas;
 export const W = 360;
 export const H = 640;
 
-export const INK = "#1d3b8b";
-export const RED = "#c0392b";
-export const GRN = "#1f8a4c";
-/** Hand-lettering (prototype: system cursive fonts) and the hook's display face (prototype: Impact). */
-export const FP = '"Patrick Hand"';
-export const DISPLAY = "Anton";
+// The look: iron-gall ink on old parchment, rubricated in red, with gilt highlights.
+export const INK = "#2a1d14";
+export const RED = "#9b2c1e";
+export const GRN = "#2f6e3f";
+export const GOLD = "#d4a440";
+export const CREAM = "#f3e4c2";
+export const NIGHT = "#140e18";
+/** Body text (narration, cards) and the display face (titles, banners, dice numbers). */
+export const FP = "Alegreya";
+export const DISPLAY = "Cinzel";
 export const font = (w: number | string, z: number) => `${w} ${z}px ${FP}`;
+export const dfont = (w: number | string, z: number) => `${w} ${z}px ${DISPLAY}`;
+
+/** A colour moved towards white (k > 0) or black (k < 0). */
+export function shade(hex: string, k: number): string {
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+  const n = parseInt(h, 16), t = k > 0 ? 255 : 0, a = Math.abs(k);
+  const ch = (v: number) => Math.round(v + (t - v) * a);
+  return `rgb(${ch((n >> 16) & 255)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
 
 export const cl = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 export const seg = (t: number, a: number, b: number) => cl((t - a) / (b - a));

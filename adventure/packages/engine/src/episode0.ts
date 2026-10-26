@@ -7,10 +7,10 @@
 // Fixed templates: their voice-over is recorded once into the stock library.
 import { type BakedMap, along } from "./map.ts";
 import { type Creature, type Defs, recolor } from "./defs.ts";
-import { type Frame, big, fade, fit, flicker, heart, narr, parch, standee, star, txt } from "./draw.ts";
+import { type Frame, type Light, big, dtxt, fade, fit, flame, heart, lighting, narr, parch, ribbon, seal, standee, star, txt } from "./draw.ts";
 import { THROW, throwDie } from "./dice.ts";
 import { CLASSES, CLASS_ORDER, type ClassKey, modifier, odds, pct, signed, skillName } from "./sheet.ts";
-import { GRN, H, INK, RED, W, cl, ez, font, lp, seg } from "./util.ts";
+import { CREAM, GOLD, GRN, H, INK, RED, W, cl, ez, font, lp, seg } from "./util.ts";
 
 export type Foe = "skeleton" | "goblin" | "wraith";
 export const FEARS: { foe: Foe; label: string; pick: string }[] = [
@@ -143,7 +143,7 @@ export function drawEpisode0(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
     c.globalAlpha = 1;
   }
   if (out > 0) {
-    c.fillStyle = `rgba(13,20,40,${0.55 * out})`;
+    c.fillStyle = `rgba(14,9,18,${(lineupMode ? 0.4 : 0.3) * out})`;
     c.fillRect(0, 0, W, H);
   }
   if (!lineupMode && out > 0) {
@@ -151,12 +151,24 @@ export function drawEpisode0(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
     standee(F, hero, HERO_CTA[0], HERO_CTA[1], 1.6, 1, T, 0);
     c.globalAlpha = 1;
   }
-  flicker(F);
+  // torchlight: the map's lights, plus the hero's lantern (or spots on the lineup)
+  const lights: Light[] = [];
+  for (const l of S.map.lights) {
+    const X = sx(l.x), Y = sy(l.y), r = l.r * z;
+    if (X > -r && X < W + r && Y > -r && Y < H + r) lights.push({ x: X, y: Y, r, rgb: l.rgb });
+  }
+  if (!lineupMode) lights.push({ x: lp(sx(hp[0]), HERO_CTA[0], out), y: lp(sy(hp[1]), HERO_CTA[1], out) - 18, r: 125, rgb: "255,190,110" });
+  else COLS.forEach((x) => lights.push({ x, y: LINEUP_Y - 10, r: 95, rgb: "255,200,140" }));
+  lighting(F, lights, lineupMode ? 0.42 : 0.52);
+  S.map.flames.forEach((f, i) => {
+    const X = sx(f.x), Y = sy(f.y);
+    if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) flame(F, X, Y, f.s * z * 0.95, i * 1.9);
+  });
 
   // --- part tag
   if (T > HE && T < P.cta) {
-    parch(F, 16, ASK_Y, 150, 26, undefined, false);
-    txt(F, `EPISODE 0 · PART ${s.part} OF 4`, 91, ASK_Y + 18, 11);
+    parch(F, 16, ASK_Y, 150, 26);
+    dtxt(F, `EPISODE 0 · PART ${s.part} OF 4`, 91, ASK_Y + 17, 10);
   }
 
   // --- beats
@@ -176,26 +188,31 @@ export function drawEpisode0(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
   c.restore();
   c.fillStyle = "rgba(128,128,128,.4)";
   c.fillRect(0, H - 4, W, 4);
-  c.fillStyle = RED;
+  c.fillStyle = GOLD;
   c.fillRect(0, H - 4, (W * T) / P.dur, 4);
 }
 
 function hook(F: Frame, s: Episode0Spec, S: Scene0, hero: Creature, HE: number) {
   const { c, T } = F;
   const a = T < HE - 0.4 ? 1 : (HE + 0.1 - T) / 0.5;
-  c.fillStyle = `rgba(13,20,40,${0.9 * a})`;
+  c.fillStyle = `rgba(14,9,18,${0.86 * a})`;
   c.fillRect(-20, -20, W + 40, H + 40);
+  const hv = c.createRadialGradient(180, 300, 20, 180, 300, 260);
+  hv.addColorStop(0, `rgba(255,170,80,${0.22 * a})`);
+  hv.addColorStop(1, "rgba(255,170,80,0)");
+  c.fillStyle = hv;
+  c.fillRect(0, 0, W, H);
   c.globalAlpha = a;
-  standee(F, s.part === 1 ? S.defs.creatures.skeleton : hero, 180, 300, 3.1, 1, T, 0);
-  txt(F, "EPISODE 0 · YOU DECIDE THE STORY", W / 2, 96, 13, "#ffe680");
+  standee(F, s.part === 1 ? S.defs.creatures.skeleton : hero, 180, 300, 3.1, 1, T, 0, s.part === 1 ? RED : GOLD);
+  dtxt(F, "EPISODE 0 · YOU DECIDE THE STORY", W / 2 - 10, 96, 12, GOLD);
   const lines: [string, string, string] =
     s.part === 1 ? ["YOU DECIDE", "THE STORY", "A dungeon crawl run by your comments."]
       : s.part === 2 ? ["PICK", "YOUR HERO", "Who goes into the dark?"]
         : s.part === 3 ? ["PICK", "A LOOK", `Your ${CLASSES[s.hero!.cls].name.toLowerCase()} needs a face.`]
           : ["MEET YOUR", CLASSES[s.hero!.cls].name.toUpperCase(), "The quest starts now."];
-  big(F, lines[0], 180, 386, 50, "#fff", 0.1, 0.4);
-  big(F, lines[1], 180, 442, 54, "#ffd23f", 0.5, 0.8);
-  if (T > 1.4) txt(F, lines[2], W / 2, 474, 17, "#fff", "center", 600);
+  big(F, lines[0], 170, 386, 44, CREAM, 0.1, 0.4);
+  big(F, lines[1], 170, 440, 48, GOLD, 0.5, 0.8);
+  if (T > 1.4) txt(F, lines[2], W / 2 - 10, 472, 17, CREAM, "center", 500);
   c.globalAlpha = 1;
 }
 
@@ -208,7 +225,7 @@ function recapCard(F: Frame, s: Episode0Spec, label: string, [a0, a1]: [number, 
   c.save();
   c.globalAlpha = a;
   parch(F, 16, y, W - 76, 96);
-  txt(F, tot ? "YESTERDAY'S VOTE" : "NO VOTES YESTERDAY", 158, y + 22, 12);
+  dtxt(F, tot ? "YESTERDAY'S VOTE" : "NO VOTES YESTERDAY", 158, y + 22, 11);
   txt(F, tot ? `${v[i]} of ${tot} of you chose` : "so we took the default:", 158, y + 45, 15, INK, "center", 600);
   fit(F, `[${"ABC"[i]}] ${label.toUpperCase()}`, 158, y + 72, 16, W - 100, RED);
   c.restore();
@@ -225,20 +242,15 @@ function part1(F: Frame, s: Episode0Spec, P: Plan, hx: number, hy: number) {
       const a = pa * ez(seg(T, b2[0] + 0.6 + i * 0.3, b2[0] + 1.1 + i * 0.3)), x = cl(hx + dx, 40, 290), y = cl(hy + dy, 190, 420) + Math.sin(T * 5 + i) * 2;
       c.save();
       c.globalAlpha = a;
-      c.setLineDash([6, 6]);
-      c.strokeStyle = INK;
-      c.lineWidth = 2.2;
+      c.setLineDash([5, 5]);
+      c.strokeStyle = "rgba(243,228,194,.85)";
+      c.lineWidth = 2;
       c.beginPath();
       c.moveTo(hx, hy - 30);
       c.lineTo(x, y);
       c.stroke();
       c.setLineDash([]);
-      c.fillStyle = "#ffe680";
-      c.beginPath();
-      c.arc(x, y, 15, 0, 7);
-      c.fill();
-      c.stroke();
-      txt(F, "ABC"[i], x, y + 6, 16, INK, "center", 900);
+      seal(F, x, y, 14, "ABC"[i]);
       c.restore();
     });
   }
@@ -249,7 +261,7 @@ function part1(F: Frame, s: Episode0Spec, P: Plan, hx: number, hy: number) {
     fit(F, `${skillName(s.demo.skill).toUpperCase()} · DC ${s.demo.dc} · ${pct(odds(mod, s.demo.dc))}`, (W - 12) / 2, 226, 17, W - 100, RED, "center", 900);
   }
   if (T > land + 0.2 && T < b3[1]) {
-    parch(F, 30, 200, W - 72, 40, ok ? "#d9f2e0" : "#ffd9d4");
+    parch(F, 30, 200, W - 72, 40, ok ? "#d3e2bf" : "#e9c0b2");
     fit(F, `${s.demo.roll} ${signed(mod)} = ${s.demo.roll + mod} · ${ok ? "SUCCESS" : "FAIL"}`, (W - 12) / 2, 228, 20, W - 100, ok ? GRN : RED, "center", 900);
   }
   throwDie(F, { t0, face: s.demo.roll, ok, until: b3[1] + 0.2 });
@@ -276,7 +288,7 @@ function lineup(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
     if (pa > 0.01) {
       c.save();
       c.globalAlpha = pa;
-      parch(F, COLS[i] - 46, y + 40, 92, s.part === 2 ? 70 : 36, undefined, false);
+      parch(F, COLS[i] - 46, y + 40, 92, s.part === 2 ? 70 : 36);
       if (s.part === 2) {
         const k = CLASS_ORDER[i], cd = CLASSES[k], best = cd.skills[0];
         fit(F, cd.name, COLS[i], y + 60, 17, 84);
@@ -292,14 +304,7 @@ function lineup(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
       const la = ez(seg(T, P.cta + 0.6 + i * 0.2, P.cta + 1.1 + i * 0.2)), ly = y - 92 * sc / 2 - 14 + Math.sin(T * 5 + i) * 2;
       c.save();
       c.globalAlpha = la;
-      c.fillStyle = "#ffe680";
-      c.strokeStyle = INK;
-      c.lineWidth = 2.2;
-      c.beginPath();
-      c.arc(COLS[i], ly, 15, 0, 7);
-      c.fill();
-      c.stroke();
-      txt(F, "ABC"[i], COLS[i], ly + 6, 16, INK, "center", 900);
+      seal(F, COLS[i], ly, 14, "ABC"[i]);
       c.restore();
     }
   });
@@ -308,7 +313,11 @@ function lineup(F: Frame, s: Episode0Spec, S: Scene0, P: Plan) {
     c.save();
     c.globalAlpha = dim;
     for (let i = 0; i < 3; i++) heart(F, 120 + i * 60, 300, 22, i === 2 ? ez(seg(T, b2[0] + 3.2, b2[0] + 3.8)) : 0);
-    txt(F, "3 HEARTS", W / 2 - 10, 356, 22, "#ffe680", "center", 900);
+    c.fillStyle = "rgba(20,12,16,.75)";
+    c.beginPath();
+    c.roundRect(W / 2 - 80, 334, 140, 30, 6);
+    c.fill();
+    dtxt(F, "3 HEARTS", W / 2 - 10, 356, 20, GOLD, "center", 900);
     c.restore();
   }
 }
@@ -342,8 +351,7 @@ function cta(F: Frame, s: Episode0Spec, P: Plan, pinFrom: [number, number] | nul
   c.save();
   c.translate(W / 2 - 10, ASK_Y + 28);
   c.scale(q * pu, q * pu);
-  parch(F, -142, -26, 284, 52, "#ffe680");
-  fit(F, C.ask.toUpperCase(), 0, 9, 24, 260, INK, "center", 900);
+  ribbon(F, 0, 0, 226, 44, C.ask.toUpperCase());
   c.restore();
   if (pinFrom) {
     const [hx, hy] = pinFrom, PO = [[-100, -55], [0, -110], [100, -55]];
@@ -351,44 +359,40 @@ function cta(F: Frame, s: Episode0Spec, P: Plan, pinFrom: [number, number] | nul
       const a = ez(seg(t, 0.8 + i * 0.2, 1.3 + i * 0.2)), x = cl(hx + PO[i][0], 40, 280), y = cl(hy + PO[i][1], 150, 250) + Math.sin(T * 5 + i) * 2;
       c.save();
       c.globalAlpha = a;
-      c.setLineDash([6, 6]);
-      c.strokeStyle = INK;
-      c.lineWidth = 2.2;
+      c.setLineDash([5, 5]);
+      c.strokeStyle = "rgba(243,228,194,.85)";
+      c.lineWidth = 2;
       c.beginPath();
       c.moveTo(hx, hy - 40);
       c.lineTo(x, y);
       c.stroke();
       c.setLineDash([]);
-      c.fillStyle = "#ffe680";
-      c.beginPath();
-      c.arc(x, y, 15, 0, 7);
-      c.fill();
-      c.stroke();
-      txt(F, "ABC"[i], x, y + 6, 16, INK, "center", 900);
+      seal(F, x, y, 14, "ABC"[i]);
       c.restore();
     });
   }
   if (t > 1.4) {
     c.save();
     c.globalAlpha = ez(seg(t, 1.4, 1.8));
-    c.fillStyle = "rgba(13,20,40,.85)";
+    c.fillStyle = "rgba(20,12,16,.88)";
     c.beginPath();
     c.roundRect(16, CARD_Y - 36, W - 76, 31, 6);
     c.fill();
-    fit(F, `COMMENT A, B OR C BY 8AM · ${C.next.toUpperCase()} AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, "#ffd23f", "center", 900);
-    fit(F, `No votes? We go with ${"ABC"[C.dflt]}.`, W / 2 - 22, CARD_Y - 9, 11, W - 92, "#fff", "center", 600);
+    c.font = "700 10px Cinzel";
+    fit(F, `COMMENT A, B OR C BY 8AM · ${C.next.toUpperCase()} AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
+    fit(F, `No votes? We go with ${"ABC"[C.dflt]}.`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
     c.restore();
   }
   C.options.forEach((o, i) => {
     const a = ez(seg(t, 1.6 + i * 0.25, 2.3 + i * 0.25)), x = 16 + (1 - a) * 400, y = CARD_Y + i * CARD_GAP;
     c.save();
     c.globalAlpha = a;
-    parch(F, x, y, W - 76, CARD_H, i === C.dflt ? "#fff3c4" : undefined, false);
-    txt(F, `[${"ABC"[i]}]`, x + 12, y + 30, 17, INK, "left");
-    c.font = font(600, 15);
-    const lw = o.sub ? 150 : W - 140;
-    fit(F, o.label, x + 50, y + (o.sub ? 24 : 30), 15, lw, INK, "left", 600);
-    if (o.sub) fit(F, o.sub, x + 50, y + 41, 11, lw, RED, "left", 700);
+    parch(F, x, y, W - 76, CARD_H, i === C.dflt ? "#f5e6b8" : undefined);
+    seal(F, x + 24, y + CARD_H / 2, 13, "ABC"[i]);
+    c.font = font(700, 16);
+    const lw = W - 150;
+    fit(F, o.label, x + 46, y + (o.sub ? 21 : 29), 16, lw, INK, "left", 700);
+    if (o.sub) fit(F, o.sub, x + 46, y + 38, 12, lw, RED, "left", 700);
     c.restore();
   });
 }

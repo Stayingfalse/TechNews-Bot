@@ -7,3 +7,4 @@ export * from "./draw.ts";
 export * from "./dice.ts";
 export * from "./sheet.ts";
 export * from "./episode0.ts";
+export * from "./tex.ts";

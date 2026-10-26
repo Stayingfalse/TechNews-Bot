@@ -2,7 +2,7 @@
 // input: the server rolls, the engine shows that roll.
 import type { Frame } from "./draw.ts";
 import { loop } from "./draw.ts";
-import { FP, GRN, INK, RED, cl, lp, seg } from "./util.ts";
+import { DISPLAY, GRN, INK, RED, cl, lp, seg } from "./util.ts";
 
 type V3 = [number, number, number];
 type M3 = [V3, V3, V3];
@@ -70,7 +70,7 @@ export function die(Fr: Frame, cx: number, cy: number, Rp: number, Rm: M3) {
   };
   F.map((f) => ({ f, n: mv(Rm, f.n), c: mv(Rm, f.c) })).filter((o) => o.n[2] > 0.02).sort((a, b) => a.c[2] - b.c[2]).forEach(({ f, n }) => {
     const pts = f.v.map((i) => P(V[i])), sh = cl(0.5 + 0.5 * (n[0] * -0.35 + n[1] * 0.55 + n[2] * 0.75));
-    c.fillStyle = `rgb(${lp(205, 255, sh) | 0},${lp(198, 252, sh) | 0},${lp(172, 238, sh) | 0})`;
+    c.fillStyle = `rgb(${lp(196, 255, sh) | 0},${lp(178, 246, sh) | 0},${lp(140, 222, sh) | 0})`;
     c.strokeStyle = INK;
     c.lineWidth = 2;
     c.lineJoin = "round";
@@ -83,7 +83,7 @@ export function die(Fr: Frame, cx: number, cy: number, Rp: number, Rm: M3) {
     const r = [u[1] * n[2] - u[2] * n[1], u[2] * n[0] - u[0] * n[2], u[0] * n[1] - u[1] * n[0]], cp = P(f.c);
     c.save();
     c.transform(r[0], -r[1], -u[0], u[1], cp[0], cp[1]);
-    c.font = `700 ${0.34 * Rp}px ${FP}`;
+    c.font = `700 ${0.3 * Rp}px ${DISPLAY}`;
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.fillStyle = INK;

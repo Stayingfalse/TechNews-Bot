@@ -23,8 +23,8 @@ export const CLASSES: Record<ClassKey, ClassDef> = {
     blurb: "Breaks doors. Takes hits.",
     looks: [
       { name: "Steel", swap: {} },
-      { name: "Bronze", swap: { "#9aa3b5": "#b58a4a", "#7d8699": "#8f6a35", "#f0c9a0": "#c99a6b" } },
-      { name: "Blackened", swap: { "#9aa3b5": "#4a4f5c", "#7d8699": "#2f333d", "#f0c9a0": "#8d5a3b" } },
+      { name: "Bronze", swap: { "#9aa3b5": "#b58a4a", "#7d8699": "#8f6a35", "#f0c9a0": "#c99a6b", "#8a2a22": "#2f5a3a" } },
+      { name: "Blackened", swap: { "#9aa3b5": "#4a4f5c", "#7d8699": "#2f333d", "#f0c9a0": "#8d5a3b", "#8a2a22": "#5a2a6a" } },
     ],
   },
   rogue: {
@@ -41,8 +41,8 @@ export const CLASSES: Record<ClassKey, ClassDef> = {
     blurb: "Reads runes. Casts spells.",
     looks: [
       { name: "Violet", swap: {} },
-      { name: "Ember", swap: { "#6a4fb0": "#b0584f", "#4a3590": "#903a35", "#f0c9a0": "#c99a6b" } },
-      { name: "Frost", swap: { "#6a4fb0": "#4f8fb0", "#4a3590": "#356f90", "#f0c9a0": "#8d5a3b" } },
+      { name: "Ember", swap: { "#6a4fb0": "#b0584f", "#4a3590": "#903a35", "#5b42a0": "#9a463e", "#f0c9a0": "#c99a6b" } },
+      { name: "Frost", swap: { "#6a4fb0": "#4f8fb0", "#4a3590": "#356f90", "#5b42a0": "#427ea0", "#f0c9a0": "#8d5a3b" } },
     ],
   },
 };
