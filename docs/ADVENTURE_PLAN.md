@@ -12,11 +12,17 @@ Nothing here changes the quiz channel, except the shared voice budget (§7).
 
 | | Decision |
 |---|---|
-| Platforms | **Instagram only** at launch. YouTube later: the publisher, comment reader and vote parser already handle it, so it's a per-channel `platforms` switch plus connecting the account. |
+| Platforms | **Instagram only** at launch, account **@dungeoncrawlergram** (creator account). YouTube later: the publisher, comment reader and vote parser already handle it, so it's a per-channel `platforms` switch plus connecting the account. |
 | Cadence | **Daily** at **09:00** Europe/London. Every other day only if the voice budget forces it (§7). |
 | Vote window | From the post at 09:00 until **08:00 the next day**. At 08:00 the server reads the comments, picks the next scene, makes its voice-over, renders and posts at 09:00. |
-| Weekly planning | Routine **5 hours after the quiz routine**: the quiz batch runs Monday 19:05, so this runs **Tuesday 00:05** (§6). |
+| Weekly planning | Routine **Tuesday 00:05** (5 h after the quiz batch at Monday 19:05) (§6). |
 | Voice credits | **10,000 a month shared with the quiz** (30,000 in the first month). Voice is made only for the scene that actually happens, on the day (§7). |
+| Renderer | **Skia canvas** (`@napi-rs/canvas`), not Remotion (§2). |
+| Script | **Lean script** (§7): story and aftermath ≤ 14 words each, choices on screen only, stock clips for everything that repeats. |
+| Out of credits | **Post without narration** (§7). |
+| Narrator | **Obsidian – A Dark Fantasy Storyteller** (ElevenLabs library, `acrqYoDVmcpJemOxjC39`), Cormac as the backup (§7). |
+| Story | Our own campaign on **SRD 5.2.1** (CC BY 4.0), each week adapting one openly licensed **one-page dungeon** (§8). |
+| Music | **CC0 tracks** from OpenGameArt per scene type, mixed with **synthesised** drones and sound effects; dice from Kenney's CC0 packs (§9). |
 
 ## 1. What already exists and gets reused
 
@@ -306,6 +312,22 @@ through the with-timestamps endpoint; `fromAlign()` finds the segment starts, wi
 with fixed gaps, so every cue is known exactly and the die lands on the spoken number by
 construction.
 
+### Narrator voice
+
+Chosen from the ElevenLabs voice library (listening to a library preview is free; only
+generating costs credits):
+
+| | Voice | Why |
+|---|---|---|
+| **Pick** | **Obsidian – A Dark Fantasy Storyteller** (`acrqYoDVmcpJemOxjC39`), deep, gravelly, American | The only library voice described as tuned for Eleven v3, and built for dark fantasy narration, villain and grizzled-soldier reads: matches the whisper → tense → grim range the script's tags ask for |
+| Backup | **Cormac – The Irish Fantasy Storyteller** (`tEo3d4j7gzVojBL5Z4Pt`) | Made for D&D / tabletop narration, trained across dread, awe, urgency and humour; lighter, warmer, more "friendly DM" |
+| Also good | Daniel – The Gruff Old British Wizard (`htZQqY7WtacRNV7s62Iy`), Zane – Deep Dramatic Late Night (`mfxPGiKweaQEsXJix2Ve`) | British alternatives: wizardly / horror-podcast |
+
+M3 voices one test line (~60 characters) with Obsidian and Cormac (~120 credits) before the stock
+library is recorded, since every stock clip is tied to the voice; changing voice later means
+re-recording the library (~2,500 credits). Library voices need a paid ElevenLabs plan for API use,
+which the quiz's voices already need.
+
 ### Guard rails
 
 - **Ledger**: every request records its characters in `credits.json`; the server also reads
@@ -313,15 +335,105 @@ construction.
   (`VOICE_BUDGET_QUIZ`, `VOICE_BUDGET_ADVENTURE`) shown on `/status`, and the quiz routine reads the
   quiz's remaining allowance before setting `voice: true` (a small quiz change).
 - **Out of budget**: the episode still posts, without narration (on-screen text, music and dice
-  sounds; `plan()` already has a no-cues timing mode), and Discord says so. Optionally switch the
-  rest of the month to every other day; see open questions.
+  sounds; `plan()` already has a no-cues timing mode), and Discord says so. The stock clips
+  (rolls, CTA) are already paid for, so only the story lines go silent.
 - **Cache**: clips are keyed by (text, voice, model, settings), so retries and re-renders cost 0.
 - **No retakes by default**: a bad take is replaced only on request from Discord.
 
 Every other day, if ever needed: the same graph, 15 episodes a month, ~480 credits each (room to
 voice the choices again), and a 47-hour vote window. It's a booking change, not a design change.
 
-## 8. Episode 0: character creator
+## 8. Campaign sources
+
+### What we can and can't adapt
+
+| Source | Licence | Use it? |
+|---|---|---|
+| **SRD 5.2.1** (Wizards of the Coast's System Reference Document: rules, classes, spells, ~300 monsters incl. skeleton, goblin, wraith, ochre jelly, gelatinous cube, mimic, owlbear, minotaur, kobold, ghoul, bugbear, lich, dragons) | **CC BY 4.0**, irrevocable, commercial use fine with attribution | **Yes: the rules and monster layer.** Checks, DCs, classes and monsters come from here. |
+| **One Page Dungeon Contest** entries (dungeoncontest.com; ~100 entries a year since 2009, each a whole dungeon on one page) | **CC BY-SA** (3.0 for older years, 4.0 for recent entries; some entries state their own) | **Yes: the weekly dungeons.** One page ≈ 6-12 rooms ≈ one week of 7 episodes. Licence checked per entry at intake. |
+| **Basic Fantasy RPG** adventure modules (free PDFs; classic multi-level dungeons) | 4th edition moved the line to **CC BY-SA**; not confirmed for every older module | **Yes, per module after checking**: good for a longer multi-week arc later. |
+| Other CC BY-SA OSR dungeons on itch.io (e.g. *Tomb of the Silver Mage*, Cairn adventures) | CC BY-SA 4.0 where stated | Case by case. |
+| Public-domain myth and legend (Beowulf, Childe Rowland and the Dark Tower, Norse myths, Arthurian *Green Knight*) | Public domain | **Yes: season frames and villains.** |
+| *Tomb of the Serpent Kings* (Skerples) | CC BY-NC-SA (non-commercial) | **No** while the channel may ever earn money. |
+| Official D&D adventures (Lost Mine of Phandelver, Curse of Strahd, …) | Copyright; only the non-commercial Fan Content Policy | **No.** |
+| Robert E. Howard / Lovecraft stories | Public domain in the UK, not all yet in the US | **No** (keeps the YouTube launch simple). |
+
+Rules this puts on the routine and the content library:
+
+- Monsters and names from the SRD only: none of Wizards' reserved creatures (beholder, mind
+  flayer, displacer beast and others are not in the SRD) and no "Dungeons & Dragons"/"D&D" names or
+  logos on screen or in titles. Hashtags like `#ttrpg`, `#dungeoncrawl` instead of the trademark.
+- Attribution in every caption (Instagram captions can't link; the line is the credit):
+  `Includes material from the SRD 5.2.1 by Wizards of the Coast LLC (CC BY 4.0).` plus, in a week
+  adapted from a one-page dungeon, `Adapted from "<title>" by <author> (CC BY-SA 4.0).` The bio
+  links a page listing every source with full licence links.
+- Share-alike: a week adapted from a CC BY-SA dungeon is itself CC BY-SA (anyone may reuse those
+  videos with credit). Fine for a channel like this; the caption says so.
+
+### Shape of the campaign
+
+A **season** is ~6 weeks, one site a week, held together by our own frame story (a public-domain
+legend as the season's spine, e.g. *Childe Rowland*: a hero descends through ever-darker places
+to reach the Dark Tower):
+
+| Week | Content | Engine scene |
+|---|---|---|
+| 1 | Tue: **Episode 0** (class + look). Wed-Mon: the first dungeon | `dungeon` |
+| 2-5 | One adapted one-page dungeon each, picked to rotate the four scene layouts the engine has | `cave`, `forest`, `mountain`, `dungeon` |
+| 6 | Finale at the spine's goal, then a short break or straight into the next season's Episode 0 | `dungeon` / payload scene |
+
+Intake (done by hand or by an occasional research routine, not the weekly one): pick an entry,
+confirm its licence on its own page, and write a **site brief** for it in our own words (rooms as a
+list, monsters mapped to SRD stat names, the secret, the treasure, 3-4 dramatic choice points).
+Briefs and their licence/credit lines live in `DATA_DIR/adventure/sources/`; `GET /adventure/state`
+hands the week's brief to the routine, which writes the 7-layer arc from it. The prototype's
+"Sunken Altar" (dungeon, rogue, skeleton) stays as the season 1 opener so M1's golden frames double
+as real content.
+
+Starting shortlist to check at intake (2024 contest winner and winners' circle):
+*Findlay's Lamp Emporium* (imps overrun a wizard's lamp-shop tower), *Tomb of the Forsworn* (a
+knightly order's tomb), *The Crypt of Crimson Ice* (grave robbers find something worse below),
+*Over the Moon* (a mouldy dungeon to reseal before a god wakes), *The Book of Wisdom* (a minotaur's
+labyrinth library). Each one's own licence statement is confirmed before use.
+
+## 9. Music and sound
+
+Only tracks we can use on Instagram now and YouTube later without credits or Content ID claims:
+**CC0** (public-domain dedication, no attribution needed). Library tracks go in a per-channel music
+folder (`/data/music/adventure`, MULTI_ACCOUNT step 7), mixed under the voice with the existing
+ducking.
+
+| Scene | Track (OpenGameArt, all CC0) | Author |
+|---|---|---|
+| `dungeon` | *Dungeon Ambience*; *Loopable Dungeon Ambience* (low wind and drips) | yd; JaggedStone |
+| `cave` | *Dark Cavern Ambient* (two loops); *Crystal Cave (song18)* | Paul Wortmann; cynicmusic |
+| `forest` | *Dark Forest Theme*; *Forest Ambience* | cynicmusic; TinyWorlds |
+| `mountain` / travel | *Medieval: Exploration* | RandomMind |
+| Episode 0, tavern, rest | *Medieval: The Old Tower Inn*; *Medieval: The Bard's Tale* | RandomMind |
+| Failed check / fight | *Battle Theme A* | cynicmusic |
+| Season finale, sad turn | *Fantasy: Lament for a Warrior's Soul* | RandomMind |
+
+Left out on purpose: CC BY / OGA-BY tracks (they'd need a credit line in every caption), Pixabay
+(its tracks can carry Content ID claims on YouTube), Tabletop Audio and Kevin MacLeod (credit or a
+licence needed).
+
+**Synthesised in code** (no credits, different every episode, from the episode seed, extending
+`render/music.py` and `render/audio.py`):
+
+- an ambient drone bed under the library track (low pad, filtered noise "air", tuned to the
+  scene: dripping for caves, wind for mountains),
+- hook sting (low boom + reverse swell) at the episode title, a tension riser into the dice throw,
+  success chime or failure thud on the landing, a soft "page turn" on the choice cards,
+- torch crackle when torches are on screen.
+
+**Recorded effects** from Kenney's CC0 packs: *Casino Audio* (dice rolls and lands, for the d20
+throw, synced to the physics bounces) and *RPG Audio* (footsteps, doors, metal, cloth) for the hero's
+walk and the scene's props. CC0, so no credit needed.
+
+Licences are recorded in `assets/adventure/LICENSES.md` with each file's source URL, author and
+licence as downloaded, so a claim can be answered.
+
+## 10. Episode 0: character creator
 
 A fixed template, not AI-written, voiced once into the stock library: three hero classes (rogue,
 wizard, fighter: the existing creatures) each shown in three looks (palette variants of the
@@ -329,7 +441,7 @@ creature's part colours), the dice-less "Comment class + look, like B2" CTA, and
 inside the safe zone. The tally picks class and look independently; the result becomes
 `state.hero` and every later node's `hero: "$hero"` resolves to it.
 
-## 9. Milestones
+## 11. Milestones
 
 Stop for review after each.
 
@@ -337,42 +449,32 @@ Stop for review after each.
 |---|---|---|
 | **M1** | `adventure/` workspace; port of engine (dsl, gen, standee, die, plan, segs, cues) to TS with explicit PRNG; Skia backend; `render ep.json --audio clip.mp3 --out out.mp4`; safe-zone layout change; bundled fonts | EP1 from the prototype renders 1080×1920 30 fps with the prototype's audio in sync; golden frames at t = 1, 6, 12, 18.5 (die mid-air), 20 (landed), 30, 38 s; render time reported on 4 cores; side-by-side frames vs. prototype for sign-off |
 | **M2** | zod schemas + JSON Schema export; content library (built-ins + payload merge); generator tests | Same seed ⇒ byte-identical map; props never overlap (min distance); path stays on floor pixels; all 4 `dir`s for all scenes; payload smoke render; `validate` CLI |
-| **M3** | Lean script; stock library generation; daily clip with timestamps + `fromAlign` + fallback; clip assembly; credit ledger + budget guard | Measured credits per character for v3 (and whether tags count); stock library made once; a daily clip ≤ 240 credits; cues exact on the assembled track |
-| **M4** | `kind=adventure` channel (MULTI_ACCOUNT steps 1-3, 5 for this channel only: Instagram only, 09:00 slot, 60-min lead); `POST /adventure/arc` with all checks; map pre-bake + booking; `docs/ADVENTURE_ROUTINE_PROMPT.md` + the Tuesday 00:05 routine | A hand-written 7-layer arc books and every node renders in dry run (placeholder voice); bad arcs get every problem back in one response |
+| **M3** | Voice test (Obsidian vs Cormac, ~120 credits); lean script; stock library generation; daily clip with timestamps + `fromAlign` + fallback; clip assembly; credit ledger + budget guard; music folder, synth beds and effects, Kenney dice synced to the throw | Measured credits per character for v3 (and whether tags count); stock library made once; a daily clip ≤ 240 credits; cues exact on the assembled track; audio mix signed off |
+| **M4** | `kind=adventure` channel (MULTI_ACCOUNT steps 1-3, 5 for this channel only: Instagram only, 09:00 slot, 60-min lead); `POST /adventure/arc` with all checks; map pre-bake + booking; source briefs + credit lines (§8) for season 1; `docs/ADVENTURE_ROUTINE_PROMPT.md` + the Tuesday 00:05 routine | A hand-written 7-layer arc books and every node renders in dry run (placeholder voice); bad arcs get every problem back in one response; captions carry the right credits |
 | **M5** | Vote parsing, 08:00 cutoff, tally, tie-break, recap, state updates, options comment, dry run end to end | Parser table tests; replaying a stored comment set always picks the same node; restart mid-job doesn't double-post, double-advance or double-spend credits |
 | **M6** | Episode 0 template, looks as palette variants, `B2` parsing | Episode 0 renders and a mixed comment set yields the expected class + look |
 | **M7** | Retries, healthcheck for the 09:00 post, cost log (credits and routine runs) on the dashboard, channel switcher; YouTube switch-on | A week runs unattended in dry run with Discord previews; then live on Instagram |
 
-## 10. Open questions
+## 12. Open questions
 
-**Need your call**
+**Still need your call**
 
-1. **Renderer**: Skia canvas instead of Remotion (§2)? Recommended yes.
-2. **Shorter spoken script** (§7): story and aftermath voiced at ≤ 14 words each, the three
-   choices shown and not read out, the check/roll/CTA from stock clips. That is what makes daily fit
-   ~240 credits. OK, or would you rather go every other day and keep the fuller script?
-3. **Out of credits mid-month**: post without narration (recommended), skip days, or switch to
-   every other day for the rest of the month?
-4. **Quiz share**: is ~2,000 a month right for the quiz (≈ 2 voiced quizzes a week), and should
-   the quiz routine respect a hard allowance?
-5. **Narrator voice**: an existing ElevenLabs voice (a deep "dungeon master"), or design one?
-   Designing previews costs credits, so better done in the first month.
-6. **Routine time**: Monday 19:05 + 5 h is **Tuesday 00:05**. OK, or did you mean earlier on
-   Monday (e.g. 14:05)?
-7. **Instagram account**: the new account must be a professional (creator/business) account,
-   added as a tester to the existing Instagram app, then connected with
-   `/oauth/instagram/start?channel=adventure`. Handle and name?
-8. **Story rules**: tone (spooky but all-ages?), how often checks fail, and does the campaign
-   run forever in weekly chapters or end in seasons (each starting with Episode 0)?
-9. **Music and sound**: synthesised ambient loop plus dice sounds, made in code like the quiz's
-   music (no credits)? Or the uploaded music library?
+1. **Quiz share** of the 10,000 monthly credits: ~2,000 (≈ 2 voiced quizzes a week) proposed. Should
+   the quiz routine be held to a hard allowance?
+2. **Story tone**: spooky but all-ages (no gore), or darker? And how often should checks fail
+   (proposed: about 1 in 3, so failures sting but the hero keeps going)?
+3. **Seasons**: ~6 weeks each with an Episode 0 at the start of every season (proposed), or one
+   endless campaign with a single Episode 0?
+4. **Season 1 spine**: the *Childe Rowland and the Dark Tower* frame (§8), or another legend?
+5. **Narrator**: OK to spend ~120 credits on an Obsidian vs Cormac test line before committing
+   the stock library to one voice? (Previews on the ElevenLabs site are free to listen to first.)
 
-**Technical, answered during the milestones**
+**Technical: I'll answer these during the milestones, nothing needed from you**
 
-10. Whether eleven_v3 bills 1 credit per character and whether audio tags and `[long pause]`
-    count (M3: measure with the subscription endpoint before/after a test clip).
-11. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
-12. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5:
-    confirm; otherwise a manual pin from the Discord link).
-13. Votes in replies to other comments: counted or not (plan: top-level only).
-14. Remotion licensing only matters if (1) is "no".
+6. Whether eleven_v3 bills 1 credit per character and whether audio tags and `[long pause]`
+   count (M3: measured with the subscription endpoint before and after the test line).
+7. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
+8. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5: confirm;
+   otherwise a manual pin from the Discord link).
+9. Votes in replies to other comments: top-level only unless numbers show people vote in replies.
+10. Each one-page dungeon's own licence statement, at intake (§8).
