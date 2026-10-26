@@ -117,3 +117,22 @@ def test_endpoint_rejects_bad_spec(client, monkeypatch):
 def test_credits_endpoint(client):
     r = client.get("/adventure/credits", headers={"Authorization": "Bearer test-token"})
     assert r.status_code == 200 and r.json()["budget"] == settings.adventure_voice_budget and r.json()["spent"] == 0
+
+
+def test_tighten_shortens_long_pauses_and_moves_the_timestamps(tmp_path):
+    import subprocess
+    # 1 s tone, 3 s silence, 1 s tone
+    src = tmp_path / "v.mp3"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=1",
+                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-f", "lavfi", "-i", "sine=frequency=300:duration=1",
+                    "-filter_complex", "[1:a]atrim=duration=3[s];[0:a][s][2:a]concat=n=3:v=0:a=1", str(src)], check=True)
+    al = tmp_path / "v.json"
+    al.write_text(json.dumps({"alignment": {"characters": ["a", "b"], "character_start_times_seconds": [0.1, 4.1],
+                                            "character_end_times_seconds": [0.9, 4.9]}}))
+    out, out_al = voice.tighten(src, al, 0.6)
+    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(out)],
+                               capture_output=True, text=True).stdout)
+    assert 2.4 < dur < 2.9  # 5 s → about 2.6 s
+    starts = json.loads(out_al.read_text())["alignment"]["character_start_times_seconds"]
+    assert starts[0] == 0.1 and 1.5 < starts[1] < 1.8  # the second word moved up by the cut
+    assert voice.tighten(src, al, 0.6) == (out, out_al)  # cached

@@ -30,7 +30,7 @@ function audioArgs(dur: number, voice: string | undefined, music: string | undef
   let v: string | undefined;
   if (voice) {
     ins.push("-i", voice);
-    parts.push(`[${i}:a]aresample=48000,loudnorm=I=-16:TP=-1.5,asplit=2[v][vk]`);
+    parts.push(`[${i}:a]aresample=48000,loudnorm=I=-16:TP=-1.5,apad,asplit=2[v][vk]`); // padded: the ducked music runs to the end
     v = "vk";
     mixIn.push("[v]");
     i++;

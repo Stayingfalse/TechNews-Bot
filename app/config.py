@@ -82,6 +82,8 @@ class Settings:
         # Voice credits the adventure channel may spend per calendar month (1 credit per character,
         # tags included); past it, videos go out without narration.
         self.adventure_voice_budget = int(os.environ.get("ADVENTURE_VOICE_BUDGET", "7200"))
+        # The narrator's pauses are shortened to this many seconds (its [long pause] runs to 3-4 s).
+        self.adventure_max_pause = float(os.environ.get("ADVENTURE_MAX_PAUSE", "0.6"))
 
         # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
         self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")

@@ -92,6 +92,10 @@ def _work(job: dict) -> None:
         save(job)
         try:
             mp3, align, made = voice.clip(text)
+            try:
+                mp3, align = voice.tighten(mp3, align, settings.adventure_max_pause)
+            except Exception:  # long pauses are better than no video
+                log.exception("adventure voice: could not shorten pauses")
             audio = ["--audio", str(mp3), "--align", str(align)]
             job["voice_clip"] = {"file": mp3.name, "chars": len(text), "new": made, "month_spent": voice.spent()}
         except voice.OutOfBudget as e:
