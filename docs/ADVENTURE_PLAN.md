@@ -20,8 +20,10 @@ Nothing here changes the quiz channel, except the shared voice budget (§7).
 | Renderer | **Skia canvas** (`@napi-rs/canvas`), not Remotion (§2). |
 | Script | **Lean script** (§7): story and aftermath ≤ 14 words each, choices on screen only, stock clips for everything that repeats. |
 | Out of credits | **Post without narration** (§7). |
-| Narrator | **Obsidian – A Dark Fantasy Storyteller** (ElevenLabs library, `acrqYoDVmcpJemOxjC39`), Cormac as the backup (§7). |
-| Story | Our own campaign on **SRD 5.2.1** (CC BY 4.0), each week adapting one openly licensed **one-page dungeon** (§8). |
+| Narrator | **Obsidian – A Dark Fantasy Storyteller** (ElevenLabs library, `acrqYoDVmcpJemOxjC39`), Cormac as the backup; test clips made, final pick by ear (§7). |
+| Story | Our own campaign on **SRD 5.2.1** (CC BY 4.0), each week adapting one openly licensed **one-page dungeon** (§8). **Seasons** of ~6 weeks; season 1 follows ***Childe Rowland***. **Teen and up.** |
+| Dice | **Real rolls**: the AI sets skill and DC, the server rolls d20 + the hero's modifier on the day, odds shown on screen (§5). |
+| Quiz voice | **2,000 credits a month**, a hard allowance (§7). |
 | Music | **CC0 tracks** from OpenGameArt per scene type, mixed with **synthesised** drones and sound effects; dice from Kenney's CC0 packs (§9). |
 
 ## 1. What already exists and gets reused
@@ -122,7 +124,7 @@ Port as-is, with these mechanical changes:
 | `document.createElement('canvas')` | `createCanvas()` from the backend, injected |
 | `segs()`: one long script per episode (713 characters for EP1) | The lean script of §7: a short daily clip plus stock clips made once. `plan()` takes the clip boundaries as cues. |
 
-`die()`, `finalRot()` and the throw in `frame()` port unchanged: the face for `check.roll` is
+`die()`, `finalRot()` and the throw in `frame()` port unchanged: the face for `roll.kept` is
 rotated to face the camera at `land`, the tumble is `rot(AX1)·rot(AX2)` decaying to that rotation,
 then a damped wobble. Landing is timed so the die settles 0.5 s before the narrator says the
 number (`t0 = checkB − 0.5 − 2.7`); with a stock clip for the number, `checkB` is known exactly.
@@ -165,14 +167,19 @@ Node = {
   hero: CreatureKey | "$hero", foe?: CreatureKey,
   hook: [string, string], sub: string,
   story: string,                    // ≤ 14 words (spoken; §7)
-  check?: { skill: SkillKey, dc: 5..20, roll: 1..20 },
-  after?: string,                   // ≤ 14 words (spoken)
+  check?: {                         // the AI sets the challenge, never the result (§5, Dice)
+    skill: SkillKey, dc: 5|10|12|15|18|20, mode?: "normal"|"advantage"|"disadvantage",
+    success: { after: string, choices?: Choice[] },   // after ≤ 14 words (spoken)
+    fail:    { after: string, choices?: Choice[], harm?: 0|1 }
+  },
+  after?: string,                   // nodes without a check, ≤ 14 words (spoken)
   ask: AskKey,                      // one of the stock questions ("Which way?", "What do you do?", …)
-  choices: [ {label, slot: "left"|"top"|"right", next: NodeId | null, pick: string} ] (2..3),
+  choices: Choice[] (2..3),         // Choice = {label, slot: "left"|"top"|"right", next: NodeId | null, pick: string}
   default: 0..2,                    // used on zero votes
   tone?: { story?: Tag, after?: Tag },
   payload?: { scenes?, items?, props?, creatures? },   // same DSL as the built-ins
   // filled by the server on the day, never by the AI:
+  roll?: { dice: [1..20] | [1..20, 1..20], kept: 1..20, mod: int, total: int, ok: bool, p: number, proof: string },
   cues?: Cues, voice?: {file, chars, credits, model, voice_id, confidence: "align"|"samples"|"low"|"none"},
   recap?: { pick: string, votes: [n,n,n] }
 }
@@ -180,7 +187,9 @@ Node = {
 
 `choices` is an object rather than the prototype's `[label, slot]` tuple so it can carry `next`
 and `pick` (the short name the recap uses: "the iron door"). `skill` and `ask` are keys into fixed
-lists because their spoken versions are stock clips (§7).
+lists because their spoken versions are stock clips (§7). A check's outcome can swap in its own
+choices (a failed climb offers different options than a successful one); otherwise the node's
+choices are used either way.
 
 ### Graph shape: departure from the brief (to confirm)
 
@@ -226,10 +235,11 @@ per channel; the quiz keeps 45). At 08:00:
    (case-insensitive; `A`, `a!`, `(b)`, `I pick C`, `option b` count; `ABC` or `a or b` doesn't).
    Episode 0 parses `[A-C][1-3]` (`b2`, `B 2`) into class + look and tallies each separately.
    Parser is table-tested.
-4. Tally (both platforms once YouTube is on). Tie: `prng(hash(yesterday's job id))` picks among
+4. Tally (both platforms once YouTube is on). Tie: the roll HMAC (§5, Dice) keyed on yesterday's job picks among
    the tied; zero votes or comments unreadable: the node's `default`, with a Discord warning.
-5. Resolve the next node, attach `recap {pick, votes}`, make the voice-over (§7), render, preview
-   to Discord with the tally and the credits spent.
+5. Resolve the next node, attach `recap {pick, votes}`, **roll its check** (Dice, below) and take
+   that outcome's text and choices, make the voice-over for that outcome only (§7), render, preview
+   to Discord with the tally, the roll and the credits spent.
 6. 09:00: post the Reel (existing publisher; caption from the node), comment the options under it
    ("A) Take the torchlit left · B) … · Comment a letter by 8am tomorrow"), and reuse
    `link_previous` on yesterday's Reel.
@@ -243,6 +253,44 @@ with a placeholder voice (no credits) and writes nothing to state.
 Late 08:00 render: if the render fails, the existing retry runs; if 09:00 passes, the post goes out
 when ready (the 6-hour missed-slot rule already covers a server outage), and the next day's
 cutoff stays 08:00.
+
+### Dice: real rolls, real odds (departure from the brief)
+
+The brief had the AI predetermine every roll. Instead the AI only sets the challenge (skill, DC,
+advantage) and writes both outcomes; the server rolls on the day, with odds from the rules, so a
+success is never scripted.
+
+- **The hero's sheet** (from Episode 0, SRD 5.2.1 rules): level-1 standard-array scores per class,
+  +2 proficiency on the class's skills. Roughly: fighter STR +3 (Athletics, Intimidation), rogue
+  DEX +3 (Stealth, Sleight of Hand, Acrobatics, Perception), wizard INT +3 (Arcana, History,
+  Investigation). Every SRD skill maps to its ability, so a wizard *can* try to climb, just badly.
+  The sheet goes up a little each season (proficiency +3 from season 3, an ability bump at
+  season 4: level-ups as the reward for surviving).
+- **The roll**: total = d20 + modifier, success when total ≥ DC. Advantage rolls two dice and keeps
+  the higher, disadvantage the lower (a choice can earn either: "sneak in with the torch out"). House
+  rule for drama: a natural 20 always succeeds and a natural 1 always fails.
+- **Odds are shown**, so viewers see it's genuine: the check card reads `STEALTH · DC 15 · 55%`
+  before the throw and `14 + 5 = 19 · SUCCESS` after. `p` is computed exactly (with advantage:
+  1 − (1 − p)²; disadvantage: p²).
+- **Randomness**: `HMAC-SHA256(ROLL_SECRET, "<season>:<ep>:<node>:<check>")` turned into a uniform
+  1-20 by rejection sampling. Unpredictable without the server's secret (nobody can work out
+  tomorrow's roll, the AI included), yet the same on a retry or re-render, so the video, the voice
+  and the stored state always agree. The roll is made once, when the vote closes, and stored on the
+  job with `proof` (the HMAC input); the Discord preview lists it. Revealing the week's secret
+  afterwards would let anyone check every roll, if that's ever wanted.
+- **The die lands on the kept face** (`finalRot`), so the physics show the actual roll; with
+  advantage the second die tumbles alongside and is knocked aside, dimmed.
+- **Failing forward, with stakes**: a failure always moves the story on (a worse room, a lost item,
+  a foe that's now awake), never a dead end. Dangerous failures (`harm: 1`) cost the hero a heart
+  out of 3, shown on screen; rests (a node type) restore them. At 0 hearts the hero falls: that
+  episode is a death scene, and the next day's Episode 0 brings in a new hero who picks up the
+  quest where the last one fell. Teen+ peril with real loss, never gore.
+- **Pacing**: the validator keeps every check between 25% and 90% and aims the week at about 1
+  failure in 3; not every node has a check (talk, travel and rest nodes don't).
+- **Tie-breaks** on votes use the same HMAC with the vote's own key, so they're fair the same way.
+
+Because the roll happens before the voice-over is made, only the outcome that happened is voiced:
+the AI writes both branches as text (free), the server voices one.
 
 ## 6. Weekly arc (the one AI step)
 
@@ -261,7 +309,10 @@ routine can fix and resend (the retry loop):
 - zod schema (field limits; `story`/`after` ≤ 14 words; `pick` ≤ 5 words, no digits)
 - graph: ≤ 3 nodes per layer, 7 layers, every `next` exists, every node reachable from `entry`,
   last layer's `next` is `null`, `default` in range
-- every `check.roll` in 1-20 and the success/failure agrees with `after`'s tone tag
+- every check has both a `success` and a `fail` branch, both valid from every incoming choice;
+  each node's odds (§5, Dice) lie between 25% and 90%, and across the week the expected failures
+  come to roughly 1 in 3 (the server computes the odds from the hero's sheet and reports them back
+  to the routine)
 - payload: DSL keys and primitive shapes valid, names don't shadow built-ins unless marked
   `override`, and a headless smoke render (bake the map + draw 3 frames) succeeds with every
   payload item on screen
@@ -276,13 +327,14 @@ Discord gets the week summary with the arc as a small graph.
 
 The prototype's EP1 script is 713 characters with its tags (479 spoken). Daily at that length is
 ~21,400 credits a month, twice the whole shared budget, and the brief's weekly generation of every
-branch would be three times that again. Assuming eleven_v3 costs 1 credit per character (checked
-in M3), the budget has to look like this:
+branch would be three times that again. **Measured** in the voice test: eleven_v3 bills 1 credit
+per character, audio tags included (a 72-character line with two tags cost 72 credits). So the
+budget has to look like this:
 
 | Monthly | Credits |
 |---|---|
 | Shared budget | 10,000 |
-| Quiz (≈ 2 voiced quizzes a week × ~220 new characters; "Round two!" etc. are cached) | ~2,000 |
+| Quiz: a hard allowance (≈ 2 voiced quizzes a week × ~220 new characters; "Round two!" etc. are cached) | 2,000 |
 | Safety margin (a retake, a new voice line) | ~800 |
 | **Adventure, 30 episodes** | **~7,200 → ≈ 240 a day** |
 
@@ -296,14 +348,15 @@ only the story is voiced each day:
 | Hook + recap | "You chose the rogue. Now survive the dark." + "Forty-one of sixty-four of you picked the Hooded Rogue." | "[whispers] You chose the iron door." (counts on screen only) | ~40 |
 | Story | 76 chars | ≤ 14 words | ~85 |
 | Check | "Stealth check. Difficulty thirteen." | stock: skill clip + "difficulty N" clip | 0 |
-| Roll | "Seventeen. Success." | stock: 20 numbers × success/failure | 0 |
+| Roll | "Seventeen. Success." | stock: the total (1-30) × success/failure, "Natural twenty!", "Natural one…" | 0 |
 | After | 90 chars | ≤ 14 words | ~85 |
 | CTA | 162 chars, reads all three choices | stock: the `ask` clip + "A, B or C? Comment your letter. Next episode tomorrow." Choices on screen only. | 0 |
 | | **713** | | **~210-240** |
 
-Stock library (made once, ≈ 2,500 credits): 20 roll numbers × 2 outcomes, ~10 skills, DC 5-20,
-~8 ask questions, 2-3 CTA variants, the Episode 0 lines. Same voice, model and settings as the
-daily clip.
+Stock library (made once, ≈ 3,000 credits): totals 1-30 × 2 outcomes, the two naturals, "with advantage" / "with disadvantage", ~12 skills, the 6 DCs,
+~8 ask questions, 2-3 CTA variants, the Episode 0 lines, "you've lost a heart", the death and
+new-hero lines. Same voice, model and settings as the daily clip. Tags are billed, so each line
+carries one tag at most.
 
 The daily clip is the three variable segments in one request, with `[long pause]` between them,
 through the with-timestamps endpoint; `fromAlign()` finds the segment starts, with
@@ -323,17 +376,19 @@ generating costs credits):
 | Backup | **Cormac – The Irish Fantasy Storyteller** (`tEo3d4j7gzVojBL5Z4Pt`) | Made for D&D / tabletop narration, trained across dread, awe, urgency and humour; lighter, warmer, more "friendly DM" |
 | Also good | Daniel – The Gruff Old British Wizard (`htZQqY7WtacRNV7s62Iy`), Zane – Deep Dramatic Late Night (`mfxPGiKweaQEsXJix2Ve`) | British alternatives: wizardly / horror-podcast |
 
-M3 voices one test line (~60 characters) with Obsidian and Cormac (~120 credits) before the stock
-library is recorded, since every stock clip is tied to the voice; changing voice later means
-re-recording the library (~2,500 credits). Library voices need a paid ElevenLabs plan for API use,
+**Test done** (26 Oct 2026, 144 credits): one take each of `[whispers] The iron door groans open…
+[dramatically] something BREATHES.` on eleven_v3 (5.8 s Obsidian, 5.6 s Cormac). The pick is
+confirmed by ear before the stock library is recorded, since every stock clip is tied to the voice;
+changing voice later means re-recording the library (~3,000 credits). Library voices need a paid ElevenLabs plan for API use,
 which the quiz's voices already need.
 
 ### Guard rails
 
 - **Ledger**: every request records its characters in `credits.json`; the server also reads
   `GET /v1/user/subscription` before each daily clip. Per-channel monthly allowances
-  (`VOICE_BUDGET_QUIZ`, `VOICE_BUDGET_ADVENTURE`) shown on `/status`, and the quiz routine reads the
-  quiz's remaining allowance before setting `voice: true` (a small quiz change).
+  (`VOICE_BUDGET_QUIZ=2000`, `VOICE_BUDGET_ADVENTURE=7200`) shown on `/status`. The quiz's is
+  hard: the quiz routine reads the remaining allowance before setting `voice: true`, and the server
+  renders a quiz without voice rather than go over (a small quiz change).
 - **Out of budget**: the episode still posts, without narration (on-screen text, music and dice
   sounds; `plan()` already has a no-cues timing mode), and Discord says so. The stock clips
   (rolls, CTA) are already paid for, so only the story lines go silent.
@@ -372,15 +427,41 @@ Rules this puts on the routine and the content library:
 
 ### Shape of the campaign
 
-A **season** is ~6 weeks, one site a week, held together by our own frame story (a public-domain
-legend as the season's spine, e.g. *Childe Rowland*: a hero descends through ever-darker places
-to reach the Dark Tower):
+A **season** is ~6 weeks, one site a week, held together by a public-domain legend as its spine.
+Each season opens with Episode 0 (a new hero); a hero who falls mid-season is replaced by a new
+Episode 0 the next day and the quest carries on.
 
-| Week | Content | Engine scene |
-|---|---|---|
-| 1 | Tue: **Episode 0** (class + look). Wed-Mon: the first dungeon | `dungeon` |
-| 2-5 | One adapted one-page dungeon each, picked to rotate the four scene layouts the engine has | `cave`, `forest`, `mountain`, `dungeon` |
-| 6 | Finale at the spine's goal, then a short break or straight into the next season's Episode 0 | `dungeon` / payload scene |
+**Tone: teen and up.** Dark fairy-tale peril, real danger and real loss (the hero can die), scary
+monsters, morally grey choices. No gore described, no torture, nothing sexual, no swearing, no real
+religions or real-world groups as villains. The routine prompt carries these rules and the
+validator rejects banned words.
+
+### Season 1: *Childe Rowland* (public domain)
+
+Source: "Childe Rowland" in Joseph Jacobs, *English Fairy Tales* (1890). Burd Ellen runs round a
+church widdershins and is carried off to the Dark Tower of the King of Elfland. Her brothers go
+after her and don't return. The youngest learns two rules from Merlin: in Elfland, **speak to no
+one who speaks to you, and eat or drink nothing**. On the way he asks a horse-herd, a cow-herd and a
+hen-wife for the road, finds a green hill ringed with terraces, walks round it widdershins three
+times saying "Open, door!", and inside, in a hall lit by a great glowing lamp, faces the King of
+Elfland to free his sister and brothers.
+
+Our version: the viewers' hero goes after their sibling, Ellen. The two rules become the season's
+running temptation: choices that break them are always tempting (the food is warm, the voice knows
+your name), and every broken rule is remembered and comes due in the finale (disadvantage on the
+final checks, one per broken rule).
+
+| Week | Site | Engine scene | Adapted from |
+|---|---|---|---|
+| 1 | Tue: **Episode 0**. Wed-Mon: the crypt under the church where Ellen vanished; the way into Elfland | `dungeon` ("The Sunken Altar", the prototype's map) | a crypt one-pager (e.g. *Tomb of the Forsworn* or *The Crypt of Crimson Ice*, licence checked at intake) |
+| 2 | Merlin's cave: reach the seer, earn the two rules | `cave` | the legend + a cave one-pager |
+| 3 | The fey wood: the horse-herd and the cow-herd, who both speak to you | `forest` | the legend |
+| 4 | The hen-wife and the climb to the terraced green hill | `mountain` | the legend |
+| 5 | Inside the hill: "Open, door!", the halls of Elfland, the feast you mustn't touch | `dungeon` | a one-pager for the halls |
+| 6 | The Dark Tower and the King of Elfland (a payload creature); free Ellen and the brothers | payload scene | the legend |
+
+Season 2+ use another legend as spine (Beowulf's mere, the Green Knight's chapel, a Norse
+descent), chosen when season 1 is half done.
 
 Intake (done by hand or by an occasional research routine, not the weekly one): pick an entry,
 confirm its licence on its own page, and write a **site brief** for it in our own words (rooms as a
@@ -439,7 +520,9 @@ A fixed template, not AI-written, voiced once into the stock library: three hero
 wizard, fighter: the existing creatures) each shown in three looks (palette variants of the
 creature's part colours), the dice-less "Comment class + look, like B2" CTA, and a 3×3 card grid
 inside the safe zone. The tally picks class and look independently; the result becomes
-`state.hero` and every later node's `hero: "$hero"` resolves to it.
+`state.hero` and every later node's `hero: "$hero"` resolves to it, together with the class's
+character sheet (§5, Dice), so the class viewers pick changes their odds all season: a rogue sneaks
+well, a fighter breaks doors, a wizard reads runes. Each class card shows its best skills.
 
 ## 11. Milestones
 
@@ -451,7 +534,7 @@ Stop for review after each.
 | **M2** | zod schemas + JSON Schema export; content library (built-ins + payload merge); generator tests | Same seed ⇒ byte-identical map; props never overlap (min distance); path stays on floor pixels; all 4 `dir`s for all scenes; payload smoke render; `validate` CLI |
 | **M3** | Voice test (Obsidian vs Cormac, ~120 credits); lean script; stock library generation; daily clip with timestamps + `fromAlign` + fallback; clip assembly; credit ledger + budget guard; music folder, synth beds and effects, Kenney dice synced to the throw | Measured credits per character for v3 (and whether tags count); stock library made once; a daily clip ≤ 240 credits; cues exact on the assembled track; audio mix signed off |
 | **M4** | `kind=adventure` channel (MULTI_ACCOUNT steps 1-3, 5 for this channel only: Instagram only, 09:00 slot, 60-min lead); `POST /adventure/arc` with all checks; map pre-bake + booking; source briefs + credit lines (§8) for season 1; `docs/ADVENTURE_ROUTINE_PROMPT.md` + the Tuesday 00:05 routine | A hand-written 7-layer arc books and every node renders in dry run (placeholder voice); bad arcs get every problem back in one response; captions carry the right credits |
-| **M5** | Vote parsing, 08:00 cutoff, tally, tie-break, recap, state updates, options comment, dry run end to end | Parser table tests; replaying a stored comment set always picks the same node; restart mid-job doesn't double-post, double-advance or double-spend credits |
+| **M5** | Vote parsing, 08:00 cutoff, tally, tie-break, recap, dice (sheet, HMAC roll, advantage, hearts, rules broken), state updates, options comment, dry run end to end | Parser table tests; 100,000 simulated rolls match the shown odds within 0.5% (normal, advantage, disadvantage, naturals); replaying a stored comment set always picks the same node and roll; restart mid-job doesn't double-post, double-advance or double-spend credits |
 | **M6** | Episode 0 template, looks as palette variants, `B2` parsing | Episode 0 renders and a mixed comment set yields the expected class + look |
 | **M7** | Retries, healthcheck for the 09:00 post, cost log (credits and routine runs) on the dashboard, channel switcher; YouTube switch-on | A week runs unattended in dry run with Discord previews; then live on Instagram |
 
@@ -459,22 +542,16 @@ Stop for review after each.
 
 **Still need your call**
 
-1. **Quiz share** of the 10,000 monthly credits: ~2,000 (≈ 2 voiced quizzes a week) proposed. Should
-   the quiz routine be held to a hard allowance?
-2. **Story tone**: spooky but all-ages (no gore), or darker? And how often should checks fail
-   (proposed: about 1 in 3, so failures sting but the hero keeps going)?
-3. **Seasons**: ~6 weeks each with an Episode 0 at the start of every season (proposed), or one
-   endless campaign with a single Episode 0?
-4. **Season 1 spine**: the *Childe Rowland and the Dark Tower* frame (§8), or another legend?
-5. **Narrator**: OK to spend ~120 credits on an Obsidian vs Cormac test line before committing
-   the stock library to one voice? (Previews on the ElevenLabs site are free to listen to first.)
+1. **Narrator**: Obsidian or Cormac, from the two test clips?
+2. **Hero death**: OK that a hero who loses all 3 hearts dies for good (death episode, then a new
+   Episode 0 the next day), or should a fall only cost something (an item, a rule broken) and the
+   same hero carry on?
 
-**Technical: I'll answer these during the milestones, nothing needed from you**
+**Technical: answered during the milestones, nothing needed from you**
 
-6. Whether eleven_v3 bills 1 credit per character and whether audio tags and `[long pause]`
-   count (M3: measured with the subscription endpoint before and after the test line).
-7. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
-8. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5: confirm;
+3. ~~Whether eleven_v3 bills audio tags~~: measured, 1 credit per character including tags.
+4. Whether the with-timestamps endpoint returns alignment for eleven_v3 (M3; fallback ready).
+5. Comment pinning: no pin endpoint on Instagram's or YouTube's API as far as known (M5: confirm;
    otherwise a manual pin from the Discord link).
-9. Votes in replies to other comments: top-level only unless numbers show people vote in replies.
-10. Each one-page dungeon's own licence statement, at intake (§8).
+6. Votes in replies to other comments: top-level only unless numbers show people vote in replies.
+7. Each one-page dungeon's own licence statement, at intake (§8).
