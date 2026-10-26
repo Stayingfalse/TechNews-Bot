@@ -10,7 +10,8 @@ import {
 } from "../../engine/src/index.ts";
 
 export const OUT_W = 1080, OUT_H = 1920, DPR = OUT_W / W;
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+export const AUDIO = join(ROOT, "assets/audio");
 
 let fontsLoaded = false;
 export function loadFonts() {
@@ -27,7 +28,7 @@ export const EPISODE0_MAP = { type: "dungeon", seed: 12, size: 5, dir: "N" as co
 /** Bake the scene map once and cache it as a PNG keyed by everything that shapes it. */
 export type MapFile = { file: string; tp: number[][]; len: number[]; k: number; lights: MapLight[]; flames: MapFlame[] };
 
-export async function bakedMap(seed: number, cacheDir = join(ROOT, ".cache/maps")): Promise<MapFile> {
+export async function bakedMap(seed: number, cacheDir = process.env.ADVENTURE_CACHE || join(ROOT, ".cache/maps")): Promise<MapFile> {
   loadFonts();
   const rq = { ...EPISODE0_MAP, seed };
   const key = createHash("sha256").update(JSON.stringify(rq) + "|k4.5|v5").digest("hex").slice(0, 16);

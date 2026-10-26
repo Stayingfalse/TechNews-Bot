@@ -13,6 +13,7 @@ export const Episode0 = z.object({
   hero: z.object({ cls: z.enum(["fighter", "rogue", "wizard"]), look: z.number().int().min(0).max(2) }).optional(),
   demo: z.object({ roll: z.number().int().min(1).max(20), skill: z.string(), dc: z.number().int().min(5).max(30) })
     .default({ roll: 13, skill: "stealth", dc: 12 }),
+  cues: z.record(z.string(), z.number().min(0)).optional(),
 }).superRefine((s, ctx) => {
   const need = (ok: boolean, message: string) => ok || ctx.addIssue({ code: "custom", message });
   if (s.part >= 3) need(!!s.hero, `part ${s.part} needs "hero"`);

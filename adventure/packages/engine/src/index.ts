@@ -8,3 +8,4 @@ export * from "./dice.ts";
 export * from "./sheet.ts";
 export * from "./episode0.ts";
 export * from "./tex.ts";
+export * from "./voice.ts";

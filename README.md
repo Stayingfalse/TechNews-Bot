@@ -121,6 +121,9 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
 | `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
+| `POST /adventure/episode0?voice=` | Adventure channel preview: render an Episode 0 part (body `{"part": 1}`, or with `recap`/`fear`/`hero` for parts 2-4), voiced by the narrator unless `voice=false`, and send it to Discord. Returns the job and the script. Nothing is posted yet. |
+| `GET /adventure/jobs`, `GET /adventure/jobs/{id}` | Adventure renders: status, video URL, voice clip, render time |
+| `GET /adventure/credits` | Narrator credits spent this month against `ADVENTURE_VOICE_BUDGET` (default 7200) |
 
 ## Tests
 
@@ -142,6 +145,14 @@ YouTube itself and sends the matching picture to Discord to upload: neither Inst
 API can change a profile picture. `POST /avatars/banner` puts up the banner for the current picture.
 Add more by dropping `avatar-*.png` files into `/data/avatars`. `GET /avatars` shows the rotation,
 `POST /avatars/next` hands over the next one now.
+
+## Adventure channel
+
+A second channel, a daily choose-your-adventure dungeon crawl, is being built: plan in
+[docs/ADVENTURE_PLAN.md](docs/ADVENTURE_PLAN.md), renderer in [adventure/](adventure/) (Node,
+installed into the image by the Dockerfile). For now the server can render its Episode 0 videos as
+Discord previews (`POST /adventure/episode0`). Settings: `ADVENTURE_VOICE_ID` (default Obsidian),
+`ADVENTURE_VOICE_MODEL` (`eleven_v3`), `ADVENTURE_VOICE_BUDGET` (characters a month, default 7200).
 
 ## Channels
 

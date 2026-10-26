@@ -11,6 +11,8 @@ import { type Frame, type Light, big, dtxt, fade, fit, flame, heart, lighting, n
 import { THROW, throwDie } from "./dice.ts";
 import { CLASSES, CLASS_ORDER, type ClassKey, modifier, odds, pct, signed, skillName } from "./sheet.ts";
 import { CREAM, GOLD, GRN, H, INK, RED, W, cl, ez, font, lp, seg } from "./util.ts";
+import { type Cues, type Seg, cap, line, words } from "./voice.ts";
+import { BOUNCES } from "./dice.ts";
 
 export type Foe = "skeleton" | "goblin" | "wraith";
 export const FEARS: { foe: Foe; label: string; pick: string }[] = [
@@ -34,16 +36,30 @@ export type Episode0Spec = {
   hero?: { cls: ClassKey; look: number };
   /** Part 1's demonstration roll. */
   demo: { roll: number; skill: string; dc: number };
+  /** Segment start times in the voice-over (from its alignment); without them, fixed timing. */
+  cues?: Cues;
 };
 
 type Option = { label: string; sub?: string };
-type Plan = { dur: number; hook: [number, number]; beats: [number, number][]; cta: number; throwAt?: number };
+export type Plan = { dur: number; hook: [number, number]; beats: [number, number][]; cta: number; throwAt?: number };
 
 const ASK_Y = 76, CARD_Y = 314, CARD_H = 46, CARD_GAP = 52, LINEUP_Y = 300, LINEUP_CTA_Y = 240;
 const COLS = [64, 160, 256];
 const HERO_CTA: [number, number] = [W / 2 - 10, 250];
 
+const LEAD = 0.25; // visuals change just before the narrator gets there
+
 export function plan0(s: Episode0Spec): Plan {
+  const c = s.cues;
+  if (c) {
+    // timed by the voice: each beat starts as its line does; the CTA stays up after the last word
+    const n = { 1: 4, 2: 3, 3: 2, 4: 4 }[s.part];
+    const starts = Array.from({ length: n }, (_, i) => c[`b${i}`] - LEAD), cta = c.cta - LEAD;
+    const beats: [number, number][] = starts.map((a, i) => [a, i < n - 1 ? starts[i + 1] : cta]);
+    const p: Plan = { dur: Math.max(c.end + 2, cta + 9), hook: [0, starts[0]], beats, cta };
+    if (s.part === 1) p.throwAt = Math.max(beats[2][0] + 1, c.roll - 0.35 - THROW);
+    return p;
+  }
   // hook, then beats, then the call to action (10 s, room to read the cards and comment)
   const lens: Record<number, number[]> = { 1: [6.6, 7, 9.5, 4.5], 2: [4.4, 10.5, 6.5], 3: [4.4, 8.5], 4: [4.4, 7, 6.5, 6] };
   const hook = 3.4;
@@ -395,4 +411,71 @@ function cta(F: Frame, s: Episode0Spec, P: Plan, pinFrom: [number, number] | nul
     if (o.sub) fit(F, o.sub, x + 46, y + 38, 12, lw, RED, "left", 700);
     c.restore();
   });
+}
+
+// ---------------------------------------------------------------- voice-over and sound
+
+const LOOK_WORDS = (cls: ClassKey) => CLASSES[cls].looks.map((l) => l.name.toLowerCase());
+const NEXT = ["", "Part two", "Part three", "Part four", "Episode one"];
+const voted = (s: Episode0Spec) => !!s.recap && s.recap.votes.some((v) => v > 0);
+
+/** The narrator's lines, one segment per beat (keys b0…), the roll result, the hook and the CTA. */
+export function script0(s: Episode0Spec): Seg[] {
+  const tomorrow = `${NEXT[s.part]}, tomorrow at nine.`;
+  if (s.part === 1) {
+    const mod = modifier("rogue", s.demo.skill), total = s.demo.roll + mod;
+    const ok = s.demo.roll === 20 || (s.demo.roll !== 1 && total >= s.demo.dc);
+    return [
+      line("hook", "[whispers] You decide the story."),
+      line("b0", "[warmly] Every day at nine, a new episode. One hero. One dungeon. And you call the shots."),
+      line("b1", "Each episode ends with a choice. Comment A, B, or C. The most votes wins."),
+      line("b2", `[tense] And the dice are real. Your hero's skills set the odds. ${skillName(s.demo.skill)}, difficulty ${words(s.demo.dc)}: ${words(Math.round(odds(mod, s.demo.dc) * 100))} percent.`),
+      line("roll", ok ? `[excited] ${cap(words(s.demo.roll))}, plus ${words(mod)}. ${cap(words(total))}. Success!` : `[grimly] ${cap(words(s.demo.roll))}, plus ${words(mod)}. ${cap(words(total))}. Failure.`),
+      line("b3", "No votes? The story takes the default path. It never stops."),
+      line("cta", `[dramatic] So, a warm-up. What scares you most? Skeletons, goblins, or wraiths? Comment your letter. ${tomorrow}`),
+    ];
+  }
+  if (s.part === 2) {
+    const fear = FEARS.find((f) => f.foe === s.fear)!.pick;
+    return [
+      line("hook", "[whispers] Pick your hero."),
+      line("b0", voted(s) ? `Most of you fear ${fear}. [darkly] Noted.` : `No votes yet, so the default: ${fear}. [darkly] Noted.`),
+      line("b1", "Three heroes, each good at different things, and that changes your odds. The fighter breaks doors. The rogue sneaks and picks locks. The wizard reads runes."),
+      line("b2", "[grimly] Every hero has three hearts. Lose them all, and your hero dies. For good."),
+      line("cta", `Who goes in? Fighter, rogue, or wizard? Comment your letter. ${tomorrow}`),
+    ];
+  }
+  const cls = s.hero!.cls, name = CLASSES[cls].name.toLowerCase();
+  if (s.part === 3) {
+    const [a, b, c] = LOOK_WORDS(cls);
+    return [
+      line("hook", "[whispers] Pick a look."),
+      line("b0", voted(s) ? `Most of you chose the ${name}.` : `No votes, so the default: the ${name}.`),
+      line("b1", "Pick how your hero looks. If they fall, a new hero takes up the quest."),
+      line("cta", `${cap(a)}, ${b}, or ${c}? Comment your letter. ${tomorrow}`),
+    ];
+  }
+  const look = LOOK_WORDS(cls)[s.hero!.look], [k1, k2] = CLASSES[cls].skills.map((k) => skillName(k).toLowerCase());
+  return [
+    line("hook", `[dramatic] Meet your ${name}.`),
+    line("b0", voted(s) ? `${cap(look)} it is.` : `No votes, so ${look} it is.`),
+    line("b1", "[softly] Your sister Ellen ran round the old church widdershins, on a dare... [whispers] and vanished."),
+    line("b2", "Below the church lies a sealed crypt. It's the only way after her."),
+    line("b3", `Your ${name}: three hearts, and best at ${k1} and ${k2}.`),
+    line("cta", `[urgent] The crypt gate is shut. Force it, pick the lock, or search for another way? Comment your letter. ${tomorrow}`),
+  ];
+}
+
+/** Background track (files in assets/audio). */
+export const music0 = (s: Episode0Spec) => (s.part === 2 || s.part === 3 ? "old_tower_inn.mp3" : "dungeon_ambience.ogg");
+
+/** Sound effects: the dice shaken, then a clatter on every bounce. */
+export function sfx0(s: Episode0Spec, P: Plan): { t: number; file: string; gain: number }[] {
+  if (s.part !== 1 || P.throwAt == null) return [];
+  const t0 = P.throwAt;
+  const files = ["dice-throw-1.ogg", "dice-throw-2.ogg", "dice-throw-3.ogg", "dice-throw-2.ogg"], gains = [1, 0.75, 0.5, 0.3];
+  return [
+    { t: Math.max(0, t0 - 1.3), file: "dice-shake-1.ogg", gain: 0.6 },
+    ...BOUNCES.map((b, i) => ({ t: t0 + b * THROW, file: files[i], gain: gains[i] })),
+  ];
 }

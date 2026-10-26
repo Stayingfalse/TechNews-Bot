@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
 from . import metrics, notify, pipeline, social, store, themes
+from .adventure import jobs as adventure_jobs
+from .adventure import voice as adventure_voice
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
@@ -513,6 +515,40 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
 
 MUSIC_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,100}$")
 MAX_TRACK = 40 * 1024 * 1024
+
+
+# ------------------------------------------------------------------ adventure channel (preview only)
+
+@app.post("/adventure/episode0", status_code=202, dependencies=[Depends(require_token)])
+def adventure_episode0(spec: dict, voice: bool = True):
+    """Render an Episode 0 part as a preview (voiced unless voice=false) and send it to Discord.
+    Body: {"part": 1} or e.g. {"part": 2, "fear": "wraith", "recap": {"pick": 2, "votes": [3, 2, 7]}}.
+    Nothing is posted to Instagram yet."""
+    try:
+        job = adventure_jobs.submit({"kind": "episode0", **spec}, use_voice=voice)
+    except RuntimeError as e:
+        raise HTTPException(422, str(e))
+    return {k: job[k] for k in ("id", "status", "voice")} | {"chars": job["script"]["chars"], "script": job["script"]["text"]}
+
+
+@app.get("/adventure/jobs", dependencies=[Depends(require_token)])
+def adventure_jobs_list(limit: int = 20):
+    return adventure_jobs.recent(limit)
+
+
+@app.get("/adventure/jobs/{job_id}", dependencies=[Depends(require_token)])
+def adventure_job(job_id: str):
+    job = adventure_jobs.get(job_id) if re.fullmatch(r"adv-[\w-]+", job_id) else None
+    if not job:
+        raise HTTPException(404, "no such adventure job")
+    return job
+
+
+@app.get("/adventure/credits", dependencies=[Depends(require_token)])
+def adventure_credits():
+    return {"month": adventure_voice.month(), "spent": adventure_voice.spent(),
+            "budget": settings.adventure_voice_budget, "voice_id": settings.adventure_voice_id,
+            "model": settings.adventure_voice_model, "ledger": adventure_voice.ledger()}
 
 
 @app.get("/music", dependencies=[Depends(require_token)])
