@@ -47,7 +47,8 @@ spin-off, a kids' quiz.
 
 ## Things to decide before step 1
 
-- Which second channel first, and does it reuse the quiz format (cheapest: a new channel of kind
+- Which second channel first (planned: a daily choose-your-adventure dungeon crawl, see
+  [ADVENTURE_PLAN.md](ADVENTURE_PLAN.md)), and does it reuse the quiz format (cheapest: a new channel of kind
   `quiz` with its own themes) or need a new kind?
 - One Discord webhook for all channels, or one each?
 - Does a channel ever post to TikTok again? The publisher was removed; it would come back as a
