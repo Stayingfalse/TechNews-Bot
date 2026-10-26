@@ -7,6 +7,8 @@ import base64
 import hashlib
 import json
 import logging
+import re
+import subprocess
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -88,3 +90,50 @@ def clip(text: str) -> tuple[Path, Path, bool]:
     _record(len(text), key)
     log.info("adventure voice: %d characters, clip %s", len(text), key)
     return mp3, align, True
+
+
+def _silences(mp3: Path, min_len: float) -> list[tuple[float, float]]:
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(mp3), "-af", f"silencedetect=noise=-40dB:d={min_len}", "-f", "null", "-"],
+                       capture_output=True, text=True, check=True)
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    return list(zip(starts, ends))
+
+
+def tighten(mp3: Path, align: Path, max_gap: float = 0.6) -> tuple[Path, Path]:
+    """Shorten every pause longer than `max_gap` to `max_gap` (the narrator's [long pause] runs to
+    3-4 s), and move the alignment's timestamps to match. Cached next to the clip."""
+    tag = f"-t{int(max_gap * 100)}"
+    out, out_align = mp3.with_name(mp3.stem + tag + ".mp3"), align.with_name(align.stem + tag + ".json")
+    if out.exists() and out_align.exists():
+        return out, out_align
+    cuts = [(a + max_gap / 2, b - max_gap / 2) for a, b in _silences(mp3, max_gap + 0.2) if b - a > max_gap]
+    if not cuts:
+        return mp3, align
+    keep, t = [], 0.0
+    for a, b in cuts:
+        keep.append((t, a))
+        t = b
+    filters = [f"[0:a]atrim=start={a:.3f}" + (f":end={b:.3f}" if b else "") + f",asetpts=PTS-STARTPTS[k{i}]"
+               for i, (a, b) in enumerate(keep + [(t, None)])]
+    n = len(keep) + 1
+    graph = ";".join(filters) + ";" + "".join(f"[k{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[o]"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(mp3), "-filter_complex", graph, "-map", "[o]",
+                    "-c:a", "libmp3lame", "-b:a", "128k", str(out)], check=True)
+
+    def shift(x: float) -> float:
+        removed = 0.0
+        for a, b in cuts:
+            if x >= b:
+                removed += b - a
+            elif x > a:
+                return round(a - removed, 3)  # inside a removed stretch: snap to where it was cut
+        return round(x - removed, 3)
+
+    data = json.loads(align.read_text())
+    al = data["alignment"]
+    for k in ("character_start_times_seconds", "character_end_times_seconds"):
+        al[k] = [shift(x) for x in al[k]]
+    out_align.write_text(json.dumps(data))
+    log.info("adventure voice: %d pauses shortened, %.1fs removed", len(cuts), sum(b - a for a, b in cuts))
+    return out, out_align
