@@ -81,3 +81,15 @@ def test_move_and_cancel(client, quiz):
 def test_avatars(client):
     out = client.get("/avatars", headers=AUTH).json()
     assert "avatar-emoji.png" in out["pictures"] and out["every_weeks"] >= 0
+
+
+def test_job_comments(client, quiz, platforms):
+    from tests.helpers import comment, posted
+
+    posted("post-1", quiz, hours_ago=5)
+    platforms["comments"]["instagram"] = [comment("c1", "fan", "Do Disney next!", 1),
+                                          comment("c2", "mediaquiz.daily", "Thanks!", 2)]
+    out = client.get("/jobs/post-1/comments", headers=AUTH).json()
+    assert out["platforms_read"] == 2
+    assert [(c["user"], c["theme"]) for c in out["comments"]] == [("fan", "Disney next")]
+    assert client.get("/jobs/nope/comments", headers=AUTH).status_code == 404

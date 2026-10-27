@@ -410,6 +410,21 @@ def get_job(job_id: str):
     return job
 
 
+@app.get("/jobs/{job_id}/comments", dependencies=[Depends(require_token)])
+def job_comments(job_id: str):
+    """The viewers' comments on a posted quiz, as the bot reads them (our own left out), with each
+    one's theme reading: what a "comment a theme" post would take from it."""
+    job = store.get_job(job_id)
+    if not job or not job.get("results"):
+        raise HTTPException(404, "no posted quiz with that id")
+    from .cliffhanger import read_comments
+
+    with channels.use(job.get("channel")):
+        rows, readable, errors = read_comments(job)
+    return {"job_id": job_id, "platforms_read": readable, "errors": errors,
+            "comments": [{**c, "theme": themes._theme_text(c["text"])} for c in rows]}
+
+
 # ------------------------------------------------------------------ performance
 
 @app.get("/metrics", dependencies=[Depends(require_token)])
