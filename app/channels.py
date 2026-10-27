@@ -1,9 +1,9 @@
 """Channels: one brand posting one kind of content to its own social accounts.
 
-Today there is one channel, "main" (the quiz account), built from the existing settings, so nothing
-behaves differently. The seams for more are here: every job records its channel, the worker runs
-each job "as" its channel, and OAuth tokens are stored per channel. See docs/MULTI_ACCOUNT.md for
-the steps still to come (per-channel schedules, connections, routines and content kinds).
+Two channels: "main" (the quiz account, built from the existing settings) and "adventure" (the
+dungeon crawl, docs/ADVENTURE_PLAN.md). Every job records its channel, the worker runs each job
+"as" its channel, OAuth tokens are stored per channel, and /oauth/{platform}/start?channel=…
+connects a channel's own accounts. See docs/MULTI_ACCOUNT.md for what's still to come.
 """
 from __future__ import annotations
 
@@ -14,20 +14,25 @@ from dataclasses import dataclass, field
 from .config import settings
 
 MAIN = "main"
+ADVENTURE = "adventure"
 
 
 @dataclass(frozen=True)
 class Channel:
     id: str
     name: str
-    kind: str  # the content it makes; "quiz" is the only renderer so far
+    kind: str  # the content it makes: "quiz" or "adventure"
     brand_handle: str
     post_time: str
     platforms: list[str] = field(default_factory=list)
 
 
 def registry() -> dict[str, Channel]:
-    return {MAIN: Channel(MAIN, "Daily quiz", "quiz", settings.brand_handle, settings.post_time, list(settings.platforms))}
+    return {
+        MAIN: Channel(MAIN, "Daily quiz", "quiz", settings.brand_handle, settings.post_time, list(settings.platforms)),
+        ADVENTURE: Channel(ADVENTURE, "Dungeon crawl", "adventure", settings.adventure_handle, settings.adventure_post_time,
+                           list(settings.adventure_platforms)),
+    }
 
 
 def get(channel_id: str | None) -> Channel:

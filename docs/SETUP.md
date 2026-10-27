@@ -114,6 +114,22 @@ The Reel is published through the API with the video's own music.
 The app stays in development mode (posting to your own account doesn't need Meta App Review).
 Long-lived tokens last 60 days and are refreshed automatically.
 
+### A second account (the adventure channel, @dungeoncrawlergram)
+
+Same Meta app; nothing to create.
+
+1. Make the account Professional (Creator or Business) in the Instagram app.
+2. Meta app → Instagram → API setup with Instagram login → Roles → add the account as an
+   **Instagram tester**, and accept the invite in Instagram while signed in to that account
+   (Settings → Website permissions → Apps and websites → Tester invites).
+3. In a **private window**, sign in to instagram.com as that account, then open
+   `APP_URL/oauth/instagram/start?channel=adventure&token=API_TOKEN` and approve. The page names the
+   account it connected; the quiz's own account is refused, so the quiz's connection can't be
+   overwritten this way. `GET /status` → `channels` shows both.
+
+Never use the plain `/oauth/instagram/start` link (no `?channel=`) for the second account: that one
+replaces the quiz's connection.
+
 ## 5b. Performance numbers and comments (dashboard, weekly review, cliffhangers)
 
 The bot collects each post's numbers at about 1 hour, 24 hours and 7 days, and refreshes them
