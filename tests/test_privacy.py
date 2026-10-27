@@ -25,7 +25,8 @@ def test_policy_page_is_public_and_complete(monkeypatch):
     page = r.text
     for must in ("privacy@example.com", "Legitimate interests", "Your rights", "ico.org.uk", "ElevenLabs",
                  "Anthropic", "90 days", 'id="deletion"', "Children", "YouTube API Services",
-                 "policies.google.com/privacy", "how-we-use-comments.mp4", "/privacy/request", "/terms"):
+                 "policies.google.com/privacy", "how-we-use-comments.mp4", "how-we-use-votes.mp4", "/privacy/request", "/terms",
+                 "@dungeoncrawlergram", "Dungeon crawl votes", "One opt-out covers both channels"):
         assert must in page, must
     assert TestClient(app).get("/data-deletion", follow_redirects=False).headers["location"] == "/privacy#deletion"
 
@@ -41,8 +42,11 @@ def test_terms_page_and_video_are_public():
     r = c.get("/terms")
     assert r.status_code == 200 and "Terms of service" in r.text and "England and Wales" in r.text
     assert "$" not in r.text.split("<body", 1)[1]
-    v = c.get("/privacy/how-we-use-comments.mp4")
-    assert v.status_code == 200 and v.headers["content-type"] == "video/mp4"
+    assert "Dungeon crawl votes" in r.text
+    for name in ("how-we-use-comments", "how-we-use-votes"):
+        v = c.get(f"/privacy/{name}.mp4")
+        assert v.status_code == 200 and v.headers["content-type"] == "video/mp4"
+    assert c.get("/privacy/secrets.mp4").status_code == 404
 
 
 def test_opted_out_viewers_are_never_read(quiz, platforms):
@@ -133,3 +137,22 @@ def test_meta_deletion_callback(monkeypatch):
     assert c.post("/privacy/meta/deletion", data={"signed_request": forged}).status_code == 400
     assert c.post("/privacy/meta/deletion", data={"signed_request": "junk"}).status_code == 400
     assert c.post("/privacy/meta/deauthorize", data={"signed_request": good}).json() == {"ok": True}
+
+
+def test_one_optout_covers_the_dungeon_crawl_too(monkeypatch):
+    """An opt-out made on either channel drops that viewer's votes on the adventure, and "#optout" under an
+    adventure episode opts them out of the quiz too."""
+    from app.adventure import jobs as adv
+    from app.publish import instagram
+
+    monkeypatch.setattr(instagram, "own_name", lambda: "dungeoncrawlergram")
+    rows = [{"id": "a1", "user": "Quiz_Fan", "text": "B", "at": "1"}, {"id": "a2", "user": "goblin", "text": "C", "at": "2"},
+            {"id": "a3", "user": "Shy_Bard", "text": "#optout", "at": "3"}]
+    monkeypatch.setattr(instagram, "comments", lambda media, limit=200: rows)
+    adv.save({"id": "ep1", "channel": "adventure", "status": "done", "published_at": store.now_iso(),
+              "results": {"instagram": {"ok": True, "media_id": "m1"}}})
+    assert legal.scan_comment_optouts() == 1 and privacy.is_opted_out("shy_bard")
+
+    privacy.opt_out("@quiz_fan")  # e.g. via the form, naming the quiz
+    t = adv.votes.tally([c for c in rows if privacy._key(c["user"]) not in privacy.opted_out()], ["x", "y", "z"])
+    assert t["counts"] == [0, 0, 1]

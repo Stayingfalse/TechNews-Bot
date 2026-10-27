@@ -103,10 +103,10 @@ def phone(frame: Image.Image, height: int = 980) -> Image.Image:
 
 
 def bullets(items: list[str]) -> Image.Image:
-    rows = []
+    rows, size = [], min(fit_size(it, "semi", 44, SAFE_W - 120, 1, 30) for it in items)  # one size for every line
     for it in items:
         dot = disc(16, PAL.sign + (255,), PAL.ink, 3, 0)
-        txt = ink_text(it, "semi", fit_size(it, "semi", 44, SAFE_W - 120, 1, 30), PAL.paper, PAL.ink, 0, 4)
+        txt = ink_text(it, "semi", size, PAL.paper, PAL.ink, 0, 4)
         row = Image.new("RGBA", (SAFE_W, max(dot.height, txt.height) + 16), (0, 0, 0, 0))
         row.alpha_composite(dot, (10, (row.height - dot.height) // 2))
         row.alpha_composite(txt, (70, (row.height - txt.height) // 2))
@@ -180,7 +180,7 @@ def build():
                (phone(title, 760), SAFE_CX, 1110, 1.1)]),
         Slide([(heading("YOUR DATA"), SAFE_CX, top + 60, 0.1),
                (bullets(["Only public comments under our videos", "Never your messages or profile",
-                         "Names leave our records after 90 days", "Opt out or delete any time",
+                         "Names leave our records after 90 days", "#optout opts you out of both our channels",
                          "Nothing sold, no ads"]), SAFE_CX, 860, 0.4),
                (sign("quiz.cezz.co.uk/privacy", 52, PAL.paper), SAFE_CX, 1300, 1.3)]),
     ]

@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .. import channels, lease, notify, store
+from .. import channels, lease, notify, privacy, store
 from ..config import settings
 from ..publish import instagram
 from . import campaign, votes, voice
@@ -140,8 +140,8 @@ def _resolve_votes(job: dict) -> None:
     comments, error = [], None
     if media:
         try:
-            own = instagram.own_name().lower()
-            comments = [c for c in instagram.comments(media) if c["user"].lower() != own]
+            own, out = instagram.own_name().lower(), privacy.opted_out()  # one opt-out list for both channels
+            comments = [c for c in instagram.comments(media) if c["user"].lower() != own and privacy._key(c["user"]) not in out]
         except Exception as e:
             error = str(e)[:300]
     else:

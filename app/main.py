@@ -546,11 +546,13 @@ def terms_of_service():
     return legal.terms_page()
 
 
-@app.get("/privacy/how-we-use-comments.mp4")
-def privacy_explainer():
-    if not legal.EXPLAINER.exists():
+@app.get("/privacy/{name}.mp4")
+def privacy_explainer(name: str):
+    """The explainer videos shown on the privacy policy, one per channel."""
+    path = legal.EXPLAINERS / f"{name}.mp4"
+    if name not in legal.VIDEOS or not path.exists():
         raise HTTPException(404)
-    return FileResponse(legal.EXPLAINER, media_type="video/mp4")
+    return FileResponse(path, media_type="video/mp4")
 
 
 @app.get("/data-deletion")

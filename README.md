@@ -128,11 +128,11 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 
 ## Privacy (GDPR)
 
-Public pages (no sign-in), written in `app/legal/*.html` and served by `app/legal.py`:
+Public pages (no sign-in) covering both channels, the quiz and the Dungeon crawl, written in `app/legal/*.html` and served by `app/legal.py`:
 
 | URL | What |
 |---|---|
-| `/privacy` | Privacy policy (UK/EU GDPR): what is read from comments, why (legitimate interests, with the balancing test), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), transfers, retention, security, rights, YouTube API Services and Instagram notices; embeds the "how we use your comments" video |
+| `/privacy` | Privacy policy (UK/EU GDPR): what is read from comments, why (legitimate interests, with the balancing test), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), transfers, retention, security, rights, YouTube API Services and Instagram notices; embeds both channels' explainer videos |
 | `/terms` | Terms of service |
 | `/privacy/request` | Self-service form: opt out, or delete and opt out; applied at once, with a confirmation code |
 | `/privacy/status/{code}` | Where a request stands (also `/privacy/status?code=`) |
@@ -140,11 +140,13 @@ Public pages (no sign-in), written in `app/legal/*.html` and served by `app/lega
 | `POST /privacy/meta/deauthorize` | Meta's deauthorize callback |
 | `/data-deletion` | Redirects to the policy's deletion section |
 
-Viewers can also opt out by commenting `#optout` (or "opt out") under any post: the maintenance loop
-scans the last 14 days of posts twice a day. Every request is logged for 365 days
+Viewers can also opt out by commenting `#optout` (or "opt out") under any post on either channel: the
+maintenance loop scans the last 14 days of posts twice a day. There is one opt-out list for both channels:
+the quiz never reads an opted-out viewer, and the Dungeon crawl doesn't count their votes. Every request is logged for 365 days
 (`privacy_requests.json`) and posted to Discord; taking down a video that shows a name stays manual.
 Owner-only: `POST /privacy/optout` and `POST /privacy/erase` (token). Viewer names leave post records
-automatically after 90 days. `render_explainer.py` makes the 42-second video in `assets/explainer/`.
+automatically after 90 days. The videos in `assets/explainer/` come from `render_explainer.py` (the quiz,
+42 s) and `render_explainer_adventure.py` (the Dungeon crawl's votes, 36 s; needs `npm ci` in `adventure/`).
 
 ## Tests
 

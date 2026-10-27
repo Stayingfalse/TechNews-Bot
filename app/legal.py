@@ -29,7 +29,8 @@ UPDATED = "28 October 2026"
 REQUEST_LOG_DAYS = 365  # deletion/opt-out records kept to show we honoured them (Art. 5(2) accountability)
 OPTOUT_WORDS = re.compile(r"(?i)(#\s*opt\s*-?\s*out\b|\bopt\s*-?\s*out\b|#\s*nodata\b)")
 TEMPLATES = Path(__file__).with_name("legal")
-EXPLAINER = Path(__file__).resolve().parents[1] / "assets" / "explainer" / "how-we-use-comments.mp4"
+EXPLAINERS = Path(__file__).resolve().parents[1] / "assets" / "explainer"
+VIDEOS = ("how-we-use-comments", "how-we-use-votes")  # the quiz's, the dungeon crawl's
 
 
 # ------------------------------------------------------------------ requests log
@@ -72,21 +73,41 @@ def apply_request(kind: str, platform: str, user: str, source: str) -> str:
 
 # ------------------------------------------------------------------ "#optout" comments
 
-def scan_comment_optouts(days: int = 14) -> int:
-    """Opt out anyone who commented "#optout" under a recent post. Returns how many were added."""
+def _recent_comments(since: str):
+    """(platform, comment) for every comment under both channels' posts published since `since`."""
+    from . import channels
+    from .adventure import jobs as adventure_jobs
     from .cliffhanger import read_comments
+    from .publish import instagram
 
+    for job in store.list_jobs(200):
+        if job.get("status") == "done" and not job.get("dry_run") and (job.get("published_at") or "") >= since:
+            with channels.use(job.get("channel")):
+                rows, _, _ = read_comments(job)
+            yield from rows
+    for job in adventure_jobs.recent(60):
+        media = ((job.get("results") or {}).get("instagram") or {}).get("media_id")
+        if not media or (job.get("published_at") or "") < since:
+            continue
+        try:
+            with channels.use(channels.ADVENTURE):
+                rows = instagram.comments(media)
+        except Exception:
+            continue
+        yield from ({**c, "platform": "instagram"} for c in rows)
+
+
+def scan_comment_optouts(days: int = 14) -> int:
+    """Opt out anyone who commented "#optout" under a recent post on either channel (one list covers
+    both). Returns how many were added."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     seen = store._read("optout_comments.json", [])
     added = 0
-    for job in store.list_jobs(200):
-        if job.get("status") != "done" or job.get("dry_run") or (job.get("published_at") or "") < since:
+    for c in _recent_comments(since):
+        if c["id"] in seen or not OPTOUT_WORDS.search(c["text"]):
             continue
-        rows, _, _ = read_comments(job)
-        for c in rows:
-            if c["id"] in seen or not OPTOUT_WORDS.search(c["text"]):
-                continue
-            seen.append(c["id"])
+        seen.append(c["id"])
+        if not privacy.is_opted_out(c["user"]):
             apply_request("opt-out", c["platform"], c["user"], "#optout comment")
             added += 1
     store._write("optout_comments.json", seen[-2000:])
@@ -135,11 +156,13 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 # ------------------------------------------------------------------ pages
 
 def _page(name: str, **values) -> str:
-    handle = settings.brand_handle or "the quiz account"
+    at = lambda h: "@" + h.lstrip("@")  # noqa: E731
+    quiz, adventure = at(settings.brand_handle or "the quiz account"), at(settings.adventure_handle)
+    handle = f"{quiz} and {adventure}"
     contact = settings.privacy_contact_email
     mail = (f'<a href="mailto:{html.escape(contact)}">{html.escape(contact)}</a>' if contact
             else "<em>(contact address not set)</em>")
-    common = {"handle": html.escape(handle), "mail": mail, "updated": UPDATED,
+    common = {"handle": html.escape(handle), "quiz": html.escape(quiz), "adventure": html.escape(adventure), "mail": mail, "updated": UPDATED,
               "controller": html.escape(settings.privacy_controller or f"the person who runs {handle}"),
               "base": html.escape(settings.public_base_url), "days": str(privacy.RETENTION_DAYS),
               "log_days": str(REQUEST_LOG_DAYS)}
