@@ -371,3 +371,188 @@ def test_booking_endpoint_takes_a_local_time(client, scheduled):
     at = datetime.fromisoformat(r.json()["publish_at"]).astimezone(settings.tz)
     assert at.strftime("%H:%M") == "09:00" and r.json()["series"] and r.json()["status"] == "booked"
     assert client.delete(f"/adventure/jobs/{r.json()['id']}", headers=AUTH).json()["status"] == "cancelled"
+
+
+# ------------------------------------------------------------------ the story (weekly arcs)
+
+from app.adventure import campaign  # noqa: E402
+
+ARC = json.loads((settings.adventure_dir / "examples" / "arc-s1w1.json").read_text())
+PART4 = ["Force the rusted gate", "Pick the old lock", "Search for another way"]
+
+
+def _fake_cli(problems=None):
+    """The renderer CLI, faked: validate-arc passes (or reports `problems`), resolve rolls plainly."""
+    seen = []
+
+    def node(cmd, path, timeout=60):
+        payload = json.loads(open(path).read())
+        seen.append((cmd, payload))
+        if cmd == "validate-arc":
+            return {"ok": not problems, "problems": problems or [], "arc": None if problems else payload["arc"]}
+        if cmd == "vocab":
+            return {"scenes": ["dungeon"], "hero": payload["hero"]}
+        n, ctx = payload["node"], payload["ctx"]
+        check, hearts = n.get("check"), ctx["hearts"]
+        ok = check is None or ctx["dice"][0] >= check["dc"]
+        if check and not ok and check.get("harm"):
+            hearts -= 1
+        return {"kind": "story", "ep": ctx["ep"], "node": n["id"], "recap": ctx["recap"], "hearts": {"before": ctx["hearts"], "after": hearts},
+                "dead": hearts <= 0, "check": {"dc": check["dc"], "roll": {"total": ctx["dice"][0], "ok": ok}} if check else None,
+                "choices": [{"label": c["label"]} for c in n["choices"]], "default": n["default"]}
+    return node, seen
+
+
+def _story_script(spec):
+    if spec.get("kind") == "story":
+        return {"text": f"ep {spec['ep']}", "check": "Check.", "roll": "Roll.", "tail": "Tail.", "caption": f"ep {spec['ep']}",
+                "comment": "opts", "options": [c["label"] for c in spec["choices"]], "default": spec["default"]}
+    return {**_script_for(spec), "options": PART4 if spec["part"] == 4 else _script_for(spec)["options"]}
+
+
+@pytest.fixture
+def story(scheduled, monkeypatch):
+    node, seen = _fake_cli()
+    monkeypatch.setattr(jobs, "_node", node)
+    monkeypatch.setattr(jobs, "script", _story_script)
+    monkeypatch.setattr(instagram, "comments", lambda media: [{"user": "ann", "text": "b"}, {"user": "bob", "text": "B!"}])
+    return scheduled, seen
+
+
+def _posted_part4(slot):
+    """Episode 0 part 4, posted at `slot`, with the hero made."""
+    job = {"id": "adv-part4", "kind": "episode0", "spec": {"kind": "episode0", "part": 4, "hero": {"cls": "rogue", "look": 0}},
+           "script": _story_script({"part": 4}), "series": True, "publish": True, "voice": False, "status": "done",
+           "publish_at": slot.isoformat(), "results": {"instagram": {"ok": True, "media_id": "m4"}}}
+    jobs.save(job)
+    campaign.note_episode0(job["spec"])
+    return job
+
+
+def test_the_first_arc_runs_from_after_episode0_to_tuesday(story):
+    slot = datetime(2026, 10, 27, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    jobs.submit({"kind": "episode0", "part": 1}, at=slot, series=True)
+    e = campaign.expected()
+    assert (e["start_date"], e["days"]) == ("2026-10-31", 4)
+    assert e["links_from"][0]["id"] == "episode0" and e["links_from"][0]["options"][1]["recap"] == "You chose to pick the old lock."
+
+    assert campaign.accept(ARC)["ok"]
+    e = campaign.expected()
+    assert (e["start_date"], e["days"]) == ("2026-11-04", 7)  # Wednesday to Tuesday from now on
+    assert [lf["id"] for lf in e["links_from"]] == ["the-whisper"] and "gate-lock" in e["known_ids"]
+
+
+def test_an_arc_for_the_same_days_needs_replace_and_must_not_have_started(story):
+    assert campaign.accept(ARC)["ok"]
+    again = campaign.accept({**ARC, "title": "Again"})
+    assert not again["ok"] and again["conflict"]
+    assert campaign.accept({**ARC, "title": "Again"}, replace=True)["ok"] and campaign.arcs()[0]["title"] == "Again"
+    campaign.save_state({**campaign.state(), "history": [{"node": "gate-lock"}]})
+    assert "started playing" in campaign.accept(ARC, replace=True)["problems"][0]
+
+
+def test_arc_endpoint_returns_every_problem(client, story, monkeypatch):
+    monkeypatch.setattr(jobs, "_node", _fake_cli(["gate-lock: 95% to succeed", "day 2: needs 1-3 nodes, has 4"])[0])
+    r = client.post("/adventure/arc", json=ARC, headers=AUTH)
+    assert r.status_code == 422 and len(r.json()["detail"]["problems"]) == 2
+    assert r.json()["detail"]["expected"]["links_from"][0]["id"] == "episode0"
+
+
+def test_state_endpoint_has_what_the_routine_needs(client, story):
+    _posted_part4(datetime(2030, 3, 7, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc))
+    r = client.get("/adventure/state", headers=AUTH).json()
+    assert r["state"]["hero"] == {"cls": "rogue", "look": 0} and r["next_arc"]["start_date"] == "2030-03-08"
+    assert "Childe Rowland" in r["season_bible"] and r["example_arc"]["id"] == ARC["id"]
+    assert r["vocab"]["hero"]["cls"] == "rogue" and r["voice"]["budget"] == settings.adventure_voice_budget
+
+
+def test_dice_are_fair_looking_and_the_same_every_time():
+    a, proof = campaign.dice(3, "gate-lock")
+    assert a == campaign.dice(3, "gate-lock")[0] and proof == "1:3:gate-lock"
+    assert all(1 <= d <= 20 for d in a) and a != campaign.dice(4, "gate-lock")[0]
+    rolls = [campaign.dice(i, "x")[0][0] for i in range(400)]
+    assert set(rolls) == set(range(1, 21))
+
+
+def test_episode0_hands_over_to_the_story_and_the_story_follows_the_votes(story, discord):
+    (rendered, posted), seen = story
+    campaign.accept(ARC)
+    slot = datetime(2030, 3, 7, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    part4 = _posted_part4(slot)
+    first = jobs._book_next(part4)
+    assert first["kind"] == "story" and "no arc" not in discord[-1][0]
+
+    jobs.tick(datetime.fromisoformat(first["publish_at"]) - timedelta(minutes=60))
+    ready = jobs.get(first["id"])
+    assert ready["status"] == "scheduled", ready.get("error")
+    assert ready["votes"]["pick"] == 1 and ready["node"] == "gate-lock" and ready["spec"]["ep"] == 1
+    assert ready["spec"]["recap"]["line"] == "You chose to pick the old lock."
+    assert ready["dice"]["rolled"] == campaign.dice(1, "gate-lock")[0]
+    assert campaign.state()["ep"] == 0  # nothing is remembered until it posts
+
+    jobs.tick(datetime.fromisoformat(first["publish_at"]))
+    s = campaign.state()
+    assert jobs.get(first["id"])["status"] == "done" and s["ep"] == 1 and s["node"] == "gate-lock"
+    assert s["history"][0]["votes"] == [0, 2, 0]
+
+    second = [j for j in jobs.recent() if j.get("from_job") == first["id"]][0]
+    jobs.tick(datetime.fromisoformat(second["publish_at"]) - timedelta(minutes=60))
+    second = jobs.get(second["id"])
+    gate_lock = next(n for n in ARC["nodes"] if n["id"] == "gate-lock")
+    assert second["node"] == gate_lock["choices"][1]["next"] and second["spec"]["ep"] == 2
+    assert second["spec"]["recap"]["line"] == gate_lock["choices"][1]["recap"]
+
+
+def test_no_arc_fails_loudly_and_retries_when_one_arrives(client, story, discord):
+    slot = datetime.now(timezone.utc) + timedelta(minutes=30)
+    part4 = _posted_part4(slot - timedelta(days=1))
+    job = jobs._book_next(part4)
+    assert "no arc says where" in discord[-1][0]
+    jobs.tick(datetime.fromisoformat(job["publish_at"]) - timedelta(minutes=60))
+    failed = jobs.get(job["id"])
+    assert failed["status"] == "failed" and failed["error_code"] == "no_arc" and "Submit the arc" in discord[-1][0]
+
+    arc = {**ARC, "start_date": campaign.expected()["start_date"]}
+    r = client.post("/adventure/arc", json=arc, headers=AUTH)
+    assert r.status_code == 201, r.text
+    assert r.json()["retried"] == [job["id"]] and jobs.get(job["id"])["status"] == "booked"
+
+
+def test_a_broken_rule_is_remembered_and_a_fallen_hero_stops_the_story(story, discord, monkeypatch):
+    monkeypatch.setattr(campaign, "dice", lambda ep, node: ([3, 3], f"1:{ep}:{node}"))
+    arc = json.loads(json.dumps(ARC))
+    lock = next(n for n in arc["nodes"] if n["id"] == "gate-lock")
+    lock["check"]["harm"] = True  # and the dice say 3
+    campaign.accept(arc)
+    campaign.save_state({**campaign.state(), "hearts": 1})
+    slot = datetime(2030, 3, 7, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    job = jobs._book_next(_posted_part4(slot))
+    jobs.tick(datetime.fromisoformat(job["publish_at"]) - timedelta(minutes=60))
+    ready = jobs.get(job["id"])
+    assert ready["spec"]["dead"] and ready["state_after"]["hearts"] == 0
+    jobs.tick(datetime.fromisoformat(job["publish_at"]))
+    s = campaign.state()
+    assert s["dead"] and s["hearts"] == 0 and "hero has fallen" in discord[-1][0]
+    assert not [j for j in jobs.recent() if j.get("from_job") == job["id"]]
+
+
+def test_a_broken_rule_is_remembered(story):
+    arc = json.loads(json.dumps(ARC))
+    lock = next(n for n in arc["nodes"] if n["id"] == "gate-lock")  # where B leads
+    lock["choices"][1]["breaks"] = "eat"
+    campaign.accept(arc)
+    slot = datetime(2030, 3, 7, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    first = jobs._book_next(_posted_part4(slot))
+    jobs.tick(datetime.fromisoformat(first["publish_at"]) - timedelta(minutes=60))
+    jobs.tick(datetime.fromisoformat(first["publish_at"]))
+    second = [j for j in jobs.recent() if j.get("from_job") == first["id"]][0]
+    jobs.tick(datetime.fromisoformat(second["publish_at"]) - timedelta(minutes=60))
+    jobs.tick(datetime.fromisoformat(second["publish_at"]))
+    assert campaign.state()["rules_broken"] == [{"rule": "eat", "choice": lock["choices"][1]["label"], "at": "gate-lock", "ep": 2}]
+
+
+def test_the_first_arc_keeps_the_checks_episode0_promised(story):
+    arc = json.loads(json.dumps(ARC))
+    next(n for n in arc["nodes"] if n["id"] == "gate-lock")["check"]["dc"] = 13
+    r = campaign.accept(arc)
+    assert not r["ok"] and r["problems"] == ['gate-lock: Episode 0 promised sleight_of_hand DC 12 for "Pick the old lock"; its check must be exactly that']

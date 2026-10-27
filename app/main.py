@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
 from . import channels, metrics, notify, pipeline, social, store, themes
+from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
 from .adventure import votes as adventure_votes_mod
@@ -603,6 +604,46 @@ def adventure_job(job_id: str):
     if not job:
         raise HTTPException(404, "no such adventure job")
     return job
+
+
+@app.get("/adventure/state", dependencies=[Depends(require_token)])
+def adventure_state():
+    """Everything the weekly story routine needs: the hero and what has happened, what the next arc
+    must look like (dates, what it links from, ids taken), the season bible, an example arc, the
+    scenes/foes/skills with this hero's odds at every DC, and the voice budget."""
+    o = adventure_campaign.overview()
+    try:
+        o["vocab"] = adventure_campaign.vocab(o["state"]["hero"])
+    except Exception as e:  # the routine can still write from the example
+        o["vocab"] = {"error": str(e)[:300]}
+    o["voice"] = {"month": adventure_voice.month(), "spent": adventure_voice.spent(), "budget": settings.adventure_voice_budget}
+    o["post_time"] = settings.adventure_post_time
+    return o
+
+
+@app.post("/adventure/arc", status_code=201, dependencies=[Depends(require_token)])
+def adventure_arc(arc: dict, replace: bool = False, dry_run: bool = False):
+    """Submit the next weekly arc. Every problem comes back at once (422; 409 if an arc already
+    covers those dates). dry_run=true only checks it. replace=true swaps an arc nothing has played yet."""
+    if dry_run:
+        r = adventure_campaign.validate(arc)
+        if not r.get("ok"):
+            raise HTTPException(422, {"problems": r.get("problems"), "expected": r["expected"]})
+        return {"ok": True, "dry_run": True}
+    r = adventure_campaign.accept(arc, replace=replace)
+    if not r["ok"]:
+        raise HTTPException(409 if r.get("conflict") else 422, {"problems": r["problems"], "expected": r.get("expected")})
+    r["retried"] = adventure_jobs.retry_waiting()
+    notify.send(f":scroll: **Adventure**: arc `{r['id']}` booked: {r['nodes']} scenes over {r['days']} days from {r['start_date']}.")
+    return r
+
+
+@app.get("/adventure/arcs/{arc_id}", dependencies=[Depends(require_token)])
+def adventure_arc_get(arc_id: str):
+    arc = next((a for a in adventure_campaign.arcs() if a["id"] == arc_id), None)
+    if not arc:
+        raise HTTPException(404, "no such arc")
+    return arc
 
 
 @app.get("/adventure/credits", dependencies=[Depends(require_token)])

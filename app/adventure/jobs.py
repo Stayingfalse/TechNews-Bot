@@ -3,7 +3,8 @@
 A booked job is prepared RENDER_LEAD before its slot: for a part that follows an earlier post, the
 votes on that post are counted first (votes close as preparation starts), then it is voiced and
 rendered; it posts at the slot. Episode 0 runs as a series: each part, once posted, books the next
-for the same time the next day. Jobs are small JSON files in DATA_DIR/adventure/jobs; one adventure
+for the same time the next day; after part 4 the story episodes follow the same way, each day's node
+picked by the votes from the weekly arcs (campaign.py) and rolled for when the votes close. Jobs are small JSON files in DATA_DIR/adventure/jobs; one adventure
 render runs at a time, and only the server holding the deploy lease schedules."""
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from pathlib import Path
 from .. import channels, lease, notify, store
 from ..config import settings
 from ..publish import instagram
-from . import votes, voice
+from . import campaign, votes, voice
 
 log = logging.getLogger(__name__)
 _render_lock = threading.Lock()
@@ -152,11 +153,17 @@ def _resolve_votes(job: dict) -> None:
         notify.send(f":warning: **Adventure**: couldn't read the votes on `{prev['id']}` ({error}); going with {'ABC'[pick]}")
     job["votes"] = {"from_job": prev["id"], "counts": t["counts"], "comments": t["comments"], "voters": len(t["voters"]),
                     "pick": pick, "how": how, "option": opts[pick], "counted_at": store.now_iso()}
-    job["spec"] = next_spec(prev["spec"], pick, t["counts"])
+    if job["kind"] == "story":
+        job.update(campaign.build_story(prev, pick, t["counts"]))
+    else:
+        job["spec"] = next_spec(prev["spec"], pick, t["counts"])
+        campaign.note_episode0(job["spec"])
     job["script"] = script(job["spec"])
     counts = " · ".join(f"{'ABC'[i]} {n}" for i, n in enumerate(t["counts"]))
-    notify.send(f":ballot_box: **Adventure votes** on Episode 0 part {prev['spec']['part']}: {counts} "
-                f"({t['comments']} comments) → **{'ABC'[pick]}: {opts[pick]}** ({how})")
+    roll = (job["spec"].get("check") or {}).get("roll")
+    rolled = f"\nRolled {roll['total']} vs DC {job['spec']['check']['dc']}: {'success' if roll['ok'] else 'failure'}" if roll else ""
+    notify.send(f":ballot_box: **Adventure votes** on {_title(prev)}: {counts} "
+                f"({t['comments']} comments) → **{'ABC'[pick]}: {opts[pick]}** ({how}){rolled}")
 
 
 def next_spec(prev: dict, pick: int, counts: list[int]) -> dict:
@@ -173,21 +180,47 @@ def next_spec(prev: dict, pick: int, counts: list[int]) -> dict:
     return spec
 
 
+def _title(job: dict) -> str:
+    spec = job["spec"]
+    return f"Episode {spec['ep']}" if spec.get("kind") == "story" else f"Episode 0 part {spec.get('part')}"
+
+
+def _voice(job: dict) -> list[str]:
+    """The narration as renderer arguments: one clip for Episode 0; for a story episode the day's
+    own clip plus the reusable check, roll and sign-off lines (cached by their words, so a line said
+    before costs nothing). Nothing at all if this month's budget can't cover it."""
+    s = job["script"]
+    if job["spec"].get("kind") == "story":
+        lines = {"daily": s["text"], "check": s.get("check"), "roll": s.get("roll"), "tail": s.get("tail")}
+    else:
+        lines = {"audio": s["text"]}
+    args, chars, new = [], 0, 0
+    for key, text in lines.items():
+        if not text:
+            continue
+        mp3, align, made = voice.clip(text)
+        chars, new = chars + len(text), new + (len(text) if made else 0)
+        if key in ("audio", "daily"):
+            try:
+                mp3, align = voice.tighten(mp3, align, settings.adventure_max_pause)
+            except Exception:  # long pauses are better than no video
+                log.exception("adventure voice: could not shorten pauses")
+            args += [f"--{key}", str(mp3), "--align", str(align)]
+        else:
+            args += [f"--{key}", str(mp3)]
+    job["voice_clip"] = {"chars": chars, "new_chars": new, "new": new > 0, "month_spent": voice.spent()}
+    return args
+
+
 def _render(job: dict) -> None:
     """Voice (if wanted and affordable) and render the job's spec."""
-    spec, text = job["spec"], job["script"]["text"]
+    spec = job["spec"]
     audio: list[str] = []
     if job["voice"]:
         job["status"] = "voicing"
         save(job)
         try:
-            mp3, align, made = voice.clip(text)
-            try:
-                mp3, align = voice.tighten(mp3, align, settings.adventure_max_pause)
-            except Exception:  # long pauses are better than no video
-                log.exception("adventure voice: could not shorten pauses")
-            audio = ["--audio", str(mp3), "--align", str(align)]
-            job["voice_clip"] = {"file": mp3.name, "chars": len(text), "new": made, "month_spent": voice.spent()}
+            audio = _voice(job)
         except voice.OutOfBudget as e:
             job["voice_clip"] = {"skipped": str(e)}  # goes out without narration
     job["status"] = "rendering"
@@ -225,7 +258,7 @@ def _publish(job: dict) -> None:
 def _report(job: dict) -> None:
     spec, summary = job["spec"], job.get("render") or {}
     vc = job.get("voice_clip") or {}
-    said = (f"voice {vc['chars']} chars ({'new' if vc.get('new') else 'cached'}; {vc['month_spent']}/{settings.adventure_voice_budget} this month)"
+    said = (f"voice {vc['chars']} chars ({vc.get('new_chars', 0)} new; {vc['month_spent']}/{settings.adventure_voice_budget} this month)"
             if "chars" in vc else f"no voice ({vc.get('skipped', 'off')})")
     ig = job["results"].get("instagram")
     if job.get("publish") and ig:
@@ -236,7 +269,9 @@ def _report(job: dict) -> None:
     else:
         title, posted = "Adventure preview", ""
     video = settings.videos_dir / job["video"] if job.get("video") else None
-    notify.send(f":crossed_swords: **{title}** `{job['id']}`: Episode 0 part {spec.get('part')}, "
+    what = f"{_title(job)} ({job['node']})" if job.get("node") else _title(job)
+    dead = "\n:skull: The hero falls in this one." if spec.get("dead") else ""
+    notify.send(f":crossed_swords: **{title}** `{job['id']}`: {what}{dead}, "
                 f"{summary.get('duration', 0):.1f}s, rendered in {summary.get('seconds', 0):.0f}s, {said}{posted}\n{job.get('video_url', '')}",
                 attach=video if title != "Adventure post" else None)
 
@@ -277,6 +312,11 @@ def _prepare(job: dict) -> None:
             job["status"] = "scheduled"
             save(job)
             _report(job)
+    except campaign.NoArc as e:
+        job.update(status="failed", error=f"no story to play: {e}", error_code="no_arc")
+        save(job)
+        notify.send(f":warning: **Adventure**: `{job['id']}` has no story to play ({e}). Submit the arc (the weekly "
+                    f"routine, POST /adventure/arc) before {_local(job['publish_at'])} and it's prepared straight away.")
     except Exception as e:
         _fail(job, e, "preparing")
 
@@ -289,31 +329,54 @@ def _post(job: dict) -> None:
             job.update(status="done" if ok else "failed", finished_at=store.now_iso())
             if not ok:
                 job["error"] = job["results"]["instagram"]["error"]
+            if ok and job["spec"].get("kind") == "story":
+                campaign.commit(job)
             save(job)
             _report(job)
-            if ok and job.get("series") and job["spec"].get("kind") == "episode0":
+            if ok and job.get("series"):
                 _book_next(job)
     except Exception as e:
         _fail(job, e, "publishing")
 
 
 def _book_next(prev: dict) -> dict | None:
-    part = prev["spec"]["part"]
-    if part >= 4:
-        notify.send(":checkered_flag: **Adventure**: Episode 0 is complete. Tomorrow's 08:00 vote on part 4 picks "
-                    "the first move of Episode 1, which needs the weekly story routine (not built yet).")
+    """Tomorrow's episode, same local time: the next Episode 0 part, or the next story episode."""
+    spec = prev["spec"]
+    if spec.get("dead"):
+        notify.send(":skull: **Adventure**: the hero has fallen. Nothing more is booked: a new hero's Episode 0 "
+                    "(not built yet) has to come next.")
         return None
+    if spec.get("kind") == "episode0" and spec["part"] < 4:
+        kind, nxt, name = "episode0", {"kind": "episode0", "part": spec["part"] + 1}, f"Episode 0 part {spec['part'] + 1}"
+    else:
+        ep = campaign.state()["ep"] + 1
+        kind, nxt, name = "story", {"kind": "story"}, f"Episode {ep}"
     when = datetime.fromisoformat(prev["publish_at"]) + timedelta(days=1)
     local = when.astimezone(settings.tz)  # same local time tomorrow, across clock changes
     prev_local = datetime.fromisoformat(prev["publish_at"]).astimezone(settings.tz)
     when = local.replace(hour=prev_local.hour, minute=prev_local.minute).astimezone(timezone.utc)
-    job = {"id": _new_id(), "kind": "episode0", "spec": {"kind": "episode0", "part": part + 1}, "from_job": prev["id"],
+    job = {"id": _new_id(), "kind": kind, "spec": nxt, "from_job": prev["id"],
            "voice": prev.get("voice", True), "publish": True, "series": True, "channel": channels.ADVENTURE,
            "created_at": store.now_iso(), "results": {}, "script": None, "status": "booked", "publish_at": when.isoformat()}
     save(job)
-    notify.send(f":calendar: **Adventure**: Episode 0 part {part + 1} booked for {_local(job['publish_at'])}; "
-                f"votes on part {part} close at {_local((when - RENDER_LEAD).isoformat())}.")
+    notify.send(f":calendar: **Adventure**: {name} booked for {_local(job['publish_at'])}; "
+                f"votes on {_title(prev)} close at {_local((when - RENDER_LEAD).isoformat())}.")
+    if kind == "story" and not campaign.covers_next(prev):
+        notify.send(f":warning: **Adventure**: no arc says where {name} goes yet. The weekly routine has to submit "
+                    f"one (POST /adventure/arc) before {_local((when - RENDER_LEAD).isoformat())}.")
     return job
+
+
+def retry_waiting() -> list[str]:
+    """Story jobs that failed for want of an arc go back on the schedule once one arrives."""
+    again = []
+    for job in recent(200):
+        if job.get("error_code") == "no_arc" and job.get("status") == "failed" \
+                and now() - datetime.fromisoformat(job["publish_at"]) < MISSED_AFTER:
+            job.update(status="booked", error=None, error_code=None)
+            save(job)
+            again.append(job["id"])
+    return again
 
 
 # ------------------------------------------------------------------ schedule

@@ -19,6 +19,8 @@ export function line(key: string, tagged: string): Seg {
 }
 
 export const scriptText = (segs: Seg[]) => segs.map((s) => s.text).join(SEP);
+/** The daily story clip: paragraph breaks only (tags cost credits; the alignment finds the starts). */
+export const dailyText = (segs: Seg[]) => segs.map((s) => s.text).join("\n\n");
 export const scriptChars = (segs: Seg[]) => scriptText(segs).length;
 
 export type Alignment = { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] };

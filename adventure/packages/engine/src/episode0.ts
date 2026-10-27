@@ -395,7 +395,7 @@ function cta(F: Frame, s: Episode0Spec, P: Plan, pinFrom: [number, number] | nul
     c.roundRect(16, CARD_Y - 36, W - 76, 31, 6);
     c.fill();
     c.font = "700 10px Cinzel";
-    fit(F, `COMMENT A, B OR C BY 8AM · ${C.next.toUpperCase()} AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
+    fit(F, `COMMENT ${C.options.length === 2 ? "A OR B" : "A, B OR C"} BY 8AM · ${C.next.toUpperCase()} AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
     fit(F, `No votes? We go with ${"ABC"[C.dflt]}.`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
     c.restore();
   }
@@ -498,7 +498,7 @@ export function caption0(s: Episode0Spec): string {
   const C = ctaOf(s);
   return [
     PART_LINES[s.part],
-    `Comment A, B or C by 8am \ud83d\udc47 No votes? We go with ${"ABC"[C.dflt]}.`,
+    `Comment ${C.options.length === 2 ? "A or B" : "A, B or C"} by 8am \ud83d\udc47 No votes? We go with ${"ABC"[C.dflt]}.`,
     TAGS,
     `Music: ${MUSIC_CREDITS[music0(s)]} (CC0). Dice sounds: Kenney (CC0). Includes material from the SRD 5.2.1 by Wizards of the Coast LLC (CC BY 4.0).`,
   ].join("\n\n");
