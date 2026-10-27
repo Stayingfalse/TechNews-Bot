@@ -156,7 +156,7 @@ def build():
     cliff_frame, yesterday, title = quiz_frames()
     top = SAFE_TOP + 40
     slides = [
-        Slide([(sign(HANDLE, 54, PAL.paper), SAFE_CX, top + 140, 0.1),
+        Slide([(sign("QUIZ VIDEOS", 54, PAL.paper), SAFE_CX, top + 140, 0.1),
                (sign("HOW WE USE", 110), SAFE_CX, 760, 0.35),
                (sign("YOUR COMMENTS", 96), SAFE_CX, 880, 0.55),
                (paragraph("The quiz is a game you play in the comments. Here's exactly what the bot does with them."), SAFE_CX, 1120, 0.9)]),
@@ -180,7 +180,7 @@ def build():
                (phone(title, 760), SAFE_CX, 1110, 1.1)]),
         Slide([(heading("YOUR DATA"), SAFE_CX, top + 60, 0.1),
                (bullets(["Only public comments under our videos", "Never your messages or profile",
-                         "Names leave our records after 90 days", "#optout opts you out of both our channels",
+                         "Names leave our records after 90 days", "#optout opts you out on all our accounts",
                          "Nothing sold, no ads"]), SAFE_CX, 860, 0.4),
                (sign("quiz.cezz.co.uk/privacy", 52, PAL.paper), SAFE_CX, 1300, 1.3)]),
     ]

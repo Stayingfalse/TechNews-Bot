@@ -155,20 +155,105 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 
 # ------------------------------------------------------------------ pages
 
+# What each kind of channel does with comments, as the policy's account list describes it
+FORMATS = {"quiz": "Quiz videos: answers in comments, shout-outs, viewer-picked themes",
+           "adventure": "Story videos: A/B/C votes in comments decide what happens next"}
+PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
+
+
+def _at(handle: str) -> str:
+    return "@" + handle.lstrip("@") if handle else ""
+
+
+def accounts_table() -> str:
+    """Every account we run, from the channel registry, so a new channel is listed (and covered) by itself."""
+    from . import channels
+
+    rows = "".join(
+        f"<tr><td>{html.escape(ch.name)}</td><td><strong>{html.escape(_at(ch.brand_handle) or '(not set)')}</strong></td>"
+        f"<td>{html.escape(', '.join(PLATFORM_NAMES.get(p, p.title()) for p in ch.platforms))}</td>"
+        f"<td>{html.escape(FORMATS.get(ch.kind, ch.kind))}</td></tr>"
+        for ch in channels.registry().values())
+    return f'<div class="wrap"><table><tr><th>Channel</th><th>Account</th><th>Where</th><th>What it does with comments</th></tr>{rows}</table></div>'
+
+
 def _page(name: str, **values) -> str:
-    at = lambda h: "@" + h.lstrip("@")  # noqa: E731
-    quiz, adventure = at(settings.brand_handle or "the quiz account"), at(settings.adventure_handle)
-    handle = f"{quiz} and {adventure}"
     contact = settings.privacy_contact_email
     mail = (f'<a href="mailto:{html.escape(contact)}">{html.escape(contact)}</a>' if contact
             else "<em>(contact address not set)</em>")
-    common = {"handle": html.escape(handle), "quiz": html.escape(quiz), "adventure": html.escape(adventure), "mail": mail, "updated": UPDATED,
-              "controller": html.escape(settings.privacy_controller or f"the person who runs {handle}"),
+    common = {"mail": mail, "updated": UPDATED, "accounts": accounts_table(),
+              "controller": html.escape(settings.privacy_controller or "the person who runs these accounts"),
               "base": html.escape(settings.public_base_url), "days": str(privacy.RETENTION_DAYS),
               "log_days": str(REQUEST_LOG_DAYS)}
     body = Template((TEMPLATES / f"{name}.html").read_text()).safe_substitute(common, **values)
     shell = Template((TEMPLATES / "shell.html").read_text())
     return shell.safe_substitute(common, title=values.get("title", name.title()), body=body)
+
+
+PROFILE_URLS = {"instagram": "https://www.instagram.com/{}/"}
+SHOWN = 30  # videos listed per account before "show all"
+
+
+def published_videos() -> dict[str, list[dict]]:
+    """Every public video, per channel, newest first: {at, title, links: [(platform, url)]}."""
+    from . import channels
+    from .adventure import jobs as adventure_jobs
+
+    out: dict[str, list[dict]] = {cid: [] for cid in channels.registry()}
+
+    def links(results: dict) -> list[tuple[str, str]]:
+        return [(PLATFORM_NAMES.get(p, p.title()), r["url"]) for p, r in (results or {}).items()
+                if r.get("ok") and r.get("url") and r.get("privacy", "public") == "public"]
+
+    for job in store.list_jobs(5000):
+        if job.get("status") != "done" or job.get("dry_run") or job["id"].startswith("test-"):
+            continue
+        spec = job.get("spec") or {}
+        title = re.sub(r"[*_]", "", spec.get("title") or job["id"])
+        if (ls := links(job.get("results"))) and (cid := job.get("channel") or channels.MAIN) in out:
+            out[cid].append({"at": job.get("published_at") or job.get("created_at", ""), "title": title,
+                             "theme": spec.get("theme", ""), "links": ls})
+    for job in adventure_jobs.recent(5000):
+        if job.get("dry_run") or not (ls := links(job.get("results"))):
+            continue
+        spec = job.get("spec") or {}
+        title = f"Episode {spec['ep']}" if spec.get("kind") == "story" else f"Episode 0, part {spec.get('part')}"
+        out.setdefault(job.get("channel") or channels.ADVENTURE, []).append(
+            {"at": job.get("published_at", ""), "title": title, "theme": "", "links": ls})
+    for vids in out.values():
+        vids.sort(key=lambda v: v["at"], reverse=True)
+    return out
+
+
+def _video_row(v: dict) -> str:
+    when = v["at"][:10]
+    try:
+        when = datetime.fromisoformat(v["at"]).strftime("%-d %b %Y")
+    except ValueError:
+        pass
+    theme = f' <span class="small">· {html.escape(v["theme"])}</span>' if v["theme"] else ""
+    links = " ".join(f'<a href="{html.escape(u)}" rel="noopener">{html.escape(p)}</a>' for p, u in v["links"])
+    return f'<li><span class="date">{html.escape(when)}</span> <span class="vt">{html.escape(v["title"])}</span>{theme} <span class="links">{links}</span></li>'
+
+
+def home_page() -> str:
+    from . import channels
+
+    videos, parts = published_videos(), []
+    for cid, ch in channels.registry().items():
+        handle = _at(ch.brand_handle)
+        profiles = " ".join(f'<a href="{PROFILE_URLS[p].format(html.escape(handle.lstrip("@")))}" rel="noopener">'
+                            f'{handle} on {PLATFORM_NAMES[p]}</a>' for p in ch.platforms if p in PROFILE_URLS and handle)
+        vids = videos.get(cid, [])
+        rows = "".join(_video_row(v) for v in vids[:SHOWN])
+        more = (f'<details><summary>All {len(vids)} videos</summary><ul class="vids">'
+                + "".join(_video_row(v) for v in vids[SHOWN:]) + "</ul></details>") if len(vids) > SHOWN else ""
+        listing = f'<ul class="vids">{rows}</ul>{more}' if vids else '<p class="small">No videos yet: the first one is on its way.</p>'
+        parts.append(f'<section class="channel"><h2>{html.escape(ch.name)}</h2>'
+                     f'<p class="meta">{html.escape(FORMATS.get(ch.kind, ch.kind))} · '
+                     f'{html.escape(", ".join(PLATFORM_NAMES.get(p, p.title()) for p in ch.platforms))}</p>'
+                     f'<p>{profiles}</p>{listing}</section>')
+    return _page("home", title="Videos you play in the comments", channels="".join(parts))
 
 
 def privacy_page() -> str:

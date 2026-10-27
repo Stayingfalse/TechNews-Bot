@@ -128,10 +128,11 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 
 ## Privacy (GDPR)
 
-Public pages (no sign-in) covering both channels, the quiz and the Dungeon crawl, written in `app/legal/*.html` and served by `app/legal.py`:
+Public pages (no sign-in) covering every channel, now and later (the account list is built from the channel registry), written in `app/legal/*.html` and served by `app/legal.py`:
 
 | URL | What |
 |---|---|
+| `/` | Home page: every account (from the channel registry) with all its public videos, newest first, and links to the legal pages |
 | `/privacy` | Privacy policy (UK/EU GDPR): what is read from comments, why (legitimate interests, with the balancing test), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), transfers, retention, security, rights, YouTube API Services and Instagram notices; embeds both channels' explainer videos |
 | `/terms` | Terms of service |
 | `/privacy/request` | Self-service form: opt out, or delete and opt out; applied at once, with a confirmation code |

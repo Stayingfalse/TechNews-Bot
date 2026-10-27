@@ -21,7 +21,6 @@ AUDIO = ADV / "assets" / "audio"
 W, H, FPS = 1080, 1920, 30
 SLIDE = 6.0
 CX, TOP, SAFE_W = 540, 300, 900
-HANDLE = "@dungeoncrawlergram"
 
 PAPER = (241, 228, 198)
 PAPER_DARK = (222, 203, 160)
@@ -223,15 +222,15 @@ def stills(tmp: Path) -> dict[str, Path]:
 def build(shot: dict[str, Path]) -> list[Slide]:
     top = TOP
     return [
-        Slide([(text(HANDLE, "Cinzel-Bold", 50, CREAM), CX, top + 60, 0.1),
+        Slide([(text("STORY VIDEOS", "Cinzel-Bold", 50, CREAM), CX, top + 60, 0.1),
                (title("HOW WE USE", 104), CX, 700, 0.35),
                (title("YOUR COMMENTS", 92), CX, 820, 0.55),
-               (paragraph("The dungeon crawl is a story you steer in the comments. Here's exactly what the bot does with them."), CX, 1080, 0.9)]),
+               (paragraph("Our story videos are adventures you steer in the comments. Here's exactly what the bot does with them."), CX, 1080, 0.9)]),
         Slide([(ribbon("STEP 1"), CX, top - 10, 0.05), (title("YOU VOTE A, B OR C", 72), CX, top + 100, 0.15),
                (phone(shot["vote"], 820), CX, 905, 0.4),
                (comment("dice_goblin", "B! goblins all the way"), CX, 1400, 1.5)]),
-        Slide([(ribbon("STEP 2"), CX, top - 10, 0.05), (title("8AM: THE VOTES ARE COUNTED", 64), CX, top + 100, 0.15),
-               (paragraph("The bot reads the public comments under yesterday's episode through Instagram's official API."), CX, top + 250, 0.4),
+        Slide([(ribbon("STEP 2"), CX, top - 10, 0.05), (title("THE VOTES ARE COUNTED", 72), CX, top + 100, 0.15),
+               (paragraph("Before the next episode, the bot reads the public comments under the last one through the platform's official API."), CX, top + 250, 0.4),
                (comment("dice_goblin", "B! goblins all the way", vote="B"), CX, 730, 0.9),
                (comment("mapmaker.jo", "c", vote="C"), CX, 900, 1.2),
                (comment("dice_goblin", "actually A?", vote="1st vote counts", dim=True), CX, 1070, 1.6),
@@ -240,12 +239,12 @@ def build(shot: dict[str, Path]) -> list[Slide]:
         Slide([(ribbon("STEP 3"), CX, top - 10, 0.05), (title("ONLY THE TOTALS ARE KEPT", 64), CX, top + 100, 0.15),
                (phone(shot["result"], 740), CX, 870, 0.4),
                (paragraph("Your vote is counted, then your comment is let go. Names aren't stored, shown or read out.", 42), CX, 1340, 1.4)]),
-        Slide([(ribbon("STEP 4"), CX, top - 10, 0.05), (title("9AM: THE STORY GOES ON", 68), CX, top + 100, 0.15),
+        Slide([(ribbon("STEP 4"), CX, top - 10, 0.05), (title("THE STORY GOES ON", 76), CX, top + 100, 0.15),
                (phone(shot["next"], 820), CX, 905, 0.4),
                (paragraph("The winning choice happens, with a real dice roll, and you vote again.", 42), CX, 1400, 1.4)]),
         Slide([(title("YOUR DATA", 96), CX, top + 60, 0.1),
                (bullets(["Only public comments under our posts", "Your vote is counted; your name isn't kept",
-                         "Never your messages or profile", "#optout opts you out of both our channels",
+                         "Never your messages or profile", "#optout opts you out on all our accounts",
                          "Nothing sold, no ads"]), CX, 860, 0.4),
                (text("quiz.cezz.co.uk/privacy", "Cinzel-Bold", 52, GOLD), CX, 1300, 1.3)]),
     ]

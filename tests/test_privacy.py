@@ -26,7 +26,7 @@ def test_policy_page_is_public_and_complete(monkeypatch):
     for must in ("privacy@example.com", "Legitimate interests", "Your rights", "ico.org.uk", "ElevenLabs",
                  "Anthropic", "90 days", 'id="deletion"', "Children", "YouTube API Services",
                  "policies.google.com/privacy", "how-we-use-comments.mp4", "how-we-use-votes.mp4", "/privacy/request", "/terms",
-                 "@dungeoncrawlergram", "Dungeon crawl votes", "One opt-out covers both channels"):
+                 "@dungeoncrawlergram", "Story videos: votes", "One opt-out covers every account we run", "any account we add later"):
         assert must in page, must
     assert TestClient(app).get("/data-deletion", follow_redirects=False).headers["location"] == "/privacy#deletion"
 
@@ -42,7 +42,7 @@ def test_terms_page_and_video_are_public():
     r = c.get("/terms")
     assert r.status_code == 200 and "Terms of service" in r.text and "England and Wales" in r.text
     assert "$" not in r.text.split("<body", 1)[1]
-    assert "Dungeon crawl votes" in r.text
+    assert "Story votes" in r.text and "@dungeoncrawlergram" in r.text
     for name in ("how-we-use-comments", "how-we-use-votes"):
         v = c.get(f"/privacy/{name}.mp4")
         assert v.status_code == 200 and v.headers["content-type"] == "video/mp4"
@@ -156,3 +156,21 @@ def test_one_optout_covers_the_dungeon_crawl_too(monkeypatch):
     privacy.opt_out("@quiz_fan")  # e.g. via the form, naming the quiz
     t = adv.votes.tally([c for c in rows if privacy._key(c["user"]) not in privacy.opted_out()], ["x", "y", "z"])
     assert t["counts"] == [0, 0, 1]
+
+
+def test_home_page_lists_every_accounts_public_videos(quiz):
+    from app.adventure import jobs as adv
+
+    posted("q1", quiz, hours_ago=30)
+    posted("q2", dict(quiz, title="Only *real* fans"), hours_ago=5,
+           results={"instagram": {"ok": True, "url": "https://instagram.com/reel/q2"},
+                    "youtube": {"ok": True, "url": "https://youtube.com/shorts/hidden", "privacy": "unlisted"}})
+    posted("q3", quiz, hours_ago=2, dry_run=True)
+    adv.save({"id": "ep1", "channel": "adventure", "status": "done", "published_at": store.now_iso(), "spec": {"kind": "episode0", "part": 2},
+              "results": {"instagram": {"ok": True, "media_id": "m1", "url": "https://instagram.com/reel/ep1"}}})
+    page = TestClient(app).get("/").text
+    for must in ("Daily quiz", "Dungeon crawl", "instagram.com/reel/q1", "youtube.com/shorts/q1", "Only real fans",
+                 "instagram.com/reel/ep1", "Episode 0, part 2", "instagram.com/dungeoncrawlergram/", "/privacy\"", "/terms\""):
+        assert must in page, must
+    assert "hidden" not in page and "reel/q3" not in page  # unlisted and test posts stay off
+    assert page.index("reel/q2") < page.index("reel/q1")  # newest first

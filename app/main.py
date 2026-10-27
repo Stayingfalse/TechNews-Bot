@@ -535,6 +535,12 @@ def current_banner():
         raise HTTPException(502, str(e)[:300])
 
 
+@app.get("/", response_class=HTMLResponse)
+def home():
+    """The public home page: every account we run and all their videos, with the legal pages."""
+    return legal.home_page()
+
+
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_policy():
     """The public privacy policy (GDPR), for the platforms' app review and anyone who asks."""

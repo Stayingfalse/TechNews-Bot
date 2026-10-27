@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>$title · $handle</title>
+<title>$title</title>
 <style>
 :root { --bg:#0D5C6B; --card:#FFF7E8; --ink:#06262C; --sign:#FFC22E; --hot:#FF5A3C; --muted:#5b5b52; }
 * { box-sizing:border-box; }
@@ -20,6 +20,9 @@ h3 { font-size:1rem; margin:1.2em 0 .3em; }
 .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:18px 0 6px; }
 .videos figure { margin:0; } .videos video { width:100%; max-height:none; }
 figcaption { font-size:.9rem; color:var(--muted); text-align:center; margin-top:6px; }
+.channel { margin-top:1.6em; } ul.vids { list-style:none; padding:0; margin:.6em 0; }
+ul.vids li { padding:7px 0; border-bottom:1px dashed #c9bfae; } .date { display:inline-block; min-width:7.5em; color:var(--muted); font-size:.9rem; }
+.vt { font-weight:600; } .links a { margin-left:10px; font-size:.9rem; } summary { cursor:pointer; font-weight:700; color:#0b5563; }
 .err { background:#fdecea; border-left:5px solid #FF5A3C; padding:10px 14px; }
 table { border-collapse:collapse; width:100%; font-size:.94rem; margin:8px 0; }
 td, th { border:1px solid #c9bfae; padding:7px 9px; text-align:left; vertical-align:top; }
@@ -35,7 +38,7 @@ button { font:inherit; font-weight:800; padding:11px 16px; border:3px solid var(
 button:active { transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink); }
 .small { font-size:.9rem; color:var(--muted); }
 </style></head><body>
-<nav><a href="$base/privacy">Privacy policy</a><a href="$base/privacy/request">Opt out or delete</a><a href="$base/terms">Terms of service</a></nav>
+<nav><a href="$base/">Videos</a><a href="$base/privacy">Privacy policy</a><a href="$base/privacy/request">Opt out or delete</a><a href="$base/terms">Terms of service</a></nav>
 <main>
 $body
 </main></body></html>
