@@ -8,7 +8,7 @@ import { cpus } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { parseArgs } from "node:util";
 import { Worker } from "node:worker_threads";
-import { type Alignment, cuesFromAlignment, music0, plan0, script0, scriptChars, scriptText, sfx0 } from "../../engine/src/index.ts";
+import { type Alignment, caption0, comment0, cuesFromAlignment, music0, plan0, script0, scriptChars, scriptText, sfx0 } from "../../engine/src/index.ts";
 import { parseEpisode0 } from "../../shared/src/index.ts";
 import { AUDIO, OUT_H, OUT_W, bakedMap, prepare, type Job } from "./canvas.ts";
 
@@ -59,7 +59,7 @@ async function main() {
   if (positionals[0] === "script") {
     const spec = parseEpisode0(JSON.parse(readFileSync(positionals[1], "utf8")));
     const segs = script0(spec);
-    process.stdout.write(JSON.stringify({ text: scriptText(segs), chars: scriptChars(segs), segments: segs }) + "\n");
+    process.stdout.write(JSON.stringify({ text: scriptText(segs), chars: scriptChars(segs), segments: segs, caption: caption0(spec), comment: comment0(spec) }) + "\n");
     return;
   }
   const file = positionals[0];

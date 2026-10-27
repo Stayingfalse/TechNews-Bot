@@ -150,8 +150,8 @@ describe("episode 0 frames", () => {
     expect(pixels(r.canvas)).toBe(a);
   });
 
-  it("fits the 45 s limit", () => {
-    for (const s of specs) expect(plan0(s).dur).toBeLessThanOrEqual(45);
+  it("fits the 60 s limit", () => {
+    for (const s of specs) expect(plan0(s).dur).toBeLessThanOrEqual(60);
     expect(W / H).toBeCloseTo(9 / 16);
   });
 });

@@ -14,6 +14,7 @@ Nothing here changes the quiz channel, except the shared voice budget (§7).
 |---|---|
 | Platforms | **Instagram only** at launch, account **@dungeoncrawlergram** (creator account). YouTube later: the publisher, comment reader and vote parser already handle it, so it's a per-channel `platforms` switch plus connecting the account. |
 | Cadence | **Daily** at **09:00** Europe/London. Every other day only if the voice budget forces it (§7). |
+| Length | **Up to 60 s** per video (the brief said 45 s; 60 s suits narrated story content). |
 | Vote window | From the post at 09:00 until **08:00 the next day**. At 08:00 the server reads the comments, picks the next scene, makes its voice-over, renders and posts at 09:00. |
 | Weekly planning | Routine **Tuesday 00:05** (5 h after the quiz batch at Monday 19:05) (§6). |
 | Voice credits | **10,000 a month shared with the quiz** (30,000 in the first month). Voice is made only for the scene that actually happens, on the day (§7). |
@@ -318,7 +319,7 @@ routine can fix and resend (the retry loop):
 - payload: DSL keys and primitive shapes valid, names don't shadow built-ins unless marked
   `override`, and a headless smoke render (bake the map + draw 3 frames) succeeds with every
   payload item on screen
-- spoken length per node ≤ the daily character budget (§7), and duration ≤ 45 s
+- spoken length per node ≤ the daily character budget (§7), and duration ≤ 60 s
 
 Then, in the background: map pre-bake for all 21 nodes (cheap, no credits) and booking 7 slots.
 Discord gets the week summary with the arc as a small graph.

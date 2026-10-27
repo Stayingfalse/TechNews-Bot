@@ -479,3 +479,33 @@ export function sfx0(s: Episode0Spec, P: Plan): { t: number; file: string; gain:
     ...BOUNCES.map((b, i) => ({ t: t0 + b * THROW, file: files[i], gain: gains[i] })),
   ];
 }
+
+const MUSIC_CREDITS: Record<string, string> = {
+  "dungeon_ambience.ogg": "\u201cDungeon Ambience\u201d by yd",
+  "old_tower_inn.mp3": "\u201cThe Old Tower Inn\u201d by RandomMind",
+};
+const TAGS = "#dungeoncrawl #ttrpg #chooseyourownadventure #fantasy #tabletopgames";
+const PART_LINES = [
+  "",
+  "Episode 0 \u00b7 Part 1 of 4: how it works \ud83c\udfb2\nA dungeon crawl where YOUR comments decide what happens. A new episode every day at 9am.\n\nWarm-up: what scares you most?",
+  "Episode 0 \u00b7 Part 2 of 4: pick your hero \u2694\ufe0f\nFighter, rogue or wizard? Every hero has 3 hearts, and heroes die for good.",
+  "Episode 0 \u00b7 Part 3 of 4: pick their look.",
+  "Episode 0 \u00b7 Part 4 of 4: the quest begins.\nYour sister Ellen vanished... and the crypt gate is shut. Episode 1 drops tomorrow at 9am.",
+];
+
+/** The post's caption: what this is, the ask, hashtags and the credits. */
+export function caption0(s: Episode0Spec): string {
+  const C = ctaOf(s);
+  return [
+    PART_LINES[s.part],
+    `Comment A, B or C by 8am \ud83d\udc47 No votes? We go with ${"ABC"[C.dflt]}.`,
+    TAGS,
+    `Music: ${MUSIC_CREDITS[music0(s)]} (CC0). Dice sounds: Kenney (CC0). Includes material from the SRD 5.2.1 by Wizards of the Coast LLC (CC BY 4.0).`,
+  ].join("\n\n");
+}
+
+/** Our first comment under the post: the options, so they're in the comments where people vote. */
+export function comment0(s: Episode0Spec): string {
+  const C = ctaOf(s);
+  return `${C.options.map((o, i) => `${"ABC"[i]}) ${o.label}`).join(" \u00b7 ")}\nComment your letter by 8am. No votes? We go with ${"ABC"[C.dflt]}.`;
+}

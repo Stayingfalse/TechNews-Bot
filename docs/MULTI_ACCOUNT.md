@@ -22,7 +22,9 @@ spin-off, a kids' quiz.
 1. **Channel config.** Load extra channels from `/data/channels.json` (id, name, kind, handle, post
    time, platforms, palette set, voices, hashtags), editable from the dashboard. Per-channel
    overrides fall back to the global settings.
-2. **Connections per channel.** `/oauth/{platform}/start?channel=…`: carry the channel through the
+2. **Connections per channel.** *(Done for the adventure channel: `?channel=` on the OAuth start link,
+   saved per channel, the quiz's account refused for another channel, tokens refreshed for every
+   channel, `/status` lists each channel's accounts.)* `/oauth/{platform}/start?channel=…`: carry the channel through the
    OAuth state and save with `set_tokens(..., channel=…)`. The Instagram app and Google project can
    be shared: each channel connects its own account through them. Each extra Instagram account must
    be added as a tester (development mode). YouTube needs one Google login per channel; the upload

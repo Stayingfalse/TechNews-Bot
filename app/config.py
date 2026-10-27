@@ -74,7 +74,11 @@ class Settings:
         # avatar-*.png files in assets/avatars, plus any added to DATA_DIR/avatars.
         self.avatar_every_weeks = int(os.environ.get("AVATAR_EVERY_WEEKS", "3"))
 
-        # The adventure channel (docs/ADVENTURE_PLAN.md): its renderer lives in adventure/ (Node).
+        # The adventure channel (docs/ADVENTURE_PLAN.md): its own accounts, connected with
+        # /oauth/{platform}/start?channel=adventure. Its renderer lives in adventure/ (Node).
+        self.adventure_handle = os.environ.get("ADVENTURE_HANDLE", "dungeoncrawlergram")
+        self.adventure_post_time = os.environ.get("ADVENTURE_POST_TIME", "09:00")
+        self.adventure_platforms = [p.strip().lower() for p in os.environ.get("ADVENTURE_PLATFORMS", "instagram").split(",") if p.strip()]
         self.adventure_dir = Path(os.environ.get("ADVENTURE_DIR", Path(__file__).resolve().parents[1] / "adventure"))
         # Narrator: "Obsidian - A Dark Fantasy Storyteller" from the ElevenLabs library, on eleven_v3.
         self.adventure_voice_id = os.environ.get("ADVENTURE_VOICE_ID", "acrqYoDVmcpJemOxjC39")

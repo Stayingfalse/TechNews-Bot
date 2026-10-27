@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
-from . import metrics, notify, pipeline, social, store, themes
+from . import channels, metrics, notify, pipeline, social, store, themes
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
 from .config import settings
@@ -123,7 +123,20 @@ def status():
         "instagram_stories": settings.instagram_stories,
         "instagram_carousels": f"{settings.carousel_day} {settings.carousel_time}" if settings.instagram_carousels else False,
         "recent_jobs": [{k: j.get(k) for k in ("id", "status", "created_at", "video_url", "error")} for j in store.list_jobs(5)],
+        "channels": {cid: _channel_status(cid) for cid in channels.registry()},
     }
+
+
+def _channel_status(cid: str) -> dict:
+    ch = channels.get(cid)
+    with channels.use(cid):
+        conns = {}
+        for name in ch.platforms:
+            if name not in PUBLISHERS:
+                continue
+            conns[name] = {"connected": bool(store.get_tokens(name)), **_account(name),
+                           "connect_url": f"/oauth/{name}/start" + ("" if cid == channels.MAIN else f"?channel={cid}")}
+    return {"name": ch.name, "kind": ch.kind, "handle": ch.brand_handle, "post_time": ch.post_time, "platforms": conns}
 
 
 def _account(name: str) -> dict:
@@ -520,15 +533,18 @@ MAX_TRACK = 40 * 1024 * 1024
 # ------------------------------------------------------------------ adventure channel (preview only)
 
 @app.post("/adventure/episode0", status_code=202, dependencies=[Depends(require_token)])
-def adventure_episode0(spec: dict, voice: bool = True):
-    """Render an Episode 0 part as a preview (voiced unless voice=false) and send it to Discord.
-    Body: {"part": 1} or e.g. {"part": 2, "fear": "wraith", "recap": {"pick": 2, "votes": [3, 2, 7]}}.
-    Nothing is posted to Instagram yet."""
+def adventure_episode0(spec: dict, voice: bool = True, publish: bool = False):
+    """Render an Episode 0 part (voiced unless voice=false) and send it to Discord; with publish=true
+    also post it to the adventure channel's Instagram, with the options as the first comment.
+    Body: {"part": 1} or e.g. {"part": 2, "fear": "wraith", "recap": {"pick": 2, "votes": [3, 2, 7]}}."""
     try:
-        job = adventure_jobs.submit({"kind": "episode0", **spec}, use_voice=voice)
+        job = adventure_jobs.submit({"kind": "episode0", **spec}, use_voice=voice, publish=publish)
+    except adventure_jobs.NotConnected as e:
+        raise HTTPException(409, str(e))
     except RuntimeError as e:
         raise HTTPException(422, str(e))
-    return {k: job[k] for k in ("id", "status", "voice")} | {"chars": job["script"]["chars"], "script": job["script"]["text"]}
+    return {k: job[k] for k in ("id", "status", "voice", "publish")} | {
+        "chars": job["script"]["chars"], "script": job["script"]["text"], "caption": job["script"]["caption"]}
 
 
 @app.get("/adventure/jobs", dependencies=[Depends(require_token)])
@@ -591,7 +607,7 @@ def delete_music(name: str):
 
 # ------------------------------------------------------------------ OAuth (one-time browser setup)
 
-_states: dict[str, tuple[str, float, str, str]] = {}  # state -> (provider, expiry, "connect"|"login", next)
+_states: dict[str, tuple[str, float, str, str]] = {}  # state -> (provider, expiry, "connect"|"login", next page | channel)
 PROVIDERS = PUBLISHERS
 
 
@@ -632,12 +648,16 @@ def logout():
 
 
 @app.get("/oauth/{provider}/start", dependencies=[Depends(require_token)])
-def oauth_start(provider: str):
+def oauth_start(provider: str, channel: str = channels.MAIN):
+    """Connect a platform account. ?channel=adventure connects that channel's own account; approve
+    it while signed in to that account (a private window avoids picking up the quiz's login)."""
     mod = PROVIDERS.get(provider)
     if not mod:
         raise HTTPException(404)
+    if channel not in channels.registry():
+        raise HTTPException(404, f"no channel {channel!r}; channels: {sorted(channels.registry())}")
     state = secrets.token_urlsafe(16)
-    _states[state] = (provider, time.time() + 600, "connect", "")
+    _states[state] = (provider, time.time() + 600, "connect", channel)
     return RedirectResponse(mod.authorize_url(state))
 
 
@@ -651,10 +671,42 @@ def oauth_callback(request: Request, provider: str, code: str = "", state: str =
         raise HTTPException(400, f"{provider} returned an error: {error} {error_description}")
     if expected[2] == "login":
         return _finish_login(provider, code.removesuffix("#_"), expected[3])
+    channel = expected[3] or channels.MAIN
+    if channel != channels.MAIN:
+        return _connect_channel(provider, channel, code.removesuffix("#_"))
     PROVIDERS[provider].exchange_code(code.removesuffix("#_"))
     if valid_session(request.cookies.get(SESSION_COOKIE, "")):  # started from the dashboard: go back there
         return RedirectResponse(f"/dashboard?connected={provider}")
     return f"<h2>{LABELS[provider]} connected ✔</h2><p>You can close this tab.</p>"
+
+
+def _account_name(provider: str) -> str:
+    acct = _account(provider).get("account") or {}
+    return acct.get("username") or acct.get("title") or PROVIDERS[provider].connected_identity() or "an account"
+
+
+def _connect_channel(provider: str, channel: str, code: str):
+    """Save another channel's connection, refusing the account the quiz already posts to."""
+    mod, ch = PROVIDERS[provider], channels.get(channel)
+    with channels.use(channel):
+        previous = store.get_tokens(provider)
+        mod.exchange_code(code)
+        who = mod.connected_identity()
+    with channels.use(channels.MAIN):
+        main_who = mod.connected_identity()
+    if who and main_who and who == main_who:
+        store.set_tokens(provider, previous, channel=channel)  # put back whatever was there
+        return _page("Wrong account", f"<h1>That's the quiz's account</h1><p class='note'>You approved with the "
+                     f"{LABELS[provider]} account the quiz already posts to. Sign in to <b>@{escape(ch.brand_handle)}</b> "
+                     "(a private window is easiest) and start again.</p>", 409)
+    with channels.use(channel):
+        name = _account_name(provider)
+    expected = ch.brand_handle.lower().lstrip("@")
+    note = "" if not expected or name.lower().lstrip("@") == expected else (
+        f"<p class='note'>Expected @{escape(expected)}. If that's wrong, sign in to the right account and start again.</p>")
+    notify.send(f":link: **{ch.name}**: {LABELS[provider]} connected as @{name}")
+    return _page("Connected", f"<h1>{LABELS[provider]} connected ✔</h1><p>@{escape(name)} is now connected to the "
+                 f"<b>{escape(ch.name)}</b> channel.</p>{note}<p class='note'>You can close this tab.</p>")
 
 
 def _finish_login(provider: str, code: str, nxt: str):

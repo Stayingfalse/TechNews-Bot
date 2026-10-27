@@ -13,8 +13,9 @@ import threading
 import time
 from pathlib import Path
 
-from .. import notify, store
+from .. import channels, notify, store
 from ..config import settings
+from ..publish import instagram
 from . import voice
 
 log = logging.getLogger(__name__)
@@ -64,9 +65,28 @@ def script(spec: dict) -> dict:
         os.unlink(fh.name)
 
 
-def submit(spec: dict, use_voice: bool = True) -> dict:
+class NotConnected(Exception):
+    pass
+
+
+def can_publish() -> str | None:
+    """Why the adventure channel can't post right now, or None."""
+    if not settings.publish_enabled:
+        return "PUBLISH_ENABLED is off"
+    if not instagram.configured():
+        return "the Instagram app isn't configured"
+    with channels.use(channels.ADVENTURE):
+        if not store.get_tokens("instagram"):
+            return "Instagram isn't connected for the adventure channel: /oauth/instagram/start?channel=adventure"
+    return None
+
+
+def submit(spec: dict, use_voice: bool = True, publish: bool = False) -> dict:
+    if publish and (why := can_publish()):
+        raise NotConnected(why)
     job = {"id": f"adv-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}", "kind": spec.get("kind"), "spec": spec,
-           "voice": use_voice, "status": "queued", "created_at": store.now_iso()}
+           "voice": use_voice, "publish": publish, "channel": channels.ADVENTURE, "status": "queued",
+           "created_at": store.now_iso(), "results": {}}
     job["script"] = script(spec)  # fails fast on a bad spec
     save(job)
     threading.Thread(target=_run, args=(job,), daemon=True, name=f"adventure-{job['id']}").start()
@@ -75,7 +95,7 @@ def submit(spec: dict, use_voice: bool = True) -> dict:
 
 def _run(job: dict) -> None:
     try:
-        with _render_lock:
+        with _render_lock, channels.use(channels.ADVENTURE):  # threads don't inherit the channel
             _work(job)
     except Exception as e:
         log.exception("adventure job %s failed", job["id"])
@@ -113,10 +133,36 @@ def _work(job: dict) -> None:
     finally:
         os.unlink(fh.name)
     url = f"{settings.public_base_url}/media/{out.name}"
-    job.update(status="done", video=out.name, video_url=url, render=summary, finished_at=store.now_iso())
+    job.update(video=out.name, video_url=url, render=summary)
+    if job.get("publish"):
+        job["status"] = "publishing"
+        save(job)
+        _publish(job)
+    job.update(status="done", finished_at=store.now_iso())
     save(job)
     vc = job.get("voice_clip") or {}
     said = (f"voice {vc['chars']} chars ({'new' if vc.get('new') else 'cached'}; {vc['month_spent']}/{settings.adventure_voice_budget} this month)"
             if "chars" in vc else f"no voice ({vc.get('skipped', 'off')})")
-    notify.send(f":crossed_swords: **Adventure preview** `{job['id']}`: Episode 0 part {spec.get('part')}, "
-                f"{summary['duration']:.1f}s, rendered in {summary['seconds']:.0f}s, {said}\n{url}", attach=out)
+    ig = job["results"].get("instagram")
+    posted = (f"\nPosted to @{settings.adventure_handle}: {ig.get('url') or ig['media_id']}" if ig and ig.get("ok")
+              else f"\nInstagram post failed: {ig['error']}" if ig else "")
+    title = "Adventure post" if job.get("publish") else "Adventure preview"
+    notify.send(f":crossed_swords: **{title}** `{job['id']}`: Episode 0 part {spec.get('part')}, "
+                f"{summary['duration']:.1f}s, rendered in {summary['seconds']:.0f}s, {said}{posted}\n{url}", attach=out)
+
+
+def _publish(job: dict) -> None:
+    """Post the Reel to the adventure channel's Instagram, then comment the options under it."""
+    script = job["script"]
+    try:
+        res = {"ok": True, **instagram.publish_reel(job["video_url"], script["caption"])}
+    except Exception as e:
+        log.exception("adventure post failed")
+        job["results"]["instagram"] = {"ok": False, "error": str(e)[:500]}
+        return
+    try:
+        res["comment_id"] = instagram.comment(res["media_id"], script["comment"])
+    except Exception as e:  # the post is out; the options are in the caption too
+        res["comment_error"] = str(e)[:300]
+    job["results"]["instagram"] = res
+    job["published_at"] = store.now_iso()

@@ -447,18 +447,28 @@ def _scheduler() -> None:
         time.sleep(30)
 
 
+def refresh_tokens() -> None:
+    """Keep every channel's connections fresh (the quiz's platforms, then each other channel's)."""
+    for cid, ch in channels.registry().items():
+        with channels.use(cid):
+            todo = refreshers() if cid == channels.MAIN else [
+                (n, PUBLISHERS[n].refresh_if_needed) for n in ch.platforms if n in PUBLISHERS and store.get_tokens(n)]
+            for name, fn in todo:
+                try:
+                    fn()
+                except Exception as e:
+                    log.exception("%s token refresh failed (%s)", name, cid)
+                    where = "" if cid == channels.MAIN else f"?channel={cid}"
+                    notify.error(f"{name} token refresh failed for {ch.name} ({e}); reconnect via /oauth/{name}/start{where}")
+
+
 def _maintenance() -> None:
     """Twice a day: keep OAuth tokens fresh and delete old videos (never ones still to be posted)."""
     while True:
         if not lease.held():
             time.sleep(600)
             continue
-        for name, fn in refreshers():
-            try:
-                fn()
-            except Exception as e:
-                log.exception("%s token refresh failed", name)
-                notify.error(f"{name} token refresh failed ({e}); reconnect via /oauth/{name}/start")
+        refresh_tokens()
         health.daily_checks()
         keep ={Path(j["video"]).stem for j in scheduled_jobs() if j.get("video")}
         cutoff = time.time() - settings.keep_videos_days * 86400
