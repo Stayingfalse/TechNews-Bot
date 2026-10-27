@@ -125,6 +125,10 @@ def read_comments(job: dict) -> tuple[list[dict], int, list[str]]:
         except Exception as e:
             errors.append(f"{platform}: {e}"[:200])
             log.warning("comments %s on %s: %s", platform, job["id"], e)
+    from .privacy import opted_out
+
+    gone = opted_out()
+    found = [c for c in found if c["user"].strip().lstrip("@").lower() not in gone]  # never read, shown or replied to
     found.sort(key=lambda c: c["at"])
     return found, readable, errors
 

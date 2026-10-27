@@ -16,7 +16,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import channels, cliffhanger, health, lease, metrics, notify, social, store, themes
+from . import channels, cliffhanger, health, lease, metrics, notify, privacy, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
 from .render.engine import render_video
@@ -470,6 +470,7 @@ def _maintenance() -> None:
             continue
         refresh_tokens()
         health.daily_checks()
+        privacy.anonymise_old()  # viewer names leave post records after 90 days
         keep ={Path(j["video"]).stem for j in scheduled_jobs() if j.get("video")}
         cutoff = time.time() - settings.keep_videos_days * 86400
         for f in settings.videos_dir.glob("*"):

@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
-from . import channels, metrics, notify, pipeline, social, store, themes
+from . import channels, metrics, notify, pipeline, privacy, social, store, themes
 from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
@@ -533,6 +533,34 @@ def current_banner():
         return {"banner": banner.name, "url": PUBLISHERS["youtube"].set_banner(banner)}
     except Exception as e:
         raise HTTPException(502, str(e)[:300])
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_policy():
+    """The public privacy policy (GDPR), for the platforms' app review and anyone who asks."""
+    return privacy.policy_html()
+
+
+@app.get("/data-deletion")
+def data_deletion():
+    return RedirectResponse("/privacy#deletion")
+
+
+class PrivacyRequest(BaseModel):
+    user: str = Field(min_length=1, max_length=80, description="The viewer's username, with or without @")
+
+
+@app.post("/privacy/optout", dependencies=[Depends(require_token)])
+def privacy_optout(req: PrivacyRequest):
+    """A viewer objected: never read, show, credit or reply to them again."""
+    privacy.opt_out(req.user)
+    return {"opted_out": req.user}
+
+
+@app.post("/privacy/erase", dependencies=[Depends(require_token)])
+def privacy_erase(req: PrivacyRequest):
+    """A viewer asked for deletion: remove them from every stored record, and opt them out."""
+    return {"erased": req.user, "records_changed": privacy.erase(req.user)}
 
 
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])

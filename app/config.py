@@ -92,6 +92,10 @@ class Settings:
         # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
         self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")
 
+        # Shown on the public privacy policy (/privacy): who's responsible and where to write
+        self.privacy_controller = os.environ.get("PRIVACY_CONTROLLER", "")
+        self.privacy_contact_email = os.environ.get("PRIVACY_CONTACT_EMAIL", "")
+
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))

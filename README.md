@@ -126,6 +126,16 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /adventure/jobs/{id}/votes` | The A/B/C votes so far on a posted part (one per account; nothing saved) |
 | `GET /adventure/credits` | Narrator credits spent this month against `ADVENTURE_VOICE_BUDGET` (default 7200) |
 
+## Privacy (GDPR)
+
+`/privacy` is the public privacy policy (UK/EU GDPR): what is read from comments, why (legitimate
+interests), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), how long
+it's kept and how to use your rights; `/data-deletion` points to its deletion section. The code keeps
+its promises: `POST /privacy/optout` (never read, show or reply to a viewer again), `POST
+/privacy/erase` (remove a viewer from every stored record, and opt them out), and viewer names leave
+post records automatically after 90 days. `render_explainer.py` makes the 42-second "how we use your
+comments" video in `assets/explainer/` (for app reviews and viewers).
+
 ## Tests
 
 `pip install -r requirements-dev.txt && python -m pytest` runs the suite (about 45 s; it renders one
