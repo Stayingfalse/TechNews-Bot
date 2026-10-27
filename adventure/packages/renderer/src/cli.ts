@@ -1,6 +1,7 @@
 // render <spec.json> --out out.mp4 [--audio voice.mp3 --align alignment.json] [--music auto|none|file] [--fps 30] [--workers 4]
 // render <spec.json> --png dir --at 1,6.5,20     stills at those times, for checking a layout
 // render script <spec.json>                      the voice-over script as JSON (what to send to ElevenLabs)
+// render avatar --out dir                        profile pictures (1080×1080)
 // Logs go to stderr; a one-line JSON summary goes to stdout.
 import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -56,6 +57,11 @@ function audioArgs(dur: number, voice: string | undefined, music: string | undef
 }
 
 async function main() {
+  if (positionals[0] === "avatar") {
+    const { avatars } = await import("./avatar.ts");
+    for (const f of await avatars(o.out || "out/avatars")) log(`wrote ${f}`);
+    return;
+  }
   if (positionals[0] === "script") {
     const spec = parseEpisode0(JSON.parse(readFileSync(positionals[1], "utf8")));
     const segs = script0(spec);
