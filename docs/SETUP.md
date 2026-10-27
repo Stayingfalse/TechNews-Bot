@@ -37,7 +37,8 @@ Environment variables:
 | `INSTAGRAM_CAROUSELS` | default `true`: once a week, post the week's most-viewed quiz again as a swipe-to-play carousel (clue, then answer) |
 | `CAROUSEL_DAY`, `CAROUSEL_TIME` | when the weekly carousel goes out: default `mon` and `20:00` (local), after the week has run and the Monday batch has booked the next |
 | `AVATAR_EVERY_WEEKS` | default `3`: how often Discord gets the next profile picture to upload (0 = off) |
-| `PRIVACY_CONTROLLER`, `PRIVACY_CONTACT_EMAIL` | who is responsible for viewers' data and where they write: shown on the public privacy policy at `APP_URL/privacy` (use it as the privacy policy URL in Meta's and Google's app settings; `APP_URL/data-deletion` is the data deletion instructions URL) |
+| `PRIVACY_CONTROLLER`, `PRIVACY_CONTACT_EMAIL` | who is responsible for viewers' data and where they write; shown on `/privacy` and `/terms` |
+| `META_APP_SECRET` | optional: the Facebook app's secret, if it differs from `INSTAGRAM_APP_SECRET`, to verify Meta's deletion/deauthorize callbacks (either is accepted) |
 | `HEALTHCHECKS_API_KEY` | optional: a healthchecks.io project API key (read-write). On start the server creates three checks there itself, tagged `quizbot`: **heartbeat** (pings every 5 min; alerts after 15 min of silence), **daily-post** (alerts if nothing has posted by 45 min after `POST_TIME`, or at once when a post fails everywhere), **weekly-batch** (alerts if Monday's routine hasn't booked the next week by 22:00). They alert through the project's integrations (email by default). |
 | `ELEVENLABS_API_KEY` | optional: turns on the host voice-over for quizzes with `"voice": true` (ElevenLabs → Developers → API keys; text-to-speech permission is enough) |
 | `ELEVENLABS_VOICE_ID` | default `TX3LPaxmHKxFdv7VOQHJ` ("Liam", a built-in energetic voice). For another, copy its ID in ElevenLabs (the voice's ⋯ menu → Copy voice ID). On the free plan only built-in voices work through the API; a refused library voice falls back to Liam |
@@ -169,3 +170,15 @@ curl -X POST "APP_URL/jobs?force=true" -H "Authorization: Bearer $API_TOKEN" \
    it stops and reports that instead of submitting anything.
 3. First week: deploy on any day and fire the Routine once by hand; it fills the next 7 days,
    then each Monday run fills whatever is free from Tuesday to the following Monday.
+
+## Legal URLs for the app settings
+
+Meta (App settings → Basic, and Instagram → API setup → Business login settings) and Google (OAuth consent screen):
+
+| Field | URL |
+|---|---|
+| Privacy Policy URL | `APP_URL/privacy` |
+| Terms of Service URL | `APP_URL/terms` |
+| User data deletion: Data deletion callback URL | `APP_URL/privacy/meta/deletion` |
+| Deauthorize callback URL | `APP_URL/privacy/meta/deauthorize` |
+| (if asked for instructions instead of a callback) | `APP_URL/privacy/request` |

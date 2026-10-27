@@ -1,0 +1,20 @@
+<h1>Opt out or delete your data</h1>
+<p class="meta">For viewers of $handle on Instagram and YouTube.</p>
+$message
+<p>Use this form to stop the quiz using your comments, or to have your data deleted. It takes effect immediately and you'll get a
+confirmation code. Prefer not to use a form? Comment <strong>#optout</strong> under any of our videos, or email $mail.</p>
+<form method="post" action="$base/privacy/request">
+  <label>Your username
+    <input name="user" required maxlength="60" autocomplete="off" placeholder="e.g. @quiz_fan_22"></label>
+  <label>Platform
+    <select name="platform"><option value="instagram">Instagram</option><option value="youtube">YouTube</option></select></label>
+  <label>What would you like?
+    <select name="kind">
+      <option value="opt-out">Opt out: never read, show, credit or reply to me again</option>
+      <option value="delete">Delete my data and opt me out</option>
+    </select></label>
+  <button type="submit">Send request</button>
+</form>
+<p class="small">We only ask for your public username so we can match your comments. We don't ask for an email address; if you want a
+reply or want a video that shows your name taken down, email $mail. See the <a href="$base/privacy">privacy policy</a>.
+Already have a code? <a href="$base/privacy/status">Check a request</a>.</p>

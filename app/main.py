@@ -11,7 +11,7 @@ import hmac
 from contextlib import asynccontextmanager
 from html import escape
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
-from . import channels, metrics, notify, pipeline, privacy, social, store, themes
+from . import channels, legal, metrics, notify, pipeline, privacy, social, store, themes
 from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
@@ -538,12 +538,94 @@ def current_banner():
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy_policy():
     """The public privacy policy (GDPR), for the platforms' app review and anyone who asks."""
-    return privacy.policy_html()
+    return legal.privacy_page()
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_of_service():
+    return legal.terms_page()
+
+
+@app.get("/privacy/how-we-use-comments.mp4")
+def privacy_explainer():
+    if not legal.EXPLAINER.exists():
+        raise HTTPException(404)
+    return FileResponse(legal.EXPLAINER, media_type="video/mp4")
 
 
 @app.get("/data-deletion")
 def data_deletion():
     return RedirectResponse("/privacy#deletion")
+
+
+# Viewers' self-service requests: no sign-in (they only name a public username), so a light
+# per-address limit keeps the form from being used to flood the opt-out list.
+_request_times: dict[str, list[float]] = {}
+REQUESTS_PER_HOUR = 10
+
+
+def _form_limited(request: Request) -> bool:
+    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?")
+    now = time.time()
+    recent = [t for t in _request_times.get(ip, []) if now - t < 3600]
+    _request_times[ip] = recent + [now]
+    if len(_request_times) > 5000:
+        _request_times.clear()
+    return len(recent) >= REQUESTS_PER_HOUR
+
+
+async def _form(request: Request) -> dict[str, str]:
+    body = (await request.body())[:10_000].decode("utf-8", "replace")
+    return {k: v[0] for k, v in parse_qs(body).items()}
+
+
+@app.get("/privacy/request", response_class=HTMLResponse)
+def privacy_request_form():
+    return legal.request_page()
+
+
+@app.post("/privacy/request", response_class=HTMLResponse)
+async def privacy_request(request: Request):
+    form = await _form(request)
+    user = re.sub(r"\s+", "", form.get("user", ""))
+    platform, kind = form.get("platform", ""), form.get("kind", "")
+    if _form_limited(request):
+        return HTMLResponse(legal.request_page('<p class="err">Too many requests from here; please try again in an hour, or email us.</p>'), 429)
+    if not re.fullmatch(r"@?[\w.\-]{1,60}", user) or platform not in ("instagram", "youtube") or kind not in ("opt-out", "delete"):
+        return HTMLResponse(legal.request_page('<p class="err">Please enter your username (letters, numbers, dots, dashes and underscores) and pick the options.</p>'), 400)
+    code = legal.apply_request(kind, platform, user, "web form")
+    return RedirectResponse(f"/privacy/status/{code}", 303)
+
+
+@app.get("/privacy/status", response_class=HTMLResponse)
+def privacy_status_query(code: str = ""):
+    return legal.status_page(code[:20])
+
+
+@app.get("/privacy/status/{code}", response_class=HTMLResponse)
+def privacy_status(code: str):
+    return legal.status_page(code[:20])
+
+
+async def _meta_callback(request: Request, kind: str) -> str:
+    data = legal.parse_signed_request((await _form(request)).get("signed_request", ""))
+    if not data or not data.get("user_id"):
+        raise HTTPException(400, "invalid signed_request")
+    return legal.meta_user_removed(str(data["user_id"]), kind)
+
+
+@app.post("/privacy/meta/deletion")
+async def meta_data_deletion(request: Request):
+    """Meta's data deletion request callback: answers with a status URL and confirmation code."""
+    code = await _meta_callback(request, "delete")
+    return {"url": f"{settings.public_base_url}/privacy/status/{code}", "confirmation_code": code}
+
+
+@app.post("/privacy/meta/deauthorize")
+async def meta_deauthorize(request: Request):
+    """Meta's deauthorize callback: someone removed the app from their account."""
+    await _meta_callback(request, "deauthorize")
+    return {"ok": True}
 
 
 class PrivacyRequest(BaseModel):

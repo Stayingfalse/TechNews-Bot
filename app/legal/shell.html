@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title · $handle</title>
+<style>
+:root { --bg:#0D5C6B; --card:#FFF7E8; --ink:#06262C; --sign:#FFC22E; --hot:#FF5A3C; --muted:#5b5b52; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+nav { max-width:820px; margin:20px auto 0; padding:0 16px; display:flex; gap:18px; flex-wrap:wrap; }
+nav a { color:#FFF7E8; text-decoration:none; font-weight:700; }
+nav a:hover { color:var(--sign); }
+main { max-width:820px; margin:14px auto 40px; padding:28px 28px 34px; background:var(--card); border:3px solid var(--ink);
+  border-radius:18px; box-shadow:8px 8px 0 var(--ink); }
+@media (max-width:860px) { main { margin:12px 16px 32px; padding:20px 16px; } }
+h1 { margin:0 0 4px; font-size:1.8rem; line-height:1.2; }
+h2 { font-size:1.15rem; margin:1.9em 0 .5em; padding-bottom:2px; border-bottom:3px solid var(--sign); display:inline-block; }
+h3 { font-size:1rem; margin:1.2em 0 .3em; }
+.meta { color:var(--muted); margin-top:0; }
+.note { background:#fff; border-left:5px solid var(--hot); padding:10px 14px; margin:16px 0; }
+.ok { background:#e9f8ef; border-left:5px solid #2f9e5b; padding:10px 14px; }
+.err { background:#fdecea; border-left:5px solid #FF5A3C; padding:10px 14px; }
+table { border-collapse:collapse; width:100%; font-size:.94rem; margin:8px 0; }
+td, th { border:1px solid #c9bfae; padding:7px 9px; text-align:left; vertical-align:top; }
+th { background:#f3e8d2; }
+.wrap { overflow-x:auto; }
+a { color:#0b5563; font-weight:600; }
+video { display:block; width:100%; max-width:300px; margin:12px auto; border:3px solid var(--ink); border-radius:18px; background:#000; }
+form { display:grid; gap:12px; max-width:460px; }
+label { font-weight:700; display:grid; gap:4px; }
+input, select { font:inherit; padding:9px 10px; border:2px solid var(--ink); border-radius:10px; background:#fff; }
+button { font:inherit; font-weight:800; padding:11px 16px; border:3px solid var(--ink); border-radius:12px;
+  background:var(--sign); box-shadow:4px 4px 0 var(--ink); cursor:pointer; justify-self:start; }
+button:active { transform:translate(2px,2px); box-shadow:2px 2px 0 var(--ink); }
+.small { font-size:.9rem; color:var(--muted); }
+</style></head><body>
+<nav><a href="$base/privacy">Privacy policy</a><a href="$base/privacy/request">Opt out or delete</a><a href="$base/terms">Terms of service</a></nav>
+<main>
+$body
+</main></body></html>

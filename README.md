@@ -128,13 +128,23 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 
 ## Privacy (GDPR)
 
-`/privacy` is the public privacy policy (UK/EU GDPR): what is read from comments, why (legitimate
-interests), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), how long
-it's kept and how to use your rights; `/data-deletion` points to its deletion section. The code keeps
-its promises: `POST /privacy/optout` (never read, show or reply to a viewer again), `POST
-/privacy/erase` (remove a viewer from every stored record, and opt them out), and viewer names leave
-post records automatically after 90 days. `render_explainer.py` makes the 42-second "how we use your
-comments" video in `assets/explainer/` (for app reviews and viewers).
+Public pages (no sign-in), written in `app/legal/*.html` and served by `app/legal.py`:
+
+| URL | What |
+|---|---|
+| `/privacy` | Privacy policy (UK/EU GDPR): what is read from comments, why (legitimate interests, with the balancing test), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), transfers, retention, security, rights, YouTube API Services and Instagram notices; embeds the "how we use your comments" video |
+| `/terms` | Terms of service |
+| `/privacy/request` | Self-service form: opt out, or delete and opt out; applied at once, with a confirmation code |
+| `/privacy/status/{code}` | Where a request stands (also `/privacy/status?code=`) |
+| `POST /privacy/meta/deletion` | Meta's data deletion callback (`signed_request`, verified with the app secret); answers `{url, confirmation_code}` |
+| `POST /privacy/meta/deauthorize` | Meta's deauthorize callback |
+| `/data-deletion` | Redirects to the policy's deletion section |
+
+Viewers can also opt out by commenting `#optout` (or "opt out") under any post: the maintenance loop
+scans the last 14 days of posts twice a day. Every request is logged for 365 days
+(`privacy_requests.json`) and posted to Discord; taking down a video that shows a name stays manual.
+Owner-only: `POST /privacy/optout` and `POST /privacy/erase` (token). Viewer names leave post records
+automatically after 90 days. `render_explainer.py` makes the 42-second video in `assets/explainer/`.
 
 ## Tests
 

@@ -95,6 +95,9 @@ class Settings:
         # Shown on the public privacy policy (/privacy): who's responsible and where to write
         self.privacy_controller = os.environ.get("PRIVACY_CONTROLLER", "")
         self.privacy_contact_email = os.environ.get("PRIVACY_CONTACT_EMAIL", "")
+        # Verifies Meta's data deletion / deauthorize callbacks when the Facebook app's secret differs
+        # from INSTAGRAM_APP_SECRET (either one is accepted)
+        self.meta_app_secret = os.environ.get("META_APP_SECRET", "")
 
         self.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
         # Videos are deleted once posted everywhere; anything left (failed posts, dry runs) goes after this.
