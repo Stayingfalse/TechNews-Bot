@@ -23,6 +23,7 @@ from . import health as monitoring  # "health" is the /health endpoint below
 from . import channels, metrics, notify, pipeline, social, store, themes
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
+from .adventure import votes as adventure_votes_mod
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .render import music
@@ -37,6 +38,7 @@ async def lifespan(_: FastAPI):
     if not settings.api_token:
         raise RuntimeError("API_TOKEN must be set")
     pipeline.start_background()
+    adventure_jobs.start()
     yield
 
 
@@ -532,19 +534,62 @@ MAX_TRACK = 40 * 1024 * 1024
 
 # ------------------------------------------------------------------ adventure channel (preview only)
 
+def _when(at: str) -> datetime:
+    """"HH:MM" (the next time it's that o'clock, local) or an ISO date-time, as UTC."""
+    if re.fullmatch(r"\d{1,2}:\d{2}", at):
+        h, m = (int(x) for x in at.split(":"))
+        local = datetime.now(settings.tz)
+        t = local.replace(hour=h, minute=m, second=0, microsecond=0)
+        return (t if t > local else t + timedelta(days=1)).astimezone(timezone.utc)
+    t = datetime.fromisoformat(at)
+    return (t if t.tzinfo else t.replace(tzinfo=settings.tz)).astimezone(timezone.utc)
+
+
 @app.post("/adventure/episode0", status_code=202, dependencies=[Depends(require_token)])
-def adventure_episode0(spec: dict, voice: bool = True, publish: bool = False):
-    """Render an Episode 0 part (voiced unless voice=false) and send it to Discord; with publish=true
-    also post it to the adventure channel's Instagram, with the options as the first comment.
+def adventure_episode0(spec: dict, voice: bool = True, publish: bool = False, at: str = "", series: bool = True):
+    """Render an Episode 0 part (voiced unless voice=false) and send it to Discord.
+    publish=true also posts it now to the adventure channel's Instagram, options as the first comment.
+    at=09:00 (or an ISO time) books it instead: votes counted and rendered an hour before, posted at
+    that time; with series (default) each part then books the next for the same time tomorrow.
     Body: {"part": 1} or e.g. {"part": 2, "fear": "wraith", "recap": {"pick": 2, "votes": [3, 2, 7]}}."""
     try:
-        job = adventure_jobs.submit({"kind": "episode0", **spec}, use_voice=voice, publish=publish)
+        when = _when(at) if at else None
+        job = adventure_jobs.submit({"kind": "episode0", **spec}, use_voice=voice, publish=publish, at=when,
+                                    series=series and when is not None)
     except adventure_jobs.NotConnected as e:
         raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     except RuntimeError as e:
         raise HTTPException(422, str(e))
-    return {k: job[k] for k in ("id", "status", "voice", "publish")} | {
+    return {k: job.get(k) for k in ("id", "status", "voice", "publish", "series", "publish_at")} | {
         "chars": job["script"]["chars"], "script": job["script"]["text"], "caption": job["script"]["caption"]}
+
+
+@app.delete("/adventure/jobs/{job_id}", dependencies=[Depends(require_token)])
+def adventure_cancel(job_id: str):
+    job = adventure_jobs.get(job_id) if re.fullmatch(r"adv-[\w-]+", job_id) else None
+    if not job:
+        raise HTTPException(404, "no such adventure job")
+    if job["status"] not in ("booked", "scheduled"):
+        raise HTTPException(409, f"it is {job['status']}; only booked or ready posts can be cancelled")
+    adventure_jobs.cancel(job)
+    return {"id": job_id, "status": "cancelled"}
+
+
+@app.get("/adventure/jobs/{job_id}/votes", dependencies=[Depends(require_token)])
+def adventure_votes(job_id: str):
+    """The votes so far on a posted part (nothing is decided or saved)."""
+    job = adventure_jobs.get(job_id) if re.fullmatch(r"adv-[\w-]+", job_id) else None
+    media = job and (job.get("results", {}).get("instagram") or {}).get("media_id")
+    if not media:
+        raise HTTPException(404, "that job has no Instagram post")
+    with channels.use(channels.ADVENTURE):
+        own = PUBLISHERS["instagram"].own_name().lower()
+        comments = [c for c in PUBLISHERS["instagram"].comments(media) if c["user"].lower() != own]
+    t = adventure_votes_mod.tally(comments, job["script"]["options"])
+    pick, how = adventure_votes_mod.decide(t["counts"], job["script"]["default"], job["id"])
+    return t | {"leading": job["script"]["options"][pick], "how": how}
 
 
 @app.get("/adventure/jobs", dependencies=[Depends(require_token)])
