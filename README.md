@@ -121,8 +121,9 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
 | `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
-| `POST /adventure/episode0?voice=` | Adventure channel preview: render an Episode 0 part (body `{"part": 1}`, or with `recap`/`fear`/`hero` for parts 2-4), voiced by the narrator unless `voice=false`, and send it to Discord. Returns the job and the script. Nothing is posted yet. |
-| `GET /adventure/jobs`, `GET /adventure/jobs/{id}` | Adventure renders: status, video URL, voice clip, render time |
+| `POST /adventure/episode0?voice=&publish=&at=&series=` | Adventure channel: render an Episode 0 part (body `{"part": 1}`, or with `recap`/`fear`/`hero` for parts 2-4), voiced unless `voice=false`, to Discord. `publish=true` posts it now to the adventure Instagram (options as the first comment). `at=09:00` books it: votes on the previous part counted and the video rendered an hour before, posted at that time, and (with `series`, the default) the next part booked for the same time tomorrow, built from this one's votes. |
+| `GET /adventure/jobs`, `GET /adventure/jobs/{id}`, `DELETE /adventure/jobs/{id}` | Adventure jobs: status, votes, video, post; cancel a booked or ready one |
+| `GET /adventure/jobs/{id}/votes` | The A/B/C votes so far on a posted part (one per account; nothing saved) |
 | `GET /adventure/credits` | Narrator credits spent this month against `ADVENTURE_VOICE_BUDGET` (default 7200) |
 
 ## Tests
