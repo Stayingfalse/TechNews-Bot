@@ -425,6 +425,36 @@ def job_comments(job_id: str):
             "comments": [{**c, "theme": themes._theme_text(c["text"])} for c in rows]}
 
 
+@app.get("/comments/check", dependencies=[Depends(require_token)])
+def comments_check(posts: int = Query(default=4, ge=1, le=10)):
+    """Can the bot see viewers' comments? For each account's latest posts on Instagram: the comments it
+    can read against the count Instagram reports. Fewer readable than reported (with none of ours)
+    usually means the Meta app is still in Development mode."""
+    from .publish import instagram
+
+    def row(cid: str, job_id: str, media: str, title: str) -> dict:
+        with channels.use(cid):
+            try:
+                reported = instagram._get(media, "comments_count").get("comments_count")
+                rows = instagram.comments(media)
+                own = instagram.own_name().lower()
+                return {"job_id": job_id, "title": title, "reported": reported, "readable": len(rows),
+                        "from_viewers": sum(c["user"].lower() != own for c in rows)}
+            except Exception as e:
+                return {"job_id": job_id, "title": title, "error": str(e)[:300]}
+
+    out: dict[str, list] = {}
+    quiz = [j for j in store.list_jobs(100) if j.get("status") == "done" and not j.get("dry_run")
+            and (j.get("results", {}).get("instagram") or {}).get("media_id")]
+    for cid in channels.registry():
+        mine = [j for j in quiz if (j.get("channel") or channels.MAIN) == cid][:posts]
+        out[cid] = [row(cid, j["id"], j["results"]["instagram"]["media_id"], j["spec"].get("title", "")) for j in mine]
+    adv = [j for j in adventure_jobs.recent(30) if ((j.get("results") or {}).get("instagram") or {}).get("media_id")][:posts]
+    out.setdefault(channels.ADVENTURE, []).extend(
+        row(channels.ADVENTURE, j["id"], j["results"]["instagram"]["media_id"], j["id"]) for j in adv)
+    return out
+
+
 # ------------------------------------------------------------------ performance
 
 @app.get("/metrics", dependencies=[Depends(require_token)])

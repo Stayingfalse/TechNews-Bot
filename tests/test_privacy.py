@@ -174,3 +174,15 @@ def test_home_page_lists_every_accounts_public_videos(quiz):
         assert must in page, must
     assert "hidden" not in page and "reel/q3" not in page  # unlisted and test posts stay off
     assert page.index("reel/q2") < page.index("reel/q1")  # newest first
+
+
+def test_comments_check_compares_readable_with_reported(quiz, monkeypatch):
+    from app.publish import instagram
+
+    posted("q1", quiz, hours_ago=5)
+    monkeypatch.setattr(instagram, "_get", lambda path, fields: {"comments_count": 3})
+    monkeypatch.setattr(instagram, "comments", lambda media, limit=200: [{"id": "1", "user": "fan", "text": "hi", "at": "1"}])
+    monkeypatch.setattr(instagram, "own_name", lambda: "mediaquiz.daily")
+    r = TestClient(app).get("/comments/check", headers=AUTH).json()
+    assert r["main"] == [{"job_id": "q1", "title": quiz["title"], "reported": 3, "readable": 1, "from_viewers": 1}]
+    assert TestClient(app).get("/comments/check").status_code == 401
