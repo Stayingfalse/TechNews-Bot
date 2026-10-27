@@ -3,6 +3,7 @@
 // render script <spec.json>                      the voice-over script as JSON (what to send to ElevenLabs)
 // render validate-arc <{arc,context}.json>       every problem with a weekly arc
 // render resolve <{node,ctx}.json>               a story node + the day's dice → the episode's spec
+// render vocab <{hero}.json>                     scenes, foes, skills (with the hero's odds) and limits, for the routine
 // story voice: --daily clip.mp3 --align a.json [--check c.mp3 --roll r.mp3] --tail t.mp3
 // render avatar --out dir                        profile pictures (1080×1080)
 // Logs go to stderr; a one-line JSON summary goes to stdout.
@@ -16,7 +17,8 @@ import {
   type Alignment, type ArcNode as EngineNode, type StorySpec, caption0, captionStory, comment0, commentStory, ctaOf, cuesFromAlignment,
   dailyText, music0, plan0, planStory, resolveNode, script0, scriptChars, scriptStory, scriptText, sfx0, storyMusic, storySfx,
 } from "../../engine/src/index.ts";
-import { type AnySpec, parseSpec, validateArc } from "../../shared/src/index.ts";
+import { CLASSES, type ClassKey, SKILLS, modifier, odds } from "../../engine/src/sheet.ts";
+import { type AnySpec, DAILY_CHARS, DCS, FOES, SCENES, parseSpec, validateArc } from "../../shared/src/index.ts";
 import { assembleStory } from "./assemble.ts";
 import { AUDIO, OUT_H, OUT_W, mapFor, prepare, type Job } from "./canvas.ts";
 
@@ -90,6 +92,16 @@ async function main() {
   if (positionals[0] === "resolve") {
     const { node, ctx } = JSON.parse(readFileSync(positionals[1], "utf8"));
     return out(resolveNode(node as EngineNode, ctx));
+  }
+  if (positionals[0] === "vocab") {
+    const { hero } = JSON.parse(readFileSync(positionals[1], "utf8")) as { hero: { cls: ClassKey; look: number } | null };
+    const skills = Object.fromEntries(Object.entries(SKILLS).map(([k, ab]) => {
+      const mod = hero ? modifier(hero.cls, k) : null;
+      const at = mod === null ? undefined : Object.fromEntries(DCS.map((dc) => [dc, Math.round(odds(mod, dc) * 100)]));
+      return [k, { ability: ab, modifier: mod, success_pct_by_dc: at }];
+    }));
+    return out({ scenes: SCENES, foes: FOES, dcs: DCS, daily_chars: DAILY_CHARS, skills,
+      hero: hero ? { ...hero, class: CLASSES[hero.cls].name, look_name: CLASSES[hero.cls].looks[hero.look]?.name, proficient: CLASSES[hero.cls].skills } : null });
   }
   const file = positionals[0];
   if (!file || (!o.out && !o.png)) throw new Error("usage: render <spec.json> --out out.mp4 | --png dir --at 1,2,3 | script <spec.json>");
