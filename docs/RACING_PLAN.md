@@ -1,4 +1,4 @@
-# Third channel: RACEFAX, teletext car racing you bet on
+# Third channel: teletext car racing you bet on (name TBD)
 
 Plan only, no code yet. This is a daily ~35 s vertical video in the style of a 1980s teletext page
 (Ceefax/Oracle): blocky mosaic graphics, the 8 teletext colours, a CRT with scan lines and the odd
@@ -10,9 +10,19 @@ glitch, and synth bleeps only, with no voice. Each video:
 4. **Next race card**: six cars, odds and form. Viewers bet by commenting, e.g. `4 250`.
 
 Everyone starts with **§1,000** of play money the first time the bot sees them. Balances persist,
-and once a week (Sunday) the video adds a **league table**.
+every known player gets a **weekly bonus**, and once a week (Sunday) the video adds a **league table**.
 
-"RACEFAX" is a working name. We must not use Ceefax or BBC branding, since Ceefax is the BBC's mark.
+**Name: to be chosen.** "RACEFAX" (in the mock-ups) is out because an existing horse racing game
+uses it, and Ceefax/BBC branding is out too. Shortlist (a quick web search found no game using
+any of the first four; that's not a trademark search):
+
+| Name | Why |
+|---|---|
+| **TURBOTEXT** | teletext + turbo; reads instantly as a page header |
+| **SIXEL SPEEDWAY** | sixels are the teletext mosaic blocks the cars are made of |
+| **MOSAIC MOTORS** | same idea, friendlier word |
+| **PIXEL PADDOCK** | the paddock is where you study form before betting |
+| TELETURBO, CHEQUERED PAGE, P300 GRAND PRIX | backups |
 
 ## Example screens
 
@@ -38,14 +48,14 @@ way real teletext did, and the clock ticks every second.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Name and accounts | **RACEFAX**, Instagram only at launch, like the adventure channel. Add YouTube Shorts later; it's a per-channel `platforms` switch. Balances are per platform account (an Instagram and a YouTube account can't be linked). |
-| 2 | Cadence | **Daily at 19:00** Europe/London. Bets close **18:00 the next day**, and the video renders right after. |
-| 3 | Which comment counts | **The latest valid bet before the cutoff.** This lets people change their mind (the adventure vote counts the first one instead). One bet per person per race. |
+| 1 | Name and accounts | **TBD** (shortlist above), Instagram only at launch, like the adventure channel. Add YouTube Shorts later; it's a per-channel `platforms` switch. Balances are per platform account (an Instagram and a YouTube account can't be linked). |
+| 2 | Cadence | **Decided: daily at 19:00** Europe/London. Bets close **18:00 the next day**, and the video renders right after. Chosen to keep clear of the other channels' work (adventure counts votes at 08:00 and posts at 09:00; the quiz posts at 12:00), so renders never overlap. |
+| 3 | Which comment counts | **Decided: every comment is its own bet.** Three comments `4 250`, `2 100`, `6 50` are three bets. They're taken in the order they were posted until the balance runs out (§3). One comment = one bet; a comment naming two cars is rejected. |
 | 4 | Bet with no amount (`4`) | **§100**. Stakes over the balance are cut to the balance. `all` / `all in` stakes everything. The minimum is §10. |
-| 5 | Going bust | **Relief fund**: anyone under §10 on Sunday is topped up to §100. They stay in the table, so the bust count is part of the show. |
-| 6 | League table | **All-time balance, top 10, on Sundays**, plus a "climber of the week" line so new players have something to win. |
-| 7 | Telling people their balance | Reply to a player's **first** bet only ("Welcome! You have §1,000; §250 on 4 BLUE STREAK at 6/1 is in"). After that, a public **/racing** page on our server lets people look up a name. Replying to every bet would hit Instagram's spam limits once a few hundred people play. |
-| 8 | Provably fair | **Yes.** The caption carries `race 15 seal: 3f9a…` (a SHA-256 of the secret seed), and the next caption reveals the seed. Anyone can re-run the race with the open code. It's cheap and it answers "it's rigged". |
+| 5 | Weekly bonus | **Decided: every Sunday, every known player gets §100, plus §50 for each video they commented on that week.** This replaces the relief fund: nobody stays bust for long, and commenting is rewarded. |
+| 6 | League table | **Decided: all-time balance, top 10, on Sundays**, plus a "climber of the week" line so new players have something to win. |
+| 7 | Telling people their balance | **Decided: a bets page on its own domain** (§7), and only there: name lookup with balance and bet history, the league table, and each race's seed check. The bot doesn't reply to bets (which would hit Instagram's spam limits at a few hundred players); the bio and every caption point at the domain. |
+| 8 | Provably fair | **Decided: yes.** The caption carries `race 15 seal: 3f9a…` (a SHA-256 of the secret seed), and the next caption reveals the seed. Anyone can re-run the race with the open code. It's cheap and it answers "it's rigged". |
 | 9 | Cars | **A fixed roster of six**, one per teletext colour: 1 RED ROCKET, 2 MEAN GREEN, 3 CUSTARD, 4 BLUE STREAK, 5 HOT PINK, 6 CYANARA. They become characters, and their form means something. White is kept for a guest or "ghost" car on special days. |
 
 ## 2. The video (~35 s, ~40 s on Sundays)
@@ -76,17 +86,25 @@ Every template is true either way, so the hook never lies about the outcome.
 
 - **Players**: a player is created the first time the bot reads a comment from them, keyed by
   platform + account id, with the handle saved for display. They start with §1,000.
-- **Betting**: comment under the latest video. The parser is in the style of
+- **Betting**: comment under the latest video. **Every comment is a separate bet**, so backing
+  three cars takes three comments. The bets are taken in the order they were posted: each stake is
+  cut to whatever balance is left, and once it's at zero, later comments that day don't count. An
+  edited comment counts as it reads at the cutoff. The parser is in the style of
   `app/adventure/votes.py`, and it accepts `4 250`, `#4 250`, `250 on 4`, `car 4 £250`,
   `blue streak 300`, `all in on 3`, `4 all` and `4` (= §100). It rejects anything that names two
   cars, or a number with no clear car.
+- **Weekly bonus** (Sundays, before the league table is drawn): every known player gets **§100**,
+  plus **§50 for each video they commented on** that week, any comment, bet or not (likes can't be
+  read per person). "Known" means not opted out and not anonymised. Players who stop playing
+  still collect the §100 for up to 90 days, until they're anonymised (§8). That's worth
+  watching, because an idle player can drift up the table while active players lose bets.
 - **Odds**: fractional (British bookie style, 9/2), from the race simulation (§4) run 20,000 times
   with random seeds. They're priced with a **5% margin**, which slowly drains the money supply so
   balances don't inflate forever. Payout = stake × odds + stake. Win bets only at launch;
   each-way could come later.
-- **Settlement**: at the cutoff, the server reads the comments, takes each player's latest valid
-  bet, debits the stakes, runs the sealed race, credits the winners and renders. Everything goes
-  into an append-only **ledger** (`bet`, `payout`, `relief`, `starting_balance`), and balances are
+- **Settlement**: at the cutoff, the server reads the comments, takes every valid bet in comment
+  order, debits the stakes, runs the sealed race, credits the winners and renders. Everything goes
+  into an append-only **ledger** (`bet`, `payout`, `bonus`, `starting_balance`), and balances are
   derived from it. This means we can audit any dispute, and erasure is one filter.
 - **Form**: each car has hidden pace, consistency and reliability. They drift a little after every
   race (a seeded random walk), so the form guide and odds change and there's something to read
@@ -121,9 +139,9 @@ Every template is true either way, so the hook never lies about the outcome.
 - **CRT pass**: colour fringing (R/B shifted 3 px), bloom, 6 px scan lines, an RGB aperture grille,
   barrel curvature, vignette, a slow rolling hum bar and light grain.
 - **Glitches** are events rather than constant noise: a burst of 2–4 frames on the hook, on
-  overtakes, and on result reveals. Tearing bands, one wide colour split, and sometimes a dropped
-  row of characters (the "bad reception" look). They're never on a frame that carries the bet
-  instructions.
+  overtakes, and on result reveals, plus the odd random one. Tearing bands, one wide colour split,
+  and sometimes a dropped row of characters (the "bad reception" look). They can cross any text,
+  including the race card: a burst lasts a split second and the text is readable again straight after.
 - **Compression**: per-frame grain wrecks the bitrate (the 4 s motion test was 12 MB at CRF 20).
   The real renderer should use a fixed grain texture that shifts each frame, keep its amplitude
   low, and encode at a capped bitrate. Instagram re-encodes anyway, and scan lines at 6 px survive
@@ -150,11 +168,11 @@ No ElevenLabs credits are spent, so this channel doesn't touch the shared voice 
 It's a new channel and content kind, alongside `main` (quiz) and `adventure`:
 
 ```
-channels.py      RACING = "racing" → Channel("racing", "RACEFAX", "racing", settings.racing_handle, "19:00", …)
+channels.py      RACING = "racing" → Channel("racing", NAME, "racing", settings.racing_handle, "19:00", …)
 app/racing/
   sim.py         seeded race sim, Monte-Carlo odds, car stat drift, seal/reveal
   bets.py        comment → (car, stake) parser (pattern of adventure/votes.py)
-  ledger.py      players, append-only ledger, balances, settle(), relief fund, league table
+  ledger.py      players, append-only ledger, balances, settle(), weekly bonus, league table
   hooks.py       hook templates chosen from race data
   jobs.py        the daily cycle (pattern of adventure/jobs.py)
 app/render/teletext/
@@ -174,7 +192,8 @@ DATA_DIR/racing/ players.json · ledger.jsonl · races/{n}.json (seed, stats, be
        → open race N+1: drift car stats, new seed + seal, Monte-Carlo odds
        → render (hook · race N · result · [Sunday table] · card N+1) → Discord preview
 19:00  post the Reel; caption has race N's seed reveal + race N+1 seal + "comment CAR STAKE"
-       → reply to first-time bettors → comment link on the previous post (existing link_previous)
+       → comment link on the previous post (existing link_previous)
+Sunday 18:00, before settling: weekly bonus → league table page added to the video
 ```
 
 **Already in place and reused**: the scheduler, render lead time, deploy lease and restart
@@ -182,10 +201,24 @@ recovery (`pipeline.py`), per-channel tokens and publishers, comment reading, op
 Discord previews and failures, `/jobs/failed` + retry, metrics and dashboard, the home page and
 legal pages (built from the channel registry, so the new channel is listed automatically).
 
-**New endpoints**: `POST /racing/start` (open race 1), `GET /racing/state`,
-`GET /racing/races/{n}`, `GET /racing/players?q=` (token), a public `GET /racing` page (league
-table and name lookup, no opted-out players), and `POST /racing/dry-run` (render tomorrow's video
-from today's comments without settling anything).
+**New endpoints** (main domain, token): `POST /racing/start` (open race 1), `GET /racing/state`,
+`GET /racing/races/{n}`, `GET /racing/players?q=`, and `POST /racing/dry-run` (render tomorrow's
+video from today's comments without settling anything).
+
+**The bets domain**: a second domain (e.g. `turbotext.example`) points at the same Easypanel app.
+A small middleware checks the `Host` header against `RACING_DOMAIN`:
+
+- On the bets domain, **only** the racing public pages exist, and everything else is a 404 there
+  (no dashboard, no API, no quiz pages). The pages are `/` (league table and this week's race
+  card), `/p/{handle}` (balance, bets, bonuses), `/race/{n}` (result, every bet, and the seed check:
+  the revealed seed, its fingerprint, and the published fingerprint side by side), and its own
+  `/privacy` and `/terms` (the same policy text, branded for the channel).
+- On the main domain, none of those pages exist, so the quiz brand and the game stay separate.
+- Opted-out players never appear; anonymised players show as "punter #1234".
+- It's read-only and needs no sign-in: balances come from public comments anyway. The handle
+  lookup matches exactly, so it can't be used to search for people.
+- Easypanel needs the extra domain added to the app and a certificate. That's the only
+  infrastructure change.
 
 **Renderer language**: **Python** (PIL + numpy), not the adventure's TypeScript/Skia. A teletext
 frame is a character grid plus rectangles, and the existing quiz renderer, ffmpeg piping and synth
@@ -220,11 +253,11 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
 |---|---|---|
 | M1 | `app/render/teletext`: page, mosaics, double height, CRT, all scenes from fixture data; `render_cli.py --racing fixture.json` | a 35 s video renders in < 2 min; golden-frame tests; the safe-zone test checks every text cell |
 | M2 | `racing/sim.py`: sim, events, stat drift, seal/reveal, Monte-Carlo odds | determinism test (same seed = same race); odds calibration test |
-| M3 | `racing/bets.py` + `ledger.py`: parser, settlement, relief, league table | parser table tests (accepts/rejects); ledger replay = balances |
+| M3 | `racing/bets.py` + `ledger.py`: parser, settlement in comment order, weekly bonus, league table | parser table tests (accepts/rejects); ledger replay = balances |
 | M4 | Sound | engines, events and bed mixed; −14 LUFS |
 | M5 | Channel wiring: `channels.py`, `jobs.py`, endpoints, Discord previews, dry run | a week of dry runs on fake comments, posting off |
-| M6 | Public `/racing` page, privacy policy + explainer, first-bet replies | legal pages list the channel; opt-out works end to end |
-| M7 | Launch: connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
+| M6 | Bets domain (host-checked middleware, lookup, race pages with seed check, its own privacy/terms), privacy policy + explainer | other paths 404 on the bets domain; racing pages 404 on the main one; opt-out works end to end |
+| M7 | Launch: pick the name, add the domain in Easypanel, connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
 
 ## 10. Risks
 
@@ -235,6 +268,6 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
   card, and a weekly Discord list of comments that looked like bets but didn't parse, so the
   parser improves.
 - **Whales and all-ins** dominate the table. That's acceptable, and it's part of the drama. The
-  climber line and the relief fund keep new players interested.
-- **Glitches hurting legibility**: glitch bursts are short, and no glitch is ever on a race card
-  frame (the mock-up's stills with glitch applied show why).
+  climber line and the weekly bonus keep new players interested.
+- **Comment spam for the bonus**: §50 is per *video* commented on, not per comment, so ten comments
+  on one video still earn §50. Bets are what multiple comments are for.
