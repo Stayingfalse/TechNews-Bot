@@ -132,6 +132,7 @@ def _render(job: dict) -> None:
     vcfg = VoiceConfig(settings.elevenlabs_api_key, voice_id, settings.elevenlabs_model,
                        settings.data_dir / "voice") if settings.elevenlabs_api_key else None
     info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
+                        bundled_music=settings.music_bundled,
                         reveal=screen, voice=vcfg)
     if (store.get_job(job["id"]) or {}).get("status") == "cancelled":  # cancelled while rendering
         video.unlink(missing_ok=True)

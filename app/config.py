@@ -131,6 +131,8 @@ class Settings:
         # A quiz is rejected (409) if any of its answers was used within this many days.
         self.repeat_days = int(os.environ.get("REPEAT_DAYS", "365"))
         self._music_dir = os.environ.get("MUSIC_DIR", "")
+        # The CC0 tracks in assets/music join the library (false: only your uploads, else the synth)
+        self.music_bundled = _bool("MUSIC_BUNDLED", True)
 
     @property
     def videos_dir(self) -> Path:

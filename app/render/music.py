@@ -1,8 +1,10 @@
-"""Background music: a track from your own library, or a game-show loop synthesised from the seed.
+"""Background music: a track from the library, or a game-show loop synthesised from the seed.
 
-The library is any .mp3/.m4a/.wav/.ogg/.flac files in MUSIC_DIR (default /data/music). Only add
-tracks you have the rights to use on Instagram/YouTube (your own, or royalty-free with a licence
-that allows social video). With no library the synth is used, so the bot never needs anything.
+The library is the CC0 tracks bundled in assets/music (see LICENSES.md there; MUSIC_BUNDLED=false
+leaves them out) plus any .mp3/.m4a/.wav/.ogg/.flac files in MUSIC_DIR (default /data/music), where
+an upload with a bundled track's name replaces it. Only add tracks you have the rights to use on
+Instagram/YouTube (your own, or royalty-free with a licence that allows social video). With no
+library the synth is used, so the bot never needs anything.
 """
 from __future__ import annotations
 
@@ -14,21 +16,34 @@ import numpy as np
 from .audio import SR
 
 EXTS = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac"}
+BUNDLED = Path(__file__).resolve().parents[2] / "assets" / "music"
 
 
-def library(music_dir: Path) -> list[Path]:
-    if not music_dir.is_dir():
+def _tracks(folder: Path) -> list[Path]:
+    if not folder.is_dir():
         return []
-    return sorted(p for p in music_dir.iterdir() if p.suffix.lower() in EXTS and p.is_file())
+    return [p for p in folder.iterdir() if p.suffix.lower() in EXTS and p.is_file()]
 
 
-def pick(choice: str, music_dir: Path, seed: int) -> Path | str | None:
+def library(music_dir: Path, bundled: bool = True) -> list[Path]:
+    """Uploaded tracks plus the bundled ones, by name; an upload named like a bundled track replaces it."""
+    own = _tracks(music_dir)
+    stems = {p.stem.lower() for p in own}
+    extra = [p for p in _tracks(BUNDLED) if p.stem.lower() not in stems] if bundled else []
+    return sorted(own + extra, key=lambda p: p.name.lower())
+
+
+def is_bundled(track: Path) -> bool:
+    return track.parent == BUNDLED
+
+
+def pick(choice: str, music_dir: Path, seed: int, bundled: bool = True) -> Path | str | None:
     """Returns a library file, "synth", or None for silence. Unknown file names fall back to auto."""
     if choice == "none":
         return None
     if choice == "synth":
         return "synth"
-    tracks = library(music_dir)
+    tracks = library(music_dir, bundled)
     if choice != "auto":
         for p in tracks:
             if p.name == choice or p.stem == choice:

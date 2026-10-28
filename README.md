@@ -10,7 +10,7 @@ Claude Code Routine (Mondays 19:05)        Easypanel app (this repo)
   verify the facts                          │  checked + stored (no video yet) → week summary in Discord
                                             ├─ 45 min before each slot: render the video → preview in Discord
                                             │    intro → rounds (clue + countdown → reveal) → outro
-                                            │    music: your library, or synthesised
+                                            │    music: 20 bundled CC0 tracks + yours, or synthesised
                                             └─ at the slot (12:00 Europe/London by default):
                                                  post to each platform in PLATFORMS
                                                  (YouTube, Instagram) → result in Discord
@@ -19,9 +19,11 @@ Claude Code Routine (Mondays 19:05)        Easypanel app (this repo)
 
 Claude only runs once a week; the server's own scheduler does the daily rendering and posting,
 and only ever keeps the next video or two on disk. Trending
-sounds can't be added through any platform's API, so the music is baked into the video: upload
-your own royalty-free tracks (`PUT /music/{name}`), or let the bot synthesise a game-show loop
-(different for every video, no licensing).
+sounds can't be added through any platform's API, so the music is baked into the video: one of 20
+CC0 tracks bundled in `assets/music` (sources and licences in its `LICENSES.md`), your own
+royalty-free uploads (`PUT /music/{name}`), or a game-show loop the bot synthesises (`"music": "synth"`;
+different for every video, no licensing). Each post is labelled with its track, so the weekly review
+can compare them.
 
 ## Look
 
@@ -35,8 +37,8 @@ bulbs that go out each second, and an answer podium with confetti. Palettes (stu
 
 ```bash
 pip install -r requirements.txt          # also needs ffmpeg and fonts-noto-color-emoji
-python render_cli.py examples/sample_quiz.json out/sample.mp4            # synth music
-python render_cli.py examples/sample_quiz.json out/sample.mp4 ./music    # random track from ./music
+python render_cli.py examples/sample_quiz.json out/sample.mp4            # random bundled track
+python render_cli.py examples/sample_quiz.json out/sample.mp4 ./music    # ...or one from ./music
 
 API_TOKEN=dev DATA_DIR=./data uvicorn app.main:app --reload
 curl -X POST localhost:8000/jobs?dry_run=true -H 'Authorization: Bearer dev' \
@@ -119,7 +121,7 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |
 | `GET /connections` | Every channel's accounts, each checked live (`ok`, `broken`, `missing_permissions`, `expiring`, `not_connected`), with its reconnect link. The dashboard's Accounts card. |
-| `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
+| `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library: the bundled CC0 tracks and your uploads (raw file body, max 40 MB; an upload named like a bundled track replaces it) |
 | `GET /oauth/{youtube,instagram}/start?channel=` | Connect or reconnect an account: the dashboard's Reconnect buttons (sign-in is enough, no token). Instagram asks which account to use; another channel's account is refused, and so is a different account from before unless `switch=true`. Signed in, it comes back to the dashboard. |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 | `POST /adventure/episode0?voice=&publish=&at=&series=` | Adventure channel: render an Episode 0 part (body `{"part": 1}`, or with `recap`/`fear`/`hero` for parts 2-4), voiced unless `voice=false`, to Discord. `publish=true` posts it now to the adventure Instagram (options as the first comment). `at=09:00` books it: votes on the previous part counted and the video rendered an hour before, posted at that time, and (with `series`, the default) the next part booked for the same time tomorrow, built from this one's votes. |

@@ -178,7 +178,7 @@ def status():
                       for name in settings.platforms},
         "post_time": f"{settings.post_time} {settings.tz.key}",
         "scheduled": [{k: j.get(k) for k in ("slot", "status", "id")} for j in pipeline.scheduled_jobs()],
-        "music_tracks": [p.name for p in music.library(settings.music_dir)],
+        "music_tracks": [p.name for p in music.library(settings.music_dir, settings.music_bundled)],
         "discord": bool(settings.discord_webhook_url),
         "voice_enabled": bool(settings.elevenlabs_api_key),
         "healthchecks": sorted(k for k in store._read("health.json", {}) if not k.startswith("warned:")),
@@ -1012,7 +1012,9 @@ def adventure_credits():
 
 @app.get("/music", dependencies=[Depends(require_token)])
 def list_music():
-    return [{"name": p.name, "bytes": p.stat().st_size} for p in music.library(settings.music_dir)]
+    """The library: your uploads and the bundled CC0 tracks (assets/music/LICENSES.md)."""
+    return [{"name": p.name, "bytes": p.stat().st_size, "source": "bundled" if music.is_bundled(p) else "uploaded"}
+            for p in music.library(settings.music_dir, settings.music_bundled)]
 
 
 @app.put("/music/{name}", status_code=201, dependencies=[Depends(require_token)])
@@ -1042,6 +1044,9 @@ async def upload_music(name: str, request: Request):
 @app.delete("/music/{name}", dependencies=[Depends(require_token)])
 def delete_music(name: str):
     path = settings.music_dir / name
+    if MUSIC_NAME.match(name) and not path.is_file() and (music.BUNDLED / name).is_file():
+        raise HTTPException(409, "that's a bundled track: upload a file with the same name to replace it, "
+                                 "or set MUSIC_BUNDLED=false to leave all of them out")
     if not MUSIC_NAME.match(name) or not path.is_file():
         raise HTTPException(404)
     path.unlink()
