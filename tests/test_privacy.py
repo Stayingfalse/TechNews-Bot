@@ -186,3 +186,20 @@ def test_comments_check_compares_readable_with_reported(quiz, monkeypatch):
     r = TestClient(app).get("/comments/check", headers=AUTH).json()
     assert r["main"] == [{"job_id": "q1", "title": quiz["title"], "reported": 3, "readable": 1, "from_viewers": 1}]
     assert TestClient(app).get("/comments/check").status_code == 401
+
+
+def test_instagram_commenters_named_from_the_from_field(monkeypatch):
+    """Instagram can leave `username` empty on viewers' comments; the name and id come from `from`."""
+    from app.adventure import votes
+    from app.publish import instagram
+
+    store.set_tokens("instagram", {"access_token": "t", "user_id": "1"})
+    data = {"data": [{"id": "c1", "text": "B", "timestamp": "1", "from": {"id": "111", "username": "goblin_fan"}},
+                     {"id": "c2", "text": "b!", "timestamp": "2", "from": {"id": "111"}},
+                     {"id": "c3", "text": "C", "timestamp": "3", "from": {"id": "222"}},
+                     {"id": "c4", "text": "A", "timestamp": "4", "username": "named"}]}
+    monkeypatch.setattr(instagram.httpx, "get", lambda *a, **k: type("R", (), {"status_code": 200, "json": lambda self: data})())
+    rows = instagram.comments("m1")
+    assert [(c["user"], c["uid"]) for c in rows] == [("goblin_fan", "111"), ("", "111"), ("", "222"), ("named", "")]
+    t = votes.tally([dict(r, user="") if r["id"] == "c1" else r for r in rows], ["a", "b", "c"])
+    assert t["counts"] == [1, 1, 1]  # c1/c2 are one person (by id): their first vote counts

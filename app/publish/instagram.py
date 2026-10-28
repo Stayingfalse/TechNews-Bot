@@ -280,16 +280,19 @@ def connected_identity() -> str | None:
 
 
 def comments(media_id: str, limit: int = 200) -> list[dict]:
-    """Comments on a post, oldest first: {id, user, text, at}. Needs instagram_business_manage_comments."""
+    """Comments on a post, oldest first: {id, user, uid, text, at}. Needs instagram_business_manage_comments."""
     tok = store.get_tokens("instagram")
     url, params, out = f"{graph()}/{media_id}/comments", {
-        "fields": "id,text,username,timestamp", "limit": 50, "access_token": tok["access_token"]}, []
+        "fields": "id,text,username,from,timestamp", "limit": 50, "access_token": tok["access_token"]}, []
     while url and len(out) < limit:
         r = httpx.get(url, params=params, timeout=30)
         if r.status_code >= 400:
             raise RuntimeError(f"Instagram comments unavailable: {r.text[:200]}")
         d = r.json()
-        out += [{"id": c["id"], "user": c.get("username", ""), "text": c.get("text", ""), "at": c.get("timestamp", "")}
+        # `username` can come back empty for other people's comments; `from` carries it (and the
+        # commenter's id, so votes still count one per person when no name is given)
+        out += [{"id": c["id"], "user": c.get("username") or (c.get("from") or {}).get("username", ""),
+                 "uid": str((c.get("from") or {}).get("id", "")), "text": c.get("text", ""), "at": c.get("timestamp", "")}
                 for c in d.get("data", [])]
         url, params = d.get("paging", {}).get("next"), None
     return sorted(out, key=lambda c: c["at"])

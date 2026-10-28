@@ -62,7 +62,7 @@ def tally(comments: list[dict], options: list[str]) -> dict:
     """Count each account's first vote. comments: oldest first, each {user, text, ...}."""
     counts, voters, seen = [0] * len(options), [], set()
     for c in comments:
-        who = (c.get("user") or "").lower()
+        who = (c.get("user") or "").lower() or (f"id:{c['uid']}" if c.get("uid") else "")
         if not who or who in seen:
             continue
         pick = parse(c.get("text") or "", options)
