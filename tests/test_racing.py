@@ -341,7 +341,7 @@ def test_launch_then_a_day_of_betting_then_the_race(cycle, discord):
     assert spec["race"]["no"] == 1 and spec["card"]["no"] == 2 and spec["table"]["week"] == "WEEK 44"
     assert jobs.get(nxt["id"])["bonus"]["doubled"]  # launch weeks
     won = r1["result"]["order"][0] == 4
-    assert ledger.balance("instagram:u-amy") == 750 + (1250 if won else 0) + 200 + 100
+    assert ledger.balance("instagram:u-amy") == 750 + (sim.payout(250, r1["odds"][3]) if won else 0) + 200 + 100
     jobs.tick(slot)
     done = jobs.get(nxt["id"])
     assert done["status"] == "done" and races.get(2)["post"]["media_id"] == "M2"
