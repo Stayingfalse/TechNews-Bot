@@ -357,6 +357,24 @@ def test_launch_then_a_day_of_betting_then_the_race(cycle, discord):
     assert len(closed) == 1 and "race 2" in closed[0]["text"]
 
 
+def test_launch_right_now_then_race_1_at_the_next_post_time(cycle, monkeypatch):
+    t0 = datetime(2026, 10, 28, 19, 5, tzinfo=timezone.utc)  # just after today's slot
+    monkeypatch.setattr(jobs, "now", lambda: t0)
+    jobs.start(datetime(2026, 10, 29, 19, 0, tzinfo=timezone.utc))
+    with pytest.raises(ValueError):
+        jobs.start(right_now=True)  # already started
+    job = jobs.start(right_now=True, restart=True)  # nothing posted yet, so it can start over
+    assert len([j for j in jobs.recent(10) if j["kind"] == "launch"]) == 1
+    assert races.get(1)["closes_at"] == "2026-10-29T18:00:00+00:00" and races.get(1)["format"] == "figure8"
+    jobs.tick(t0 + timedelta(seconds=30))
+    jobs.tick(t0 + timedelta(minutes=2))
+    assert jobs.get(job["id"])["status"] == "done"
+    nxt = [j for j in jobs.recent(10) if j["kind"] == "race"][0]
+    assert nxt["publish_at"] == "2026-10-29T19:00:00+00:00" and nxt["run"] == 1
+    with pytest.raises(ValueError, match="posted"):
+        jobs.start(right_now=True, restart=True)
+
+
 def test_a_race_is_never_run_twice(cycle):
     slot = datetime(2026, 11, 3, 19, 0, tzinfo=timezone.utc)
     jobs.start(slot - timedelta(days=1))
