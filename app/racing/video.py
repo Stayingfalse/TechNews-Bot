@@ -7,20 +7,29 @@ from datetime import datetime
 from ..config import settings
 from . import hooks, races, sim
 
-FPS = sim.FPS
+
+def format_part(fmt: str) -> dict:
+    F = sim.FORMATS[fmt]
+    return {"key": fmt, "name": F["name"], "laps": F["laps"], "pits": bool(F.get("pits")),
+            "wear": bool(F["wear"]), "launch": bool(F.get("launch")), "cross": bool(F.get("cross"))}
 
 
 def race_part(race: dict) -> dict:
-    """The race as the renderer needs it: per-frame distances plus the result."""
+    """The race as the renderer needs it: per-frame distances (already in video time) plus the result."""
     res = race["result"]
-    dist = res["dist"]
-    end = min(len(dist) / FPS, res["winner_time"] + 1.4)
-    win_t = res["times"][str(res["order"][0])] if str(res["order"][0]) in res["times"] else res["winner_time"]
-    gaps = {str(no): round(t - win_t, 3) for no, t in ((int(k), v) for k, v in res["times"].items())
-            if t is not None and no != res["order"][0]}
-    return {"no": race["no"], "circuit": race["circuit"], "laps": sim.LAPS, "dist": dist,
-            "times": res["times"], "events": res["events"], "order": res["order"], "dnf": res["dnf"],
-            "margin": res["margin"], "winner_time": res["winner_time"], "race_end": round(end, 3), "gaps": gaps}
+    scale = res["scale"]
+    win = str(res["order"][0])
+    gaps = {no: round(t - res["times"][win], 3) for no, t in res["times"].items() if t is not None and no != win}
+    out = {"no": race["no"], "format": format_part(race["format"]), "track": race["track"], "laps": res["laps"],
+           "dist": res["dist"], "times": res["times"],
+           "vtimes": {no: (round(t / scale, 3) if t is not None else None) for no, t in res["times"].items()},
+           "events": res["events"], "order": res["order"], "dnf": res["dnf"], "margin": res["margin"],
+           "winner_time": res["winner_time"], "scale": scale, "race_end": round((len(res["dist"]) - 1) / sim.FPS, 3),
+           "gaps": gaps}
+    for k in ("wear", "pit", "reaction"):
+        if k in res:
+            out[k] = res[k]
+    return out
 
 
 def result_part(race: dict, settled: dict | None, bust: int) -> dict:
@@ -36,8 +45,8 @@ def result_part(race: dict, settled: dict | None, bust: int) -> dict:
 
 def card_part(race: dict) -> dict:
     closes = datetime.fromisoformat(race["closes_at"]).astimezone(settings.tz)
-    return {"no": race["no"], "circuit": race["circuit"], "odds": race["odds"],
-            "form": {str(k): v for k, v in races.form(race["no"]).items()}, "seal": race["seal"],
+    return {"no": race["no"], "format": format_part(race["format"]), "track": race["track"], "odds": race["odds"],
+            "form": {str(k): v for k, v in races.form(race["no"], fmt=race["format"]).items()}, "seal": race["seal"],
             "closes": closes.strftime("%a %H:%M").upper()}
 
 

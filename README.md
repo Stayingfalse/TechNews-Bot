@@ -180,8 +180,10 @@ Discord previews (`POST /adventure/episode0`). Settings: `ADVENTURE_VOICE_ID` (d
 
 ## Racing channel (Sixel Speedway)
 
-A third channel: a daily ~40 s car race that viewers bet on with play money in the comments. It runs
-on the server alone, with no AI step and no routine. Plan and rules: [docs/RACING_PLAN.md](docs/RACING_PLAN.md).
+A third channel: a daily ~40 s car race that viewers bet on with play money in the comments. A
+different format each day (oval, rally, Grand Prix, figure 8, drag, endurance with pit stops) on a
+newly generated track, with cars that suit some formats more than others. It runs on the server
+alone, with no AI step and no routine. Plan and rules: [docs/RACING_PLAN.md](docs/RACING_PLAN.md).
 
 ```
 every 15 min   read new comments on the open race's post → reply to each bet (paced queue)
@@ -197,14 +199,15 @@ every 15 min   read new comments on the open race's post → reply to each bet (
   the race card, league table, a page per player and per race with the seal check. That domain
   serves nothing else, and the racing pages exist on no other domain.
 - **Themes** (`app/render/racing/themes/`): each is one look for the whole video. `RACING_THEMES=pitwall,other`
-  makes videos take turns (an A/B test); `GET /racing/metrics` compares them. `POST /racing/preview?theme=`
+  makes videos take turns (an A/B test); `GET /racing/metrics` compares them. `POST /racing/preview?theme=&format=`
   sends a sample video (with a throwaway seed) to Discord.
 - **Endpoints** (token): `POST /racing/start`, `GET /racing/state`, `GET /racing/races/{n}`,
   `GET /racing/jobs[/{id}]`, `POST /racing/jobs/{id}/retry`, `GET /racing/players?q=`,
   `GET /racing/metrics`, `POST /racing/preview`.
 - **Settings**: `RACING_HANDLE`, `RACING_POST_TIME` (19:00), `RACING_CLOSE_MINUTES` (60),
   `RACING_PLATFORMS` (instagram), `RACING_DOMAIN`, `RACING_THEMES` (pitwall), `RACING_POLL_MINUTES` (15),
-  `RACING_REPLY_GAP` (20 s), `RACING_REPLY_PER_HOUR` (60), `RACING_REPLIES` (on), `RACING_LAUNCH_WEEKS` (4).
+  `RACING_REPLY_GAP` (20 s), `RACING_REPLY_PER_HOUR` (60), `RACING_REPLIES` (on), `RACING_LAUNCH_WEEKS` (4),
+  `RACING_CALENDAR` (`mon=oval,tue=rally,wed=gp,thu=figure8,fri=drag,sat=endurance,sun=gp`).
 
 Fonts for the race videos: Inter (OFL) and JetBrains Mono, in `assets/fonts/racing`.
 

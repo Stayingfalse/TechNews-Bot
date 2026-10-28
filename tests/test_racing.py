@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app import privacy
 from app.config import settings
 from app.main import app
-from app.racing import bets, hooks, jobs, ledger, races, replies, sim, video
+from app.racing import bets, hooks, jobs, ledger, races, replies, sim, tracks, video
 from app.render.racing.engine import Video, timeline
 from app.render.racing.themes.base import SAFE
 
@@ -35,16 +35,50 @@ def comment(cid, user, text, minute, hour=12, uid="", day="2026-10-28"):
 
 def test_a_seed_always_gives_the_same_race_and_seal():
     seed = "00ff" * 8
-    a, b = sim.summary(sim.race(3, seed, STATS)), sim.summary(sim.race(3, seed, STATS))
-    assert a == b
-    assert sim.seal(3, seed, STATS) == sim.seal(3, seed, STATS)
-    assert sim.seal(3, seed, STATS) != sim.seal(4, seed, STATS)
+    a = sim.summary(sim.race(3, seed, STATS, "gp", 11), "gp")
+    assert a == sim.summary(sim.race(3, seed, STATS, "gp", 11), "gp")
+    assert sim.seal(3, seed, "gp", 11, STATS) == sim.seal(3, seed, "gp", 11, STATS)
+    assert len({sim.seal(3, seed, "gp", 11, STATS), sim.seal(4, seed, "gp", 11, STATS),
+                sim.seal(3, seed, "rally", 11, STATS), sim.seal(3, seed, "gp", 12, STATS)}) == 4
     assert sorted(a["order"]) == [1, 2, 3, 4, 5, 6]
-    assert 10 < a["winner_time"] < 22
+    assert len(a["dist"]) == int(sim.FORMATS["gp"]["video"] * sim.FPS) + 1  # fitted to its time on screen
+
+
+@pytest.mark.parametrize("kind", ["oval", "gp", "rally", "figure8", "endurance", "drag"])
+def test_every_track_kind_is_generated_the_same_from_its_seed(kind):
+    a, b = tracks.generate(kind, 5), tracks.generate(kind, 5)
+    assert (a.pts == b.pts).all() and a.name == b.name
+    assert (a.pts >= 0).all() and (a.pts <= 1).all()
+    if kind in ("gp", "rally", "endurance", "oval"):
+        assert not tracks._intersects(a.pts)
+    if kind == "drag":
+        assert round(a.length, 1) == 402.3 and not a.closed
+    assert tracks.corners(tracks.generate("rally", 5)) > tracks.corners(tracks.generate("oval", 5))
+
+
+def test_each_format_suits_different_cars():
+    """Top speed wins ovals, acceleration wins drag races, grip wins rally stages."""
+    fav = {fmt: max(range(6), key=lambda j: c[j]) + 1
+           for fmt in ("oval", "drag", "rally") for c in [sim.win_chances(STATS, fmt, 3, runs=1500)]}
+    assert fav["oval"] == 1 and fav["drag"] == 4 and fav["rally"] in (2, 6)
+
+
+def test_endurance_races_have_pit_stops_and_tyre_wear():
+    res = sim.summary(sim.race(1, "ab" * 16, STATS, "endurance", 4), "endurance")
+    pits = [e for e in res["events"] if e["kind"] == "pit"]
+    assert len(pits) >= 6 and all(20 < e["dur"] < 35 for e in pits)
+    assert max(max(w) for w in res["wear"]) > 0.6 and any(any(p) for p in res["pit"])
+    assert res["scale"] > 30  # half an hour of racing fitted into the video
+
+
+def test_drag_races_have_reaction_times_and_no_laps():
+    res = sim.summary(sim.race(1, "cd" * 16, STATS, "drag", 4), "drag")
+    assert res["laps"] == 1 and set(res["reaction"]) == {"1", "2", "3", "4", "5", "6"}
+    assert all(t is None or 8 < t < 14 for t in res["times"].values())
 
 
 def test_odds_carry_the_margin_and_cover_every_car():
-    chances = sim.win_chances(STATS, runs=3000)
+    chances = sim.win_chances(STATS, "gp", 11, runs=3000)
     assert abs(sum(chances) - 1) < 1e-9
     prices = [sim.price(c) for c in chances]
     implied = sum(1 / (1 + Fraction(p)) for p in prices)
@@ -56,10 +90,10 @@ def test_odds_carry_the_margin_and_cover_every_car():
 
 def test_odds_match_how_often_cars_really_win():
     """The real races (one seed each) win about as often as the priced chances say."""
-    chances = sim.win_chances(STATS, runs=4000, seed=1)
+    chances = sim.win_chances(STATS, "rally", 9, runs=4000, seed=1)
     wins = [0] * 6
     for i in range(300):
-        wins[sim.summary(sim.race(i, f"{i:032x}", STATS))["order"][0] - 1] += 1
+        wins[sim.race(i, f"{i:032x}", STATS, "rally", 9).order(0)[0]] += 1
     for c, w in zip(chances, wins):
         assert abs(w / 300 - c) < 0.08
 
@@ -68,7 +102,7 @@ def test_stats_drift_a_little_and_stay_in_range():
     s = STATS
     for k in range(200):
         s = sim.drift(s, k)
-    assert all(0.93 <= c["pace"] <= 1.07 and 0.15 <= c["consistency"] <= 0.95 for c in s)
+    assert all(0.93 <= c["speed"] <= 1.08 and 0.15 <= c["consistency"] <= 0.97 for c in s)
     assert sim.drift(STATS, 5) == sim.drift(STATS, 5)
 
 
@@ -166,7 +200,7 @@ def test_erasure_removes_the_player_and_their_ledger_lines():
 
 def _ran(no=1, bets_=None):
     race = _race(no)
-    race["result"] = sim.summary(sim.race(no, race["seed"], race["stats"]))
+    race["result"] = races.run(race)
     race["status"] = "run"
     out = ledger.settle(race, bets_ or [], race["result"]["order"][0], race["odds"])
     race["bets"] = out["bets"]
@@ -182,9 +216,13 @@ def test_hooks_never_need_bets_and_use_them_when_there_are_some():
     assert 2 <= len(lines) <= 3 and all(len(line.replace("*", "")) <= 20 for line in lines)
 
 
-def test_every_scene_keeps_its_text_inside_the_safe_area():
-    race, out = _ran(1, [comment("c1", "averyveryverylonghandle_99", "4 all", 1), comment("c2", "bob", "2 300", 2)])
-    nxt = _race(2)
+@pytest.mark.parametrize("fmt", ["gp", "endurance", "drag"])
+def test_every_scene_keeps_its_text_inside_the_safe_area(fmt):
+    race = races.draft(1, STATS, "2026-10-27T18:00:00+00:00", "2026-10-28T17:00:00+00:00", fmt)
+    race["result"], race["status"] = races.run(race), "run"
+    out = ledger.settle(race, [comment("c1", "averyveryverylonghandle_99", "4 all", 1), comment("c2", "bob", "2 300", 2)],
+                        race["result"]["order"][0], race["odds"])
+    nxt = races.draft(2, STATS, "2026-10-28T18:00:00+00:00", "2026-10-29T17:00:00+00:00", fmt)
     tb = ledger.table(since="2000-01-01")
     tb["week"] = "WEEK 44"
     spec = json.loads(json.dumps(video.spec("pitwall", nxt, race, out, tb, tb["bust"])))

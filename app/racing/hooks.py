@@ -43,10 +43,24 @@ def candidates(race: dict, settled: dict | None) -> list[tuple[int, list[str]]]:
     m = res.get("margin")
     if m is not None and m < 0.1:
         out.append((2, ["Too close", "to *call*?"]))
+    fmt = race.get("format", "gp")
+    pits = sum(e["kind"] == "pit" for e in res["events"])
+    if fmt == "endurance" and pits:
+        out.append((2, [f"*{race['result']['laps']}* laps", f"*{pits}* pit stops", "one winner"]))
+    if fmt == "drag":
+        out.append((2, ["Quarter mile", "about *10* seconds", "no second chances"]))
+    if fmt == "figure8" and any(e["kind"] == "tangle" for e in res["events"]):
+        out.append((2, ["Figure 8", "watch the *crossing*"]))
+    if fmt == "rally":
+        out.append((1, [f"*{race['track']['corners']}* corners", "per lap. Grip", "or gravel?"]))
     if bettors:
         out.append((1, [f"*{bettors}* punters", "one winner"]))
-    out.append((0, [f"Race *{race['no']}*", race["circuit"]["name"], "lights out"]))
+    out.append((0, [f"*{FORMAT_LINES.get(fmt, 'Race day')}*", race["track"]["name"]]))
     return out
+
+
+FORMAT_LINES = {"oval": "Oval night", "gp": "Grand Prix", "rally": "Rally stage", "figure8": "Figure 8",
+                "endurance": "Endurance", "drag": "Drag night"}
 
 
 def choose(race: dict, settled: dict | None) -> list[str]:

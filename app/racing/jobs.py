@@ -233,7 +233,7 @@ def _run_race(job: dict) -> dict:
         notify.send(f":warning: **Sixel Speedway**: couldn't read the bets on race {race['no']} ({err}); it runs with none.")
     race["status"] = "closed"
     races.save(race)
-    result = sim.summary(sim.race(race["no"], race["seed"], race["stats"]))
+    result = races.run(race)
     settled = ledger.settle(race, comments, result["order"][0], race["odds"])
     race.update(status="run", result=result, bets=settled["bets"], commenters=settled["commenters"],
                 new_players=settled["new_players"], comments_read=len(comments), read_error=err,
@@ -300,7 +300,9 @@ def _render(job: dict, spec: dict) -> None:
 
 def caption(job: dict) -> str:
     card = races.get(job["card"])
-    lines = [f"🏁 Race {card['no']} is open at {card['circuit']['name']}. Comment a car and a stake, like 4 250 "
+    fmt = sim.FORMATS[card["format"]]
+    lines = [f"🏁 Race {card['no']} is open: {fmt['name']}, {fmt['laps']} lap{'s' if fmt['laps'] > 1 else ''} of "
+             f"{card['track']['name']}. Comment a car and a stake, like 4 250 "
              f"(= §250 on 4 BLUE STREAK). Each comment is a bet. New here? You start with §1,000.",
              f"Bets close {_local(card['closes_at'])}. The race runs in the next video."]
     if job["kind"] == "race":
@@ -412,25 +414,31 @@ def retry(job: dict) -> dict:
     return job
 
 
-def preview(theme: str) -> dict:
-    """A sample video in any theme, sent to Discord: the open race run with a throwaway seed (never
-    its real one, so the preview can't give the result away) and the bets so far, nothing saved."""
+def preview(theme: str, fmt: str = "") -> dict:
+    """A sample video in any theme, sent to Discord: the open race (or a new one in `fmt`) run with
+    a throwaway seed (never its real one, so the preview can't give the result away) and the bets
+    so far, nothing saved."""
     from ..render.racing.themes import get as get_theme
 
-    get_theme(theme)  # unknown themes fail before the thread starts
-    job = {"id": f"race-preview-{time.strftime('%Y%m%d-%H%M%S')}", "kind": "preview", "theme": theme,
+    get_theme(theme)  # unknown themes and formats fail before the thread starts
+    if fmt and fmt not in sim.FORMATS:
+        raise ValueError(f"unknown format {fmt!r}; formats: {sorted(sim.FORMATS)}")
+    job = {"id": f"race-preview-{time.strftime('%Y%m%d-%H%M%S')}", "kind": "preview", "theme": theme, "format": fmt,
            "status": "rendering", "results": {}, "publish_at": now().isoformat()}
 
     def run() -> None:
         try:
             with _render_lock, channels.use(channels.RACING):
                 live = next((r for r in reversed(races.all_races()) if r["status"] == "open"), None)
-                card = live or {"no": 1, "seal": sim.seal(1, sim.new_seed(), sim.initial_stats()),
-                                "odds": sim.odds(sim.initial_stats()), "circuit": races.CIRCUITS[0],
-                                "closes_at": closes_for(next_slot()).isoformat(), "stats": sim.initial_stats()}
+                if fmt or not live:
+                    live = None
+                    card = races.draft(1, state().get("stats") or sim.initial_stats(), store.now_iso(),
+                                       closes_for(next_slot()).isoformat(), fmt or None)
+                else:
+                    card = live
                 comments, _ = read_comments(live) if live else ([], None)
-                fake = {**card, "seed": sim.new_seed(), "no": card["no"]}
-                fake["result"] = sim.summary(sim.race(fake["no"], fake["seed"], card["stats"]))
+                fake = {**card, "seed": sim.new_seed()}
+                fake["result"] = races.run(fake)
                 rows = [r for r in ledger.provisional(comments) if r["bet"] and r["stake"]]
                 bets = [{"pid": r["pid"], "name": r["comment"]["user"], "car": r["bet"]["car"], "stake": r["stake"],
                          "asked": r["bet"]["stake"], "odds": card["odds"][r["bet"]["car"] - 1],
@@ -441,7 +449,8 @@ def preview(theme: str) -> dict:
                 spec = video.spec(theme, card, fake, {"bets": bets}, tb, tb["bust"])
                 _render(job, spec)
                 job["status"] = "done"
-                notify.send(f":test_tube: **Sixel Speedway preview** ({theme}): not a real result, the race uses a "
+                notify.send(f":test_tube: **Sixel Speedway preview** ({theme}, {sim.FORMATS[card['format']]['name']}): "
+                            f"not a real result, the race uses a "
                             f"throwaway seed. {job['render']['duration']:.1f}s, rendered in {job['render']['seconds']:.0f}s\n"
                             f"{job['video_url']}", attach=settings.videos_dir / job["video"])
         except Exception as e:

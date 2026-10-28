@@ -135,20 +135,52 @@ Every template is true either way, so the hook never lies about the outcome.
   race (a seeded random walk), so the form guide and odds change and there's something to read
   into. The roster never changes, so the cars build a history.
 
-## 4. Race simulation and fairness
+## 4. Race formats, tracks and the simulation
 
-- A deterministic tick simulation (30 Hz, about 15 s of race time). Each car's speed is pace + noise
-  × consistency. Seeded events: oil slick spin (−speed for 1 s), turbo (+speed), pit stop, and a
-  rare blown engine (DNF, which reliability makes less likely). Overtakes come out of the
-  simulation and are never scripted, so the video shows exactly what the simulation produced.
-- **Seed**: generated when betting opens and stored privately. The caption publishes
-  `sha256(seed ‖ race_no ‖ car_stats)`, and the next video's caption reveals the seed. The race
-  can't be changed after the bets are seen, not even by us.
-- The odds come from the same simulation run over random seeds, so a 9/2 car really does win about
-  1 in 5.5 (less the margin). A test checks the calibration.
-- The rendered race is the simulation replayed: car y = distance, scaled to the visible straight,
-  with the camera following the leader. A lap is one scroll of the straight. There is no fake
-  oval; the lap counter and order tiles carry the story.
+**A different race every day**, from a weekly calendar (`RACING_CALENDAR`, keyed by the day the
+race's video posts):
+
+| Day | Format | Laps | What decides it | Extras |
+|---|---|---|---|---|
+| Mon | **Oval** | 10 | top speed (the banked turns are flat out) | slipstreaming |
+| Tue | **Rally** | 2 | grip: 13-20 corners a lap on a loose surface | lots of spins, punctures (14 s lost) |
+| Wed | **Grand Prix** | 5 | a mix: fast straights and every kind of corner | slipstreaming, light tyre wear |
+| Thu | **Figure 8** | 8 | grip and acceleration | tangles at the crossing |
+| Fri | **Drag** | one run | acceleration and the start (reaction times) | jump starts are disqualified |
+| Sat | **Endurance** | 24 | tyres, reliability, then pace | tyre wear, pit stops (~24 s, the odd slow one), punctures, more breakdowns |
+| Sun | **Grand Prix** | 5 | as Wednesday | plus the league table |
+
+**Tracks** (`app/racing/tracks.py`) are new for every race, generated from a public track seed
+chosen when betting opens: ovals (stadium shapes of different proportions), Grand Prix circuits
+(a random polygon with each corner rounded off at its own radius, so there are real straights,
+hairpins and sweepers), rally stages (many tight corners), figure 8s, long endurance loops and the
+quarter-mile drag strip. Each gets a generated name ("Saltmarsh Superspeedway", "Fallow Down Hill
+Stage"). The race card shows the track's map, length and corner count.
+
+**Cars** have six stats: top speed, acceleration, grip, tyres, consistency and reliability. Each
+car has a strength, so each format has its own favourite: 1 RED ROCKET top speed (ovals),
+2 MEAN GREEN grip (rally, figure 8), 3 CUSTARD all-rounder, 4 BLUE STREAK acceleration (drag),
+5 HOT PINK tyres and reliability (endurance), 6 CYANARA grip and acceleration. Stats drift a little
+after every race, pulled back towards each car's character. The race card's form column shows
+each car's last five results **in that format**.
+
+**The simulation** (`app/racing/sim.py`):
+
+- Each car gets a speed profile for the track: its top speed caps it on straights, its grip caps it
+  in corners (speed² ≤ grip × 22 m/s² ÷ curvature), its acceleration decides how fast it gets back
+  up to speed, and everyone brakes the same. Track shape alone makes the formats differ.
+- On top of that: each car's form on the day (the reason favourites lose), pace that wanders
+  (less for consistent cars), spins (mostly in corners), slipstreaming, punctures, breakdowns,
+  pit stops, tangles at the crossing, reaction times and jump starts.
+- Races run in real time (a 30-minute endurance race, a 10-second drag run) and are fitted to
+  their slot in the video: sped up (the "×91 SPEED" badge) or slowed down. Gaps in the timing
+  tower are real race seconds.
+- **Seed**: drawn when betting opens and kept private. The caption publishes the seal,
+  `sha256("race|seed|format|track seed|stats")`, and the next video's caption reveals the seed.
+  The race can't be changed after the bets are seen, not even by us; the race page checks it.
+- **Odds** come from the same simulation run 12,000 times on the same track with a public seed, so
+  a 9/2 car really does win about 1 in 5.5 (less the 5% margin). A test checks the calibration.
+  Typical spreads: Grand Prix 7/2-6/1 (an open field), oval 11/8 the favourite, drag 11/4.
 
 ## 5. Look
 

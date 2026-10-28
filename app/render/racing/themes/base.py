@@ -29,26 +29,19 @@ def font(name: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(FONTS / files[name]), size)
 
 
-def circuit(seed: int, cx: float, cy: float, rx: float, ry: float, n: int = 720) -> np.ndarray:
-    """A closed, smooth loop bent by the seed; points are spaced evenly by distance along it, so
-    a car's lap fraction maps straight to a point."""
-    rng = np.random.default_rng(seed)
-    k = [(2, rng.uniform(.06, .11), rng.uniform(0, 6)), (3, rng.uniform(.05, .1), rng.uniform(0, 6)),
-         (5, rng.uniform(.02, .045), rng.uniform(0, 6))]
-    t = np.linspace(0, 2 * np.pi, 4000, endpoint=False)
-    r = 1 + sum(a * np.sin(f * t + p) for f, a, p in k)
-    pts = np.stack([cx + rx * r * np.cos(t), cy + ry * r * np.sin(t)], 1)
-    seg = np.linalg.norm(np.diff(np.vstack([pts, pts[:1]]), axis=0), axis=1)
-    s = np.concatenate([[0], np.cumsum(seg)])
-    even = np.linspace(0, s[-1], n, endpoint=False)
-    closed = np.vstack([pts, pts[:1]])
-    return np.stack([np.interp(even, s, closed[:, 0]), np.interp(even, s, closed[:, 1])], 1)
+def fit_track(pts, box: tuple[float, float, float, float]) -> np.ndarray:
+    """The race's track (points in a unit box) scaled into a screen box (x0, y0, x1, y1), centred,
+    keeping its shape."""
+    x0, y0, x1, y1 = box
+    p = np.array(pts, float)
+    size = min(x1 - x0, y1 - y0)
+    return np.stack([x0 + (x1 - x0 - size) / 2 + p[:, 0] * size, y0 + (y1 - y0 - size) / 2 + p[:, 1] * size], 1)
 
 
-def point_at(track: np.ndarray, frac: float) -> tuple[float, float, float]:
-    """(x, y, heading) at a lap fraction."""
+def point_at(track: np.ndarray, frac: float, closed: bool = True) -> tuple[float, float, float]:
+    """(x, y, heading) at a lap fraction (along the strip, for an open track)."""
     n = len(track)
-    f = (frac % 1) * n
+    f = (frac % 1) * n if closed else min(max(frac, 0.0), 0.9999) * (n - 1)
     i = int(f) % n
     a, b = track[i], track[(i + 1) % n]
     u = f - int(f)
@@ -69,9 +62,15 @@ class Theme:
         self.boxes: list[tuple[str, tuple[int, int, int, int]]] = []  # (scene, bbox) when recording
         self.scene = ""
         if self.race:
-            self.dist = np.array(self.race["dist"])
-            self.times = {int(k): v for k, v in self.race["times"].items()}
-            self.out_at = {e["car"]: e["t"] for e in self.race["events"] if e["kind"] == "blowup"}
+            r = self.race
+            self.fmt = r["format"]
+            self.dist = np.array(r["dist"])
+            self.times = {int(k): v for k, v in r["times"].items()}  # race seconds
+            self.vtimes = {int(k): v for k, v in r["vtimes"].items()}  # when each car finishes on screen
+            self.out_at = {e["car"]: e["t"] for e in r["events"] if e["kind"] in ("blowup", "jumpstart")}
+            self.wear = np.array(r["wear"]) if r.get("wear") else None
+            self.pit = np.array(r["pit"], bool) if r.get("pit") else None
+            self.lap_time = r["winner_time"] / max(r["laps"], 1)  # race seconds a lap, roughly
 
     # ---------------------------------------------------------------- per-frame race state
     def frame_of(self, t: float) -> int:
@@ -81,19 +80,23 @@ class Theme:
         return self.dist[self.frame_of(t)]
 
     def standings(self, t: float) -> list[dict]:
-        """Running order at race time t: {car, pos, lap, gap (s to the leader, or None), done, out}."""
-        d = self.laps(t)
+        """Running order at video time t: {car, pos, lap, gap (race seconds to the leader, or None),
+        done, out, pit, wear}. Gaps are in real race seconds, whatever the playback speed."""
+        k = self.frame_of(t)
+        d = self.dist[k]
         laps = self.race["laps"]
+        real_t = t * self.race["scale"]
         rows = []
         for j, car in enumerate(self.cars):
             no = car["no"]
-            fin = self.times.get(no)
-            done = fin is not None and fin <= t
+            vfin = self.vtimes.get(no)
+            done = vfin is not None and vfin <= t
             out = no in self.out_at and self.out_at[no] <= t
-            rows.append({"car": no, "d": float(d[j]), "fin": fin if done else None, "done": done, "out": out})
+            rows.append({"car": no, "d": float(d[j]), "fin": self.times[no] if done else None, "done": done, "out": out,
+                         "pit": bool(self.pit[k, j]) if self.pit is not None else False,
+                         "wear": float(self.wear[k, j]) if self.wear is not None else None})
         rows.sort(key=lambda r: (r["out"], not r["done"], r["fin"] if r["done"] else 0, -r["d"]))
         lead = rows[0]
-        speed = laps / max(self.race["winner_time"], 1)
         for i, r in enumerate(rows):
             r["pos"] = i + 1
             r["lap"] = min(laps, int(r["d"]) + 1)
@@ -102,13 +105,13 @@ class Theme:
             elif r["done"] and lead["done"]:
                 r["gap"] = r["fin"] - lead["fin"]
             elif lead["done"]:  # still running after the winner is home: its expected finish
-                r["gap"] = max(0.0, t + (laps - r["d"]) / speed - lead["fin"])
+                r["gap"] = max(0.0, real_t + (laps - r["d"]) * self.lap_time - lead["fin"])
             else:
-                r["gap"] = max(0.0, (lead["d"] - r["d"]) / speed)
+                r["gap"] = max(0.0, (lead["d"] - r["d"]) * self.lap_time)
         return rows
 
     def event_at(self, t: float, within: float = 2.0) -> dict | None:
-        """The latest spin, turbo or blow-up in the last `within` seconds of race time."""
+        """The latest event in the last `within` seconds of video time."""
         ev = [e for e in self.race["events"] if e["t"] <= t < e["t"] + within]
         return ev[-1] if ev else None
 

@@ -69,6 +69,28 @@ def effect(kind: str, rng: np.random.Generator, tune: dict) -> np.ndarray:
             i = int(SR * 0.09 * k)
             out[i:i + len(s)] += s[: len(out) - i]
         return 0.05 * out
+    if kind == "pit":  # wheel guns
+        out = np.zeros(int(SR * 0.5), np.float32)
+        for k in range(4):
+            n = int(SR * 0.07)
+            s = _sweep(2400, 1800, 0.07, "square") * _env(n, 0.02) + rng.standard_normal(n).astype(np.float32) * 0.3 * _env(n, 0.01)
+            i = int(SR * 0.11 * k)
+            out[i:i + n] += s
+        return 0.05 * out
+    if kind == "puncture":
+        n = int(SR * 0.6)
+        s = _smooth(rng.standard_normal(n + 31).astype(np.float32), 32)[:n]
+        return 0.6 * s * _env(n, 0.25) + 0.08 * _sweep(300, 120, 0.6) * _env(n, 0.2)
+    if kind == "tangle":
+        n = int(SR * 0.5)
+        crunch = rng.standard_normal(n).astype(np.float32) * _env(n, 0.06)
+        return 0.25 * crunch + 0.15 * _sweep(160, 60, 0.5) * _env(n, 0.15)
+    if kind == "jumpstart":
+        s = _sweep(220, 220, 0.6, "square")
+        return 0.07 * s * _env(len(s), 0.4)
+    if kind == "amber":
+        s = _sweep(660, 660, 0.12, "square")
+        return 0.06 * s * _env(len(s), 0.05)
     if kind == "card":
         s = _sweep(blip * 0.5, blip * 0.75, 0.12, "square")
         return 0.05 * s * _env(len(s), 0.06)

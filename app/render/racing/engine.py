@@ -54,7 +54,8 @@ def glitches(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, f
     total = sum(d for _, d in scenes)
     out = [(at["hook"] + 0.05, 1.0)]
     if "race" in at:
-        out += [(at["race"] + e["t"], 0.6) for e in spec["race"]["events"]]
+        big = [e for e in spec["race"]["events"] if e["kind"] != "pit"][:6]  # a long race has dozens of moments
+        out += [(at["race"] + e["t"], 0.6) for e in big]
         out.append((at["result"] + 0.02, 0.8))
     rng = np.random.default_rng(spec.get("seed", 0))
     out += [(float(rng.uniform(1.0, total - 1.5)), 0.4) for _ in range(2)]
@@ -69,9 +70,12 @@ def sfx(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, str]]:
         ev += [(at["rules"] + 0.3 + i * 0.5, "blip") for i in range(4)]
     if "grid" in at:
         g, gd = at["grid"], dict(scenes)["grid"]
-        ev += [(g + 0.6 + i * 0.32, "light") for i in range(5)]
-        ev.append((g + gd - 0.35, "go"))
         race = spec["race"]
+        if race["format"]["launch"]:
+            ev.append((g + gd - 1.0, "amber"))
+        else:
+            ev += [(g + 0.6 + i * 0.32, "light") for i in range(5)]
+        ev.append((g + gd - 0.35, "go"))
         ev += [(at["race"] + e["t"], e["kind"]) for e in race["events"]]
         last, prev = -1.0, None
         dist = np.array(race["dist"])

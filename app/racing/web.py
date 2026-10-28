@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import html
-import json
 from datetime import datetime
 
 from ..config import settings
@@ -61,6 +60,21 @@ def _name(b: dict) -> str:
     return b.get("name") or ledger.anon_name(b["pid"])
 
 
+def _title(r: dict) -> str:
+    f = sim.FORMATS[r["format"]]
+    laps = f"{f['laps']} laps" if f["laps"] > 1 else "one run"
+    return f'{e(f["name"])} · {e(r["track"]["name"])} · {laps}'
+
+
+def _map(track: dict, size: int = 180) -> str:
+    """The track as a small SVG line, as on the race card."""
+    pts = " ".join(f"{x * size:.1f},{y * size:.1f}" for x, y in track["pts"][::4])
+    shape = "polygon" if track.get("closed", True) else "polyline"
+    return (f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}" role="img" aria-label="Track map" '
+            f'style="float:right;margin:0 0 8px 12px"><{shape} points="{pts}" fill="none" stroke="#8c96be" '
+            f'stroke-width="5" stroke-linejoin="round"/></svg>')
+
+
 def _hidden(name: str | None) -> bool:
     return bool(name) and name.lower() in opted_out()
 
@@ -74,16 +88,21 @@ def home() -> str:
     live = [r for r in races.all_races() if r["status"] == "open"]
     if live:
         r = live[-1]
-        form = races.form(r["no"])
+        form = races.form(r["no"], fmt=r["format"])
         rows = "".join(f'<tr><td>{_car(c["no"])}</td><td class="r mono y">{e(r["odds"][i])}</td>'
                        f'<td class="r mono">{e(form[c["no"]])}</td></tr>' for i, c in enumerate(sim.CARS))
-        parts.append(f'<h2>Race {r["no"]} · {e(r["circuit"]["name"])} · bets close {e(_local(r["closes_at"]))}</h2>'
+        parts.append(f'<h2>Race {r["no"]} · bets close {e(_local(r["closes_at"]))}</h2>'
+                     f'<div class="box">{_map(r["track"])}<p><b>{_title(r)}</b><br><span class="muted small">'
+                     f'{r["track"]["length"]:,} m a lap · {r["track"]["corners"]} corners</span></p>'
+                     f'<p class="small muted">Form is each car\'s last five {e(sim.FORMATS[r["format"]]["name"])} results.</p>'
+                     f'<div style="clear:both"></div></div>'
                      f'<div class="wrap"><table><tr><th>Car</th><th class="r">Odds</th><th class="r">Form</th></tr>{rows}'
                      f'</table></div><p class="small muted">Seal: <code>{e(r["seal"])}</code> '
                      f'(<a href="/race/{r["no"]}">what this is</a>)</p>')
     done = [r for r in races.all_races() if r["status"] == "run"]
     if done:
-        items = "".join(f'<tr><td><a href="/race/{r["no"]}">Race {r["no"]}</a></td><td>{_car(r["result"]["order"][0])}</td>'
+        items = "".join(f'<tr><td><a href="/race/{r["no"]}">Race {r["no"]}</a> <span class="small muted">'
+                        f'{e(sim.FORMATS[r["format"]]["name"])}</span></td><td>{_car(r["result"]["order"][0])}</td>'
                         f'<td class="r mono">{e(r["odds"][r["result"]["order"][0] - 1])}</td></tr>' for r in reversed(done[-10:]))
         parts.append(f'<h2>Latest results</h2><div class="wrap"><table>{items}</table></div>')
     tb = ledger.table(limit=25)
@@ -136,7 +155,9 @@ def race(no: int) -> str | None:
     if not r:
         return None
     pub = races.public(r)
-    parts = [f'<h1>Race {no} · {e(r["circuit"]["name"])}</h1>']
+    parts = [f'<h1>Race {no}</h1><div class="box">{_map(r["track"])}<p><b>{_title(r)}</b><br>'
+             f'<span class="muted small">{r["track"]["length"]:,} m a lap · {r["track"]["corners"]} corners</span></p>'
+             f'<div style="clear:both"></div></div>']
     if r["status"] != "run":
         parts.append(f'<p class="muted">Betting {"is open until " + e(_local(r["closes_at"])) if r["status"] == "open" else "has closed"}. '
                      f'The race runs in the next video.</p>')
@@ -167,15 +188,16 @@ def seal_box(r: dict, pub: dict) -> str:
                 f'<p><code>{e(r["seal"])}</code></p><p class="small muted">It is a SHA-256 fingerprint of the secret seed '
                 f'that decides this race, plus the cars\' stats. The seed is revealed after the race, so you can check '
                 f'that it matches and that the race wasn\'t changed after the bets came in.</p></div>')
-    body = f'{r["no"]}|{pub["seed"]}|{json.dumps(pub["stats"], sort_keys=True, separators=(",", ":"))}'
+    body = sim.seal_text(r["no"], pub["seed"], r["format"], r["track"]["seed"], pub["stats"])
     check = hashlib.sha256(body.encode()).hexdigest()
     ok = check == r["seal"]
     return (f'<h2>Check the seal</h2><div class="box"><p>Seal published before betting:<br><code>{e(r["seal"])}</code></p>'
             f'<p>Seed revealed after the race:<br><code>{e(pub["seed"])}</code></p>'
-            f'<p>SHA-256 of <code>race|seed|stats</code>:<br><code>{e(check)}</code></p>'
+            f'<p>SHA-256 of <code>race|seed|format|track seed|stats</code>:<br><code>{e(check)}</code></p>'
             f'<p class="{"ok" if ok else "bad"}"><b>{"✓ Matches the seal" if ok else "✗ Does not match"}</b></p>'
             f'<details><summary class="small">The exact text that was hashed</summary><p><code>{e(body)}</code></p>'
-            f'<p class="small muted">Run the race yourself with <code>sim.race({r["no"]}, seed, stats)</code> from '
+            f'<p class="small muted">Run the race yourself with <code>sim.race({r["no"]}, seed, stats, '
+            f'"{e(r["format"])}", {r["track"]["seed"]})</code> from '
             f'app/racing/sim.py: it gives the same result.</p></details></div>')
 
 

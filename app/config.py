@@ -105,6 +105,10 @@ class Settings:
         self.racing_reply_gap = float(os.environ.get("RACING_REPLY_GAP", "20"))
         self.racing_reply_per_hour = int(os.environ.get("RACING_REPLY_PER_HOUR", "60"))
         self.racing_replies = _bool("RACING_REPLIES", True)
+        # Which race runs on which day (the day its video posts): oval, gp, rally, figure8, endurance, drag
+        cal = os.environ.get("RACING_CALENDAR", "mon=oval,tue=rally,wed=gp,thu=figure8,fri=drag,sat=endurance,sun=gp")
+        self.racing_calendar = {k.strip().lower()[:3]: v.strip().lower() for k, v in
+                                (pair.split("=", 1) for pair in cal.split(",") if "=" in pair)}
         # The weekly bonus is doubled for this many weeks after launch
         self.racing_launch_weeks = int(os.environ.get("RACING_LAUNCH_WEEKS", "4"))
 

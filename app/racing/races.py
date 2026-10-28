@@ -13,17 +13,9 @@ from pathlib import Path
 from ..config import settings
 from . import sim
 
-CIRCUITS = [  # fictional circuits, one per race in turn; the seed bends each into its own shape
-    {"name": "Sixel Park", "seed": 7},
-    {"name": "Kestrel Ring", "seed": 21},
-    {"name": "Harbour Loop", "seed": 33},
-    {"name": "Moorside", "seed": 48},
-    {"name": "Glass Lake", "seed": 55},
-    {"name": "Copper Hill", "seed": 61},
-    {"name": "Old Aerodrome", "seed": 74},
-]
-PUBLIC = ("no", "seal", "odds", "circuit", "opened_at", "closes_at", "status", "post", "result", "bets",
-          "stats_hash", "revealed")
+PUBLIC = ("no", "format", "track", "seal", "odds", "opened_at", "closes_at", "status", "post", "result", "bets",
+          "revealed")
+DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
 def _dir() -> Path:
@@ -62,19 +54,48 @@ def public(race: dict) -> dict:
     return out
 
 
-def open_race(no: int, stats: list[dict], opened_at: str, closes_at: str) -> dict:
-    seed = sim.new_seed()
-    race = {"no": no, "seed": seed, "stats": stats, "seal": sim.seal(no, seed, stats),
-            "odds": sim.odds(stats, seed=no),  # the odds' own seed is public: the race number
-            "circuit": CIRCUITS[(no - 1) % len(CIRCUITS)], "opened_at": opened_at, "closes_at": closes_at,
-            "status": "open", "bets": [], "replied": []}
+def format_for(closes_at: str) -> str:
+    """The calendar's format for the day a race's video posts (RACING_CALENDAR)."""
+    from datetime import datetime
+
+    day = DAYS[datetime.fromisoformat(closes_at).astimezone(settings.tz).weekday()]
+    fmt = settings.racing_calendar.get(day, "gp")
+    return fmt if fmt in sim.FORMATS else "gp"
+
+
+def open_race(no: int, stats: list[dict], opened_at: str, closes_at: str, fmt: str | None = None) -> dict:
+    """A new race, saved: see draft()."""
+    race = draft(no, stats, opened_at, closes_at, fmt)
     save(race)
     return race
 
 
-def form(before: int, n: int = 5) -> dict[int, str]:
-    """Each car's last n finishing positions, most recent last ("21134"); "-" for no race, "X" for out."""
-    done = [r for r in all_races() if r["no"] < before and r.get("status") == "run"][-n:]
+def draft(no: int, stats: list[dict], opened_at: str, closes_at: str, fmt: str | None = None) -> dict:
+    """A new race: its format from the calendar, a brand-new track, a secret seed, the seal and the odds."""
+    import secrets
+
+    fmt = fmt or format_for(closes_at)
+    seed = sim.new_seed()
+    track_seed = secrets.randbelow(10 ** 9)  # public: the track is on the race card
+    track = sim.setup(fmt, track_seed)
+    race = {"no": no, "format": fmt, "track": track.public(), "seed": seed, "stats": stats,
+            "seal": sim.seal(no, seed, fmt, track_seed, stats),
+            "odds": sim.odds(stats, fmt, track_seed, seed=no),  # the odds' own seed is public: the race number
+            "opened_at": opened_at, "closes_at": closes_at, "status": "open", "bets": []}
+    return race
+
+
+def run(race: dict) -> dict:
+    """Run a race from its secret seed (the result plus the video's frames)."""
+    return sim.summary(sim.race(race["no"], race["seed"], race["stats"], race["format"], race["track"]["seed"]),
+                       race["format"])
+
+
+def form(before: int, n: int = 5, fmt: str | None = None) -> dict[int, str]:
+    """Each car's last n finishing positions (in this format, if given), most recent last ("21134");
+    "-" for no race, "X" for out."""
+    done = [r for r in all_races() if r["no"] < before and r.get("status") == "run"
+            and (fmt is None or r.get("format") == fmt)][-n:]
     out = {}
     for car in sim.CARS:
         s = ""
