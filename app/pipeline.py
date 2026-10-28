@@ -444,6 +444,7 @@ def _scheduler() -> None:
                 tick()
                 health.heartbeat()
                 health.connections_tick()
+                legal.confirmations_tick()  # privacy form requests confirmed by a comment
         except Exception:
             log.exception("scheduler tick failed")
         time.sleep(30)

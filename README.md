@@ -138,7 +138,7 @@ Public pages (no sign-in) covering every channel, now and later (the account lis
 | `/` | Home page: every account (from the channel registry) with all its public videos, newest first, and links to the legal pages |
 | `/privacy` | Privacy policy (UK/EU GDPR): what is read from comments, why (legitimate interests, with the balancing test), who else handles it (Meta, Google, the host, ElevenLabs, Anthropic, Discord), transfers, retention, security, rights, YouTube API Services and Instagram notices; embeds both channels' explainer videos |
 | `/terms` | Terms of service |
-| `/privacy/request` | Self-service form: opt out, or delete and opt out; applied at once, with a confirmation code |
+| `/privacy/request` | Self-service form: opt out, or delete and opt out. Gives a 6-character code; it's carried out once the named account comments that code under any of our videos (checked every 15 minutes; lapses after 7 days), so nobody can wipe someone else's data such as a racing balance. Waiting requests show on the dashboard, where you can approve (e.g. they emailed) or reject them. |
 | `/privacy/status/{code}` | Where a request stands (also `/privacy/status?code=`) |
 | `POST /privacy/meta/deletion` | Meta's data deletion callback (`signed_request`, verified with the app secret); answers `{url, confirmation_code}` |
 | `POST /privacy/meta/deauthorize` | Meta's deauthorize callback |
@@ -148,7 +148,8 @@ Viewers can also opt out by commenting `#optout` (or "opt out") under any post o
 maintenance loop scans the last 14 days of posts twice a day. There is one opt-out list for both channels:
 the quiz never reads an opted-out viewer, and the Dungeon crawl doesn't count their votes. Every request is logged for 365 days
 (`privacy_requests.json`) and posted to Discord; taking down a video that shows a name stays manual.
-Owner-only: `POST /privacy/optout` and `POST /privacy/erase` (token). Viewer names leave post records
+Owner-only: `POST /privacy/optout` and `POST /privacy/erase` (token), `GET /privacy/requests` and
+`POST /privacy/requests/{code}/approve|reject` (also from the dashboard). Viewer names leave post records
 automatically after 90 days. The videos in `assets/explainer/` come from `render_explainer.py` (the quiz,
 42 s) and `render_explainer_adventure.py` (the Dungeon crawl's votes, 36 s; needs `npm ci` in `adventure/`).
 
