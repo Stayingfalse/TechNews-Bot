@@ -48,7 +48,7 @@ FORMATS = {
     "gp": {"name": "Grand Prix", "laps": 5, "video": 18.0, "spin": 1.0, "wear": 0.06, "dnf": 0.02, "draft": True},
     "rally": {"name": "Rally", "laps": 2, "video": 18.0, "spin": 2.6, "wear": 0.15, "dnf": 0.04, "puncture": 0.05},
     "figure8": {"name": "Figure 8", "laps": 8, "video": 17.0, "spin": 0.9, "wear": 0.0, "dnf": 0.02, "cross": True},
-    "endurance": {"name": "Endurance", "laps": 24, "video": 22.0, "spin": 0.7, "wear": 0.085, "dnf": 0.06,
+    "endurance": {"name": "Endurance", "laps": 24, "video": 50.0, "spin": 0.7, "wear": 0.085, "dnf": 0.06,
                   "pits": True, "puncture": 0.01, "draft": True},
     "drag": {"name": "Drag", "laps": 1, "video": 7.0, "spin": 0.0, "wear": 0.0, "dnf": 0.0, "launch": True},
 }

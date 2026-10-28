@@ -68,7 +68,7 @@ def test_endurance_races_have_pit_stops_and_tyre_wear():
     pits = [e for e in res["events"] if e["kind"] == "pit"]
     assert len(pits) >= 6 and all(20 < e["dur"] < 35 for e in pits)
     assert max(max(w) for w in res["wear"]) > 0.6 and any(any(p) for p in res["pit"])
-    assert res["scale"] > 30  # half an hour of racing fitted into the video
+    assert 20 < res["scale"] < 50  # half an hour of racing in 50 s: sped up, but you can follow it
 
 
 def test_drag_races_have_reaction_times_and_no_laps():

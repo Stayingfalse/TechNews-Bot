@@ -173,7 +173,7 @@ each car's last five results **in that format**.
   (less for consistent cars), spins (mostly in corners), slipstreaming, punctures, breakdowns,
   pit stops, tangles at the crossing, reaction times and jump starts.
 - Races run in real time (a 30-minute endurance race, a 10-second drag run) and are fitted to
-  their slot in the video: sped up (the "×91 SPEED" badge) or slowed down. Gaps in the timing
+  their slot in the video: sped up (endurance gets 50 s on screen, about ×37, with a "×37 SPEED" badge) or slowed down. Gaps in the timing
   tower are real race seconds.
 - **Seed**: drawn when betting opens and kept private. The caption publishes the seal,
   `sha256("race|seed|format|track seed|stats")`, and the next video's caption reveals the seed.
