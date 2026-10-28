@@ -120,8 +120,9 @@ def run(rng: np.random.Generator, stats: list[dict], n: int = 1, keep_frames: bo
     return Batch(arr, finish, events)
 
 
-def win_chances(stats: list[dict], runs: int = MC_RUNS, seed: int = 0) -> list[float]:
+def win_chances(stats: list[dict], runs: int | None = None, seed: int = 0) -> list[float]:
     """Each car's chance of winning, from `runs` races (the seed is public: anyone can check)."""
+    runs = runs or MC_RUNS
     wins = np.zeros(N)
     done = 0
     rng = np.random.default_rng(seed)
@@ -192,8 +193,10 @@ def seal(race_no: int, seed: str, stats: list[dict]) -> str:
 
 
 def race(race_no: int, seed: str, stats: list[dict]) -> Batch:
-    """The real race for a revealed seed."""
-    return run(np.random.default_rng(int(seed, 16) ^ race_no), stats, 1)
+    """The real race for a revealed seed: numpy's default generator seeded with
+    int(sha256("race_no|seed")), then `run` with n=1."""
+    key = int(hashlib.sha256(f"{race_no}|{seed}".encode()).hexdigest(), 16)
+    return run(np.random.default_rng(key), stats, 1)
 
 
 def summary(b: Batch) -> dict:

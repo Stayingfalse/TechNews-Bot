@@ -178,6 +178,36 @@ installed into the image by the Dockerfile). For now the server can render its E
 Discord previews (`POST /adventure/episode0`). Settings: `ADVENTURE_VOICE_ID` (default Obsidian),
 `ADVENTURE_VOICE_MODEL` (`eleven_v3`), `ADVENTURE_VOICE_BUDGET` (characters a month, default 7200).
 
+## Racing channel (Sixel Speedway)
+
+A third channel: a daily ~40 s car race that viewers bet on with play money in the comments. It runs
+on the server alone, with no AI step and no routine. Plan and rules: [docs/RACING_PLAN.md](docs/RACING_PLAN.md).
+
+```
+every 15 min   read new comments on the open race's post → reply to each bet (paced queue)
+18:00          close race N → run it from its sealed seed → settle bets → (Sun: bonus + table)
+               → open race N+1 (new seed, seal, odds) → render → Discord preview
+19:00          post the Reel + an example bet as the first comment → book tomorrow
+```
+
+- **Launch**: connect the account (`/oauth/instagram/start?channel=racing`), then
+  `POST /racing/start` (optional `at=19:00`). Race 1 opens and the launch video (how to play +
+  race 1's card) posts at the next 19:00; from then on it books itself every day.
+- **Bets pages** on `RACING_DOMAIN` (default `race.onlydan.uk`, pointed at this app in Easypanel):
+  the race card, league table, a page per player and per race with the seal check. That domain
+  serves nothing else, and the racing pages exist on no other domain.
+- **Themes** (`app/render/racing/themes/`): each is one look for the whole video. `RACING_THEMES=pitwall,other`
+  makes videos take turns (an A/B test); `GET /racing/metrics` compares them. `POST /racing/preview?theme=`
+  sends a sample video (with a throwaway seed) to Discord.
+- **Endpoints** (token): `POST /racing/start`, `GET /racing/state`, `GET /racing/races/{n}`,
+  `GET /racing/jobs[/{id}]`, `POST /racing/jobs/{id}/retry`, `GET /racing/players?q=`,
+  `GET /racing/metrics`, `POST /racing/preview`.
+- **Settings**: `RACING_HANDLE`, `RACING_POST_TIME` (19:00), `RACING_CLOSE_MINUTES` (60),
+  `RACING_PLATFORMS` (instagram), `RACING_DOMAIN`, `RACING_THEMES` (pitwall), `RACING_POLL_MINUTES` (15),
+  `RACING_REPLY_GAP` (20 s), `RACING_REPLY_PER_HOUR` (60), `RACING_REPLIES` (on), `RACING_LAUNCH_WEEKS` (4).
+
+Fonts for the race videos: Inter (OFL) and JetBrains Mono, in `assets/fonts/racing`.
+
 ## Channels
 
 Built for one channel today (the quiz account) with the seams for several: jobs record their channel,

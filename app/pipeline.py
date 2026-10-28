@@ -472,6 +472,12 @@ def _maintenance() -> None:
         health.daily_checks()
         privacy.anonymise_old()  # viewer names leave post records after 90 days
         try:
+            from .racing import ledger as racing_ledger
+
+            racing_ledger.anonymise_idle()  # racing players with no bet in 90 days lose their name
+        except Exception:
+            log.exception("racing anonymising failed")
+        try:
             legal.scan_comment_optouts()  # "#optout" comments
         except Exception:
             log.exception("#optout comment scan failed")

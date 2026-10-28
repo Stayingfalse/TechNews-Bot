@@ -1,8 +1,10 @@
-# Third channel: Sixel Speedway, retro car racing you bet on
+# Third channel: Sixel Speedway, car racing you bet on
 
-Plan only, no code yet. This is a daily ~35 s vertical video of a simple, retro-looking car race
-with synth sound only and no voice. It runs entirely on the server: there's no AI step and no
-weekly routine. **The v1 look is still being chosen** (see "Design directions"). The teletext
+**Built** (see the README's "Racing channel" section for running it). This is a daily ~40 s
+vertical video of a simple car race with synth sound only and no voice. It runs entirely on the
+server: there's no AI step and no weekly routine. **The v1 look is "Pit wall"** (direction C
+below): a motorsport TV timing screen, with no real series' names, logos or fonts. Looks are
+**themes** that can be swapped per video for A/B tests (`app/render/racing/themes/`). The teletext
 style is parked for a v2 or a separate channel, so it doesn't tread on a friend's teletext horse
 racing game. Each video:
 
@@ -37,11 +39,9 @@ same race card, so they compare like for like. Rendered by
 | **C. Pit wall** ([race](racing/styles/c-pitwall-race.jpg), [card](racing/styles/c-pitwall-card.jpg)) | a modern TV timing screen: dark navy, timing tower with gaps, sector colours, flags | live track map with numbered dots; the tower reorders on overtakes | broadcast dropouts: macroblocking, a frozen strip, "SIGNAL LOST" | data bleeps, a whoosh on each overtake, a synth bed | the best fit for *betting*: gaps, form chips and flags give viewers something to read; feels serious and fair | not retro, and closest to the real F1 TV look (keep it generic, no F1 marks); dots are less fun than cars |
 | **D. 16-bit top-down** ([race](racing/styles/d-16bit-race.jpg), [card](racing/styles/d-16bit-card.jpg)) | a 1990s console racer: pixel-art sprites, kerbs, tyre walls, a pixel font, light scanlines | a scrolling straight seen from above, as in the teletext mock-up but in pixel art | sprite flicker, a scrolling hiccup, a palette flash | chiptune engines, a 4-channel bed | the most "game"; sprites can show spins, smoke and oil properly; easy for everyone to read | a crowded genre; pixel art needs care (sprites, tiles) to look good rather than cheap |
 
-**Recommendation: A (Vector arcade)**, with C's timing tower as the info layer on the race card
-and result. A is the most distinctive, keeps the glowing-screen, synth-and-glitch feel you liked
-in the teletext version, and is no harder to render. B is a strong second if you'd rather lean
-into nostalgia. They could also be combined later: the parked teletext look as v2, or as a "retro
-night" special.
+**Chosen: C (Pit wall)**, leaning into the motorsport feel without any real series' branding.
+The others stay as candidate themes for A/B tests: each would be one new file in
+`app/render/racing/themes/`, drawing the same scenes from the same data.
 
 The original teletext mock-ups are kept in [`racing/screens/`](racing/screens/contact-sheet.jpg)
 (drawn by [`racing/mockup.py`](racing/mockup.py)) for the v2 or separate channel.

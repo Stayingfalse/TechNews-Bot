@@ -60,7 +60,7 @@ def platforms(monkeypatch):
     state = {"calls": [], "comments": {"instagram": [], "youtube": []}}
     for mod, name in ((instagram, "instagram"), (youtube, "youtube")):
         monkeypatch.setattr(mod, "configured", lambda: True)
-        monkeypatch.setattr(mod, "comments", lambda media_id, _n=name: list(state["comments"][_n]))
+        monkeypatch.setattr(mod, "comments", lambda media_id, *a, _n=name, **k: list(state["comments"][_n]))
         monkeypatch.setattr(mod, "reply", lambda cid, text, _n=name: state["calls"].append((_n, "reply", cid, text)) or "r1")
         monkeypatch.setattr(mod, "comment", lambda mid, text, _n=name: state["calls"].append((_n, "comment", mid, text)) or "c1")
     monkeypatch.setattr(instagram, "own_name", lambda: "mediaquiz.daily")

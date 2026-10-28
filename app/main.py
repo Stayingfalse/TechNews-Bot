@@ -27,6 +27,11 @@ from .adventure import voice as adventure_voice
 from .adventure import votes as adventure_votes_mod
 from .config import settings
 from .publish import LABELS, PUBLISHERS
+from .racing import jobs as racing_jobs
+from .racing import ledger as racing_ledger
+from .racing import races as racing_races
+from .racing import replies as racing_replies
+from .racing import web as racing_web
 from .render import music
 from .render.engine import Video
 from .spec import QuizSpec
@@ -40,6 +45,7 @@ async def lifespan(_: FastAPI):
         raise RuntimeError("API_TOKEN must be set")
     pipeline.start_background()
     adventure_jobs.start()
+    racing_jobs.start_background()
     yield
 
 
@@ -90,6 +96,60 @@ def is_authorised(request: Request, authorization: str = "", token: str = "") ->
 def require_token(request: Request, authorization: str = Header(default=""), token: str = Query(default="")) -> None:
     if not settings.api_token or not is_authorised(request, authorization, token):
         raise HTTPException(401, "bad token; send the API token, or sign in at /login")
+
+
+# The bets domain (RACING_DOMAIN) serves the racing pages and the shared legal pages, nothing else;
+# the racing pages exist on no other domain.
+RACING_PAGES = re.compile(r"^/(|find|p/[^/]{1,64}|race/\d{1,6}|robots\.txt)$")
+SHARED_PAGES = re.compile(r"^/(privacy(/.*)?|terms|data-deletion|health)$")
+
+
+@app.middleware("http")
+async def racing_domain(request: Request, call_next):
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    path = request.scope["path"]
+    if settings.racing_domain and host == settings.racing_domain:
+        if RACING_PAGES.match(path):
+            request.scope["path"] = "/_racing" + path
+        elif not SHARED_PAGES.match(path):
+            return HTMLResponse(racing_web.not_found("There's no page here."), status_code=404)
+    elif path.startswith("/_racing"):
+        return HTMLResponse("Not Found", status_code=404)
+    return await call_next(request)
+
+
+@app.get("/_racing/", response_class=HTMLResponse, include_in_schema=False)
+def racing_home():
+    return racing_web.home()
+
+
+@app.get("/_racing/find", include_in_schema=False)
+def racing_find(name: str = ""):
+    where = racing_web.find(name)
+    if where:
+        return RedirectResponse(quote(where), status_code=303)
+    return HTMLResponse(racing_web.not_found(f"No punter called {name.strip()[:40]!r} yet. Comment a bet to join."), 404)
+
+
+@app.get("/_racing/p/{name}", response_class=HTMLResponse, include_in_schema=False)
+def racing_player(name: str):
+    page = racing_web.player(name)
+    if page is None:
+        return HTMLResponse(racing_web.not_found("No punter by that name."), 404)
+    return page
+
+
+@app.get("/_racing/race/{no}", response_class=HTMLResponse, include_in_schema=False)
+def racing_race_page(no: int):
+    page = racing_web.race(no)
+    if page is None:
+        return HTMLResponse(racing_web.not_found(f"There's no race {no} yet."), 404)
+    return page
+
+
+@app.get("/_racing/robots.txt", include_in_schema=False)
+def racing_robots():
+    return HTMLResponse("User-agent: *\nDisallow: /p/\n", media_type="text/plain")
 
 
 @app.get("/health")
@@ -722,6 +782,92 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked
     (most suggested first, then earliest). Credit a pick with the group's `first` entry as `picked_by`."""
     return themes.suggestions(days)
+
+
+# ------------------------------------------------------------------ racing channel (Sixel Speedway)
+
+
+@app.post("/racing/start", status_code=202, dependencies=[Depends(require_token)])
+def racing_start(at: str = ""):
+    """Launch the channel: open race 1 and book the launch video (rules + race 1's card) for
+    `at` (HH:MM local or ISO; default the next RACING_POST_TIME). From then on it runs by itself.
+    Needs the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
+    try:
+        job = racing_jobs.start(_when(at) if at else None)
+    except racing_jobs.NotConnected as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return job
+
+
+@app.get("/racing/state", dependencies=[Depends(require_token)])
+def racing_state():
+    rs = racing_races.all_races()
+    q = racing_replies.queue()
+    return {"state": racing_jobs.state(), "races": [racing_races.public(r) | {"bets": len(r.get("bets", []))} for r in rs[-5:]],
+            "players": len(racing_ledger.players()), "table": racing_ledger.table(),
+            "replies": {"waiting": len(q["items"]), "sent": len([i for i in q["sent"] if i.get("sent_at")]),
+                        "paused_until": q.get("paused_until")},
+            "themes": settings.racing_themes, "post_time": settings.racing_post_time, "domain": settings.racing_domain}
+
+
+@app.get("/racing/races/{no}", dependencies=[Depends(require_token)])
+def racing_race(no: int):
+    r = racing_races.get(no)
+    if not r:
+        raise HTTPException(404, "no such race")
+    return racing_races.public(r) | {"commenters": len(r.get("commenters", []))}
+
+
+@app.get("/racing/jobs", dependencies=[Depends(require_token)])
+def racing_jobs_list(limit: int = 20):
+    return [{k: v for k, v in j.items() if k != "spec"} for j in racing_jobs.recent(limit)]
+
+
+def _racing_job(job_id: str) -> dict:
+    job = racing_jobs.get(job_id) if re.fullmatch(r"race-[\w-]+", job_id) else None
+    if not job:
+        raise HTTPException(404, "no such racing job")
+    return job
+
+
+@app.get("/racing/jobs/{job_id}", dependencies=[Depends(require_token)])
+def racing_job(job_id: str):
+    job = _racing_job(job_id)
+    return {k: v for k, v in job.items() if k != "spec"}
+
+
+@app.post("/racing/jobs/{job_id}/retry", status_code=202, dependencies=[Depends(require_token)])
+def racing_retry(job_id: str):
+    try:
+        return racing_jobs.retry(_racing_job(job_id))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.get("/racing/players", dependencies=[Depends(require_token)])
+def racing_players(q: str = "", limit: int = 50):
+    ps = sorted(racing_ledger.players().values(), key=lambda p: -p["balance"])
+    if q:
+        ps = [p for p in ps if q.lower().lstrip("@") in (p.get("name") or "").lower()]
+    return ps[:limit]
+
+
+@app.get("/racing/metrics", dependencies=[Depends(require_token)])
+def racing_metrics():
+    """Average views, comments, likes and bets per post, by theme: the A/B comparison."""
+    return racing_jobs.metrics_by_theme()
+
+
+@app.post("/racing/preview", status_code=202, dependencies=[Depends(require_token)])
+def racing_preview(theme: str = "pitwall"):
+    """Render a sample video in a theme and send it to Discord. The race uses a throwaway seed, so
+    it shows nothing about the real result."""
+    try:
+        return racing_jobs.preview(theme)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 # ------------------------------------------------------------------ music library

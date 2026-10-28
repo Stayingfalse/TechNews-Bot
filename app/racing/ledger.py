@@ -166,7 +166,7 @@ def provisional(comments: list[dict]) -> list[dict]:
         row = {"comment": c, "pid": pid, "new": pid not in ps, "bet": b}
         if b:
             row["stake"] = stake_for(b["stake"], bal)
-            row["cut"] = b["stake"] not in (None, "all") and row["stake"] < int(b["stake"])
+            row["cut"] = 0 < row["stake"] < int(b["stake"]) if b["stake"] not in (None, "all") else False
             left[pid] = bal - row["stake"]
             row["left"] = left[pid]
         out.append(row)
@@ -178,13 +178,16 @@ def weekly_bonus(week: str, activity: dict[str, int], doubled: bool = False) -> 
     `activity` = pid → videos commented on. Once per `week` (an ISO week like "2026-W44")."""
     base, per = (200, 100) if doubled else (100, 50)
     with _lock:
+        from ..privacy import opted_out
+
+        out_names = opted_out()
         paid = _read("bonus_weeks.json", [])
         if week in paid:
             return {"week": week, "already": True}
         ps = players()
         total, n = 0, 0
         for pid, p in ps.items():
-            if p.get("anonymised") or p.get("opted_out"):
+            if p.get("anonymised") or (p.get("name") or "").lower() in out_names:
                 continue
             amount = base + per * activity.get(pid, 0)
             _post({"pid": pid, "kind": "bonus", "amount": amount, "week": week, "videos": activity.get(pid, 0)}, ps)
@@ -199,7 +202,10 @@ def table(limit: int = 10, since: str | None = None) -> dict:
     biggest climber (balance change since `since`) and how many are bust."""
     from .bets import MIN_STAKE
 
-    ps = [p for p in players().values() if p.get("bets") and not p.get("opted_out")]
+    from ..privacy import opted_out
+
+    out_names = opted_out()
+    ps = [p for p in players().values() if p.get("bets") and (p.get("name") or "").lower() not in out_names]
     rows = sorted(ps, key=lambda p: (-p["balance"], p["first_seen"]))
     out = {"rows": [{"name": p.get("name") or anon_name(p["pid"]), "balance": p["balance"],
                      "pid": p["pid"]} for p in rows[:limit]],
@@ -250,14 +256,6 @@ def erase(user: str) -> int:
 
     races.scrub(gone)
     return len(lines) - len(keep)
-
-
-def mark_opted_out(names: set[str]) -> None:
-    with _lock:
-        ps = players()
-        for p in ps.values():
-            p["opted_out"] = (p.get("name") or "").lower() in names
-        _write("players.json", ps)
 
 
 def anonymise_idle(days: int = 90) -> int:

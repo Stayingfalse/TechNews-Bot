@@ -71,6 +71,9 @@ def erase(user: str) -> int:
             if _scrub(job, key):
                 n += 1
         store._write("jobs.json", jobs)
+    from .racing import ledger
+
+    n += ledger.erase(key)  # their racing balance and every bet
     return n
 
 
