@@ -29,6 +29,8 @@ _render_lock = threading.Lock()
 
 RENDER_LEAD = timedelta(minutes=60)  # 08:00 for a 09:00 post: votes close, then voice and render
 MISSED_AFTER = timedelta(hours=6)
+STALE = timedelta(minutes=20)  # in progress this long untouched, and not ours: the process doing it died
+_mine: set[str] = set()  # jobs this process is working on
 WORKING = ("preparing", "voicing", "rendering", "publishing")
 FEAR_KEYS = ["skeleton", "goblin", "wraith"]
 CLASS_KEYS = ["fighter", "rogue", "wizard"]
@@ -97,6 +99,19 @@ def can_publish() -> str | None:
     return None
 
 
+def _spawn(target, job: dict, name: str) -> None:
+    """Run a step in its own thread, remembered as ours while it runs (so recover() leaves it be)."""
+    _mine.add(job["id"])
+
+    def run() -> None:
+        try:
+            target(job)
+        finally:
+            _mine.discard(job["id"])
+
+    threading.Thread(target=run, args=(), daemon=True, name=name).start()
+
+
 def _new_id() -> str:
     return f"adv-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
 
@@ -118,7 +133,7 @@ def submit(spec: dict, use_voice: bool = True, publish: bool = False, at: dateti
         return job
     job["status"] = "queued"
     save(job)
-    threading.Thread(target=_run_now, args=(job,), daemon=True, name=f"adventure-{job['id']}").start()
+    _spawn(_run_now, job, f"adventure-{job['id']}")
     return job
 
 
@@ -396,18 +411,25 @@ def tick(t: datetime | None = None) -> None:
         elif job["status"] == "booked" and t >= due - RENDER_LEAD:
             job["status"] = "preparing"  # claimed before the thread starts, so the next tick skips it
             save(job)
-            threading.Thread(target=_prepare, args=(job,), daemon=True, name=f"adventure-{job['id']}").start()
+            _spawn(_prepare, job, f"adventure-{job['id']}")
         elif job["status"] == "scheduled" and t >= due:
             job["status"] = "publishing"
             save(job)
-            threading.Thread(target=_post, args=(job,), daemon=True, name=f"adventure-post-{job['id']}").start()
+            _spawn(_post, job, f"adventure-post-{job['id']}")
 
 
-def recover() -> None:
-    """After a restart: unfinished preparation starts again; a post that was mid-flight is not
-    retried blindly (it may have gone out), it's flagged."""
+def recover(stale: timedelta = STALE) -> None:
+    """Jobs a dead process left mid-way: unfinished preparation starts again; a post that was
+    mid-flight is not retried blindly (it may have gone out), it's flagged. Only jobs untouched for
+    `stale` and not ours: during a deploy the old server is still finishing its own."""
+    cutoff = time.time() - stale.total_seconds()
     for job in recent(200):
         st = job.get("status")
+        if st not in WORKING + ("queued",) or job["id"] in _mine:
+            continue
+        p = _jobs_dir() / f"{job['id']}.json"
+        if p.exists() and p.stat().st_mtime > cutoff:
+            continue
         if st in ("preparing", "voicing", "rendering") and job.get("publish_at"):
             job["status"] = "booked"
             save(job)
@@ -423,6 +445,7 @@ def _loop() -> None:
     while True:
         try:
             if lease.held():
+                recover()
                 tick()
         except Exception:
             log.exception("adventure tick failed")
@@ -430,5 +453,4 @@ def _loop() -> None:
 
 
 def start() -> None:
-    recover()
     threading.Thread(target=_loop, daemon=True, name="adventure-schedule").start()

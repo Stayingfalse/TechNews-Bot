@@ -93,6 +93,26 @@ def test_instagram_login_about_to_expire(discord):
     assert len(discord) == 1
 
 
+def test_broken_connection_warns_once_a_day_per_channel(discord, monkeypatch):
+    from app import channels
+    from app.publish import instagram
+
+    monkeypatch.setattr(instagram, "configured", lambda: True)
+    store.set_tokens("instagram", {"access_token": "bad", "user_id": "1", "expires_at": time.time() + 50 * 86400})
+    store.set_tokens("instagram", {"access_token": "good", "user_id": "2", "expires_at": time.time() + 50 * 86400},
+                     channel=channels.RACING)
+
+    def account():
+        if store.get_tokens("instagram")["access_token"] == "bad":
+            raise RuntimeError("Error validating access token: The session has been invalidated")
+        return {"username": "sixelspeedway"}
+
+    monkeypatch.setattr(instagram, "account", account)
+    assert health.check_connections() == ["main:instagram"]  # the adventure channel has no login: skipped
+    health.check_connections()
+    assert len(discord) == 1 and "/oauth/instagram/start" in discord[0][0] and "invalidated" in discord[0][0]
+
+
 def test_weekly_batch_pings_only_for_a_batch(quiz, monkeypatch):
     from datetime import date, timedelta
 

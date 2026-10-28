@@ -663,7 +663,9 @@ REQUESTS_PER_HOUR = 10
 
 
 def _form_limited(request: Request) -> bool:
-    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?")
+    # Cloudflare's header names the real visitor; the first X-Forwarded-For entry is whatever the client wrote
+    ip = (request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+          or (request.client.host if request.client else "?"))
     now = time.time()
     recent = [t for t in _request_times.get(ip, []) if now - t < 3600]
     _request_times[ip] = recent + [now]
@@ -1043,6 +1045,16 @@ _states: dict[str, tuple[str, float, str, str]] = {}  # state -> (provider, expi
 PROVIDERS = PUBLISHERS
 
 
+def _new_state(entry: tuple[str, float, str, str]) -> str:
+    """Remember an OAuth round trip, dropping expired ones (/login/... is public, so this must not grow)."""
+    t = time.time()
+    for k in [k for k, v in _states.items() if v[1] < t]:
+        _states.pop(k, None)
+    state = secrets.token_urlsafe(16)
+    _states[state] = entry
+    return state
+
+
 def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
     html = (Path(__file__).parent / "login.html").read_text()
     return HTMLResponse(html.replace("{{title}}", title).replace("{{body}}", body), status_code=status)
@@ -1066,9 +1078,8 @@ def login_page(request: Request, next: str = "/dashboard"):
 def login_start(provider: str, next: str = "/dashboard"):
     if provider not in ("instagram", "youtube") or not store.get_tokens(provider):
         raise HTTPException(404)
-    state = secrets.token_urlsafe(16)
     nxt = next if next.startswith("/") and not next.startswith("//") else "/dashboard"
-    _states[state] = (provider, time.time() + 600, "login", nxt)
+    state = _new_state((provider, time.time() + 600, "login", nxt))
     return RedirectResponse(PROVIDERS[provider].authorize_url(state, login=True))
 
 
@@ -1088,8 +1099,7 @@ def oauth_start(provider: str, channel: str = channels.MAIN):
         raise HTTPException(404)
     if channel not in channels.registry():
         raise HTTPException(404, f"no channel {channel!r}; channels: {sorted(channels.registry())}")
-    state = secrets.token_urlsafe(16)
-    _states[state] = (provider, time.time() + 600, "connect", channel)
+    state = _new_state((provider, time.time() + 600, "connect", channel))
     return RedirectResponse(mod.authorize_url(state))
 
 

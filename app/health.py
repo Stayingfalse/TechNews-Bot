@@ -8,8 +8,10 @@ ping URLs are kept in health.json) and pings them:
   - weekly-batch: when the Monday routine books the next week; alerts when it hasn't by 22:00
 The checks alert through every integration on the healthchecks.io project (email by default).
 
-Discord warnings (twice a day): ElevenLabs credits running low, and an Instagram login close to
-expiring because its refresh keeps failing. YouTube refresh failures are already reported.
+Discord warnings: ElevenLabs credits running low and an Instagram login close to expiring because its
+refresh keeps failing (twice a day), and every hour, any channel's Instagram login that no longer works
+(Meta invalidates them after a password change or a security check). YouTube refresh failures are
+already reported.
 """
 from __future__ import annotations
 
@@ -117,12 +119,56 @@ def check_elevenlabs() -> dict | None:
 
 def check_logins() -> None:
     """An Instagram login refreshes when it has 20 days left; under 7 means refreshing keeps failing."""
-    tok = store.get_tokens("instagram")
-    if tok and tok.get("expires_at"):
-        days = (tok["expires_at"] - time.time()) / 86400
-        if days < 7:
-            _warn_once_a_day("instagram-login", f"The Instagram login expires in {max(0, days):.0f} days and isn't "
-                                                "renewing: reconnect it from the dashboard before posts start failing.")
+    from . import channels
+
+    for cid, ch in channels.registry().items():
+        tok = store.get_tokens("instagram", channel=cid)
+        if tok and tok.get("expires_at"):
+            days = (tok["expires_at"] - time.time()) / 86400
+            if days < 7:
+                where = "" if cid == channels.MAIN else f"?channel={cid}"
+                _warn_once_a_day(f"instagram-login:{cid}", f"{ch.name}: the Instagram login expires in {max(0, days):.0f} "
+                                 f"days and isn't renewing: reconnect it (/oauth/instagram/start{where}) before posts start failing.")
+
+
+CONNECTIONS_EVERY = 3600
+_last_connections = 0.0
+
+
+def check_connections() -> list[str]:
+    """Ask each channel's connected accounts who they are: a login Meta has invalidated (password
+    change, security check) otherwise only shows when the next post fails. Returns the broken ones."""
+    from . import channels
+    from .publish import PUBLISHERS
+
+    broken = []
+    for cid, ch in channels.registry().items():
+        for name in ch.platforms:
+            mod = PUBLISHERS.get(name)
+            if not mod or not hasattr(mod, "account") or not mod.configured():
+                continue
+            with channels.use(cid):
+                if not store.get_tokens(name):
+                    continue
+                try:
+                    mod.account()
+                except Exception as e:
+                    broken.append(f"{cid}:{name}")
+                    where = "" if cid == channels.MAIN else f"?channel={cid}"
+                    _warn_once_a_day(f"connection:{cid}:{name}",
+                                     f"{ch.name}: the {name} login has stopped working, so its next posts will fail. "
+                                     f"Reconnect it: /oauth/{name}/start{where} ({str(e)[:200]})")
+    return broken
+
+
+def connections_tick() -> None:
+    global _last_connections
+    if time.time() - _last_connections >= CONNECTIONS_EVERY:
+        _last_connections = time.time()
+        try:
+            check_connections()
+        except Exception:
+            log.exception("connection check failed")
 
 
 def daily_checks() -> None:

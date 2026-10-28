@@ -18,7 +18,8 @@ def send(content: str, embed: dict | None = None, attach: Path | None = None) ->
     if not settings.discord_webhook_url:
         log.info("discord (not configured): %s", content)
         return
-    payload = {"content": content[:2000], "embeds": [embed] if embed else []}
+    # never ping: messages quote viewers' comments, which could say @everyone
+    payload = {"content": content[:2000], "embeds": [embed] if embed else [], "allowed_mentions": {"parse": []}}
     try:
         if attach and attach.exists() and attach.stat().st_size <= MAX_ATTACH:
             with attach.open("rb") as fh:
@@ -30,9 +31,11 @@ def send(content: str, embed: dict | None = None, attach: Path | None = None) ->
                 )
         else:
             r = httpx.post(settings.discord_webhook_url, json=payload, timeout=30)
-        r.raise_for_status()
-    except Exception:  # notifications must never break the pipeline
-        log.exception("discord notification failed")
+        if r.status_code >= 400:
+            log.error("discord notification failed: HTTP %s: %s", r.status_code, r.text[:300])
+    except Exception as e:  # notifications must never break the pipeline
+        # not log.exception: the traceback would print the webhook URL, which is its secret
+        log.error("discord notification failed: %s", type(e).__name__)
 
 
 def error(msg: str) -> None:

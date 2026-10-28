@@ -442,6 +442,7 @@ def _scheduler() -> None:
             if lease.held():  # an older server still running mid-deploy leaves the scheduling to the new one
                 tick()
                 health.heartbeat()
+                health.connections_tick()
         except Exception:
             log.exception("scheduler tick failed")
         time.sleep(30)

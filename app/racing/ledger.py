@@ -116,6 +116,10 @@ def settle(race: dict, comments: list[dict], winner: int | None, odds: list[str]
     from .sim import payout
 
     with _lock:
+        if any(e.get("race") == race["no"] and e["kind"] in ("bet", "payout") for e in entries()):
+            # settled already (a restart between settling and saving the race): taking the bets again
+            # would charge and pay everyone twice
+            raise RuntimeError(f"race {race['no']} is already settled in the ledger; check it by hand")
         ps = players()
         taken, commenters, new = [], set(), 0
         for c in sorted(comments, key=lambda c: c["at"]):

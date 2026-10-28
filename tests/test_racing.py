@@ -197,12 +197,46 @@ def test_weekly_bonus_pays_every_known_player_once_a_week():
     race = _race()
     ledger.settle(race, [comment("c1", "amy", "hi", 1), comment("c2", "bob", "4 100", 2)], winner=1, odds=["2/1"] * 6)
     privacy.opt_out("carl")
-    ledger.settle(race, [comment("c3", "carl", "4 100", 3)], winner=1, odds=["2/1"] * 6)
+    ledger.settle(_race(2), [comment("c3", "carl", "4 100", 3)], winner=1, odds=["2/1"] * 6)
     got = ledger.weekly_bonus("2026-W44", {"instagram:u-amy": 3})
     assert got["players"] == 2 and got["paid"] == 250 + 100
     assert ledger.balance("instagram:u-amy") == 1250 and ledger.balance("instagram:u-bob") == 1000
     assert ledger.weekly_bonus("2026-W44", {})["already"]
     assert ledger.weekly_bonus("2026-W45", {}, doubled=True)["paid"] == 400
+
+
+def test_a_race_is_never_settled_twice():
+    race = _race()
+    ledger.settle(race, [comment("c1", "amy", "4 250", 1)], winner=4, odds=["2/1"] * 6)
+    before = ledger.players()
+    with pytest.raises(RuntimeError, match="already settled"):
+        ledger.settle(race, [comment("c1", "amy", "4 250", 1)], winner=4, odds=["2/1"] * 6)
+    assert ledger.players() == before
+
+
+def test_recover_leaves_another_servers_fresh_jobs_alone(discord):
+    a = jobs._book("race", card=2, run=1, slot=datetime.now(timezone.utc) + timedelta(hours=1))
+    b = jobs._book("race", card=3, run=2, slot=datetime.now(timezone.utc) + timedelta(days=1))
+    a["status"], b["status"] = "rendering", "publishing"
+    jobs.save(a)
+    jobs.save(b)
+    jobs.recover()  # just saved: the old server (mid-deploy) is still on them
+    assert jobs.get(a["id"])["status"] == "rendering" and jobs.get(b["id"])["status"] == "publishing"
+    jobs.recover(stale=timedelta(0))
+    assert jobs.get(a["id"])["status"] == "booked"
+    assert jobs.get(b["id"])["status"] == "failed" and "check" in discord[-1][0]
+
+
+def test_a_missed_post_can_be_retried_and_posts_at_once(cycle):
+    slot = datetime(2026, 11, 3, 19, 0, tzinfo=timezone.utc)
+    jobs.start(slot - timedelta(days=1))
+    job = [j for j in jobs.recent(10) if j["kind"] == "launch"][0]
+    jobs.tick(slot - timedelta(days=1) + timedelta(hours=7))  # the server was down through the slot
+    assert jobs.get(job["id"])["status"] == "missed"
+    jobs.retry(jobs.get(job["id"]))  # prepared inline (the cycle fixture runs threads at once)
+    assert jobs.get(job["id"])["status"] == "scheduled"
+    jobs.tick(slot - timedelta(days=1) + timedelta(hours=8))
+    assert jobs.get(job["id"])["status"] == "done"
 
 
 def test_league_table_climber_bust_and_anonymised_players():

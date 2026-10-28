@@ -360,7 +360,9 @@ def test_a_restart_prepares_again_but_never_reposts_blindly(scheduled, discord):
     a["status"], b["status"] = "rendering", "publishing"
     jobs.save(a)
     jobs.save(b)
-    jobs.recover()
+    jobs.recover()  # just saved: still the other server's (mid-deploy), left alone
+    assert jobs.get(a["id"])["status"] == "rendering" and jobs.get(b["id"])["status"] == "publishing"
+    jobs.recover(stale=timedelta(0))
     assert jobs.get(a["id"])["status"] == "booked"
     assert jobs.get(b["id"])["status"] == "failed" and "check" in discord[-1][0]
 
