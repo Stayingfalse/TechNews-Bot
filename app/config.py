@@ -89,6 +89,25 @@ class Settings:
         # The narrator's pauses are shortened to this many seconds (its [long pause] runs to 3-4 s).
         self.adventure_max_pause = float(os.environ.get("ADVENTURE_MAX_PAUSE", "0.6"))
 
+        # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
+        # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.
+        self.racing_handle = os.environ.get("RACING_HANDLE", "sixelspeedway")
+        self.racing_post_time = os.environ.get("RACING_POST_TIME", "19:00")
+        self.racing_close_minutes = int(os.environ.get("RACING_CLOSE_MINUTES", "60"))
+        self.racing_platforms = [p.strip().lower() for p in os.environ.get("RACING_PLATFORMS", "instagram").split(",") if p.strip()]
+        # The bets pages (balances, bets, seed checks) are served on this domain only
+        self.racing_domain = os.environ.get("RACING_DOMAIN", "race.onlydan.uk").strip().lower()
+        # Looks to use, comma-separated; with more than one, videos take turns (an A/B test, by race number)
+        self.racing_themes = [t.strip() for t in os.environ.get("RACING_THEMES", "pitwall").split(",") if t.strip()]
+        # Bet replies: checked every RACING_POLL_MINUTES, sent RACING_REPLY_GAP seconds apart, at most
+        # RACING_REPLY_PER_HOUR an hour (start low on a new account and raise it slowly)
+        self.racing_poll_minutes = int(os.environ.get("RACING_POLL_MINUTES", "15"))
+        self.racing_reply_gap = float(os.environ.get("RACING_REPLY_GAP", "20"))
+        self.racing_reply_per_hour = int(os.environ.get("RACING_REPLY_PER_HOUR", "60"))
+        self.racing_replies = _bool("RACING_REPLIES", True)
+        # The weekly bonus is doubled for this many weeks after launch
+        self.racing_launch_weeks = int(os.environ.get("RACING_LAUNCH_WEEKS", "4"))
+
         # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
         self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")
 
