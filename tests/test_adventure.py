@@ -429,8 +429,9 @@ def _posted_part4(slot):
     return job
 
 
-def test_the_first_arc_runs_from_after_episode0_to_tuesday(story):
+def test_the_first_arc_runs_from_after_episode0_to_tuesday(story, monkeypatch):
     slot = datetime(2026, 10, 27, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    monkeypatch.setattr(jobs, "now", lambda: slot - timedelta(days=1))  # booking needs a slot still to come
     jobs.submit({"kind": "episode0", "part": 1}, at=slot, series=True)
     e = campaign.expected()
     assert (e["start_date"], e["days"]) == ("2026-10-31", 4)

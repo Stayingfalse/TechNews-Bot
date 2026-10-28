@@ -95,6 +95,18 @@ def _recent_comments(since: str):
         except Exception:
             continue
         yield from ({**c, "platform": "instagram"} for c in rows)
+    from .racing import jobs as racing_jobs
+
+    for job in racing_jobs.recent(60):
+        media = ((job.get("results") or {}).get("instagram") or {}).get("media_id")
+        if not media or (job.get("published_at") or "") < since:
+            continue
+        try:
+            with channels.use(channels.RACING):
+                rows = instagram.comments(media)
+        except Exception:
+            continue
+        yield from ({**c, "platform": "instagram"} for c in rows)
 
 
 def scan_comment_optouts(days: int = 14) -> int:
@@ -157,7 +169,8 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 
 # What each kind of channel does with comments, as the policy's account list describes it
 FORMATS = {"quiz": "Quiz videos: answers in comments, shout-outs, viewer-picked themes",
-           "adventure": "Story videos: A/B/C votes in comments decide what happens next"}
+           "adventure": "Story videos: A/B/C votes in comments decide what happens next",
+           "racing": "Race videos: play-money bets in comments, balances and a league table"}
 PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
 
 
@@ -220,6 +233,13 @@ def published_videos() -> dict[str, list[dict]]:
         title = f"Episode {spec['ep']}" if spec.get("kind") == "story" else f"Episode 0, part {spec.get('part')}"
         out.setdefault(job.get("channel") or channels.ADVENTURE, []).append(
             {"at": job.get("published_at", ""), "title": title, "theme": "", "links": ls})
+    from .racing import jobs as racing_jobs
+
+    for job in racing_jobs.recent(5000):
+        if not (ls := links(job.get("results"))):
+            continue
+        title = "Launch: how to play" if job["kind"] == "launch" else f"Race {job['run']}"
+        out.setdefault(channels.RACING, []).append({"at": job.get("published_at", ""), "title": title, "theme": "", "links": ls})
     for vids in out.values():
         vids.sort(key=lambda v: v["at"], reverse=True)
     return out
