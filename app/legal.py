@@ -3,10 +3,13 @@
 Pages: /privacy (policy, with the "how we use your comments" video), /terms, /privacy/request (a
 form to opt out or delete), /privacy/status/<code> (where a request stands).
 
-Automated routes to opting out / deletion, all applied at once and logged with a confirmation code:
+Automated routes to opting out / deletion, logged with a confirmation code:
   - commenting "#optout" under any of our videos (the platform vouches for who wrote it): found by
-    scan_comment_optouts(), twice a day
-  - the request form
+    scan_comment_optouts(), twice a day, and applied at once
+  - the request form: anyone can type any username, so it only opens a request. It's carried out once
+    the named account comments the request's code under any of our videos (scan_confirmations(), every
+    CONFIRM_EVERY while any are waiting) or the owner approves it; unconfirmed requests expire after
+    PENDING_DAYS. Without this, anyone could wipe a rival's racing balance and opt them out.
   - Meta's data deletion and deauthorize callbacks (signed_request, verified with the app secret)
 """
 from __future__ import annotations
@@ -17,7 +20,10 @@ import hmac
 import html
 import json
 import re
+import logging
 import secrets
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from string import Template
@@ -31,6 +37,10 @@ OPTOUT_WORDS = re.compile(r"(?i)(#\s*opt\s*-?\s*out\b|\bopt\s*-?\s*out\b|#\s*nod
 TEMPLATES = Path(__file__).with_name("legal")
 EXPLAINERS = Path(__file__).resolve().parents[1] / "assets" / "explainer"
 VIDEOS = ("how-we-use-comments", "how-we-use-votes")  # the quiz's, the dungeon crawl's
+PENDING_DAYS = 7  # a form request not confirmed by then expires
+CONFIRM_EVERY = 15 * 60  # seconds between comment scans while requests wait
+MAX_PENDING = 500  # the form can't grow the log without limit
+CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I: typed into a comment
 
 
 # ------------------------------------------------------------------ requests log
@@ -39,15 +49,21 @@ def _log() -> dict:
     return store._read("privacy_requests.json", {})
 
 
-def record(kind: str, platform: str, who: str, source: str, done: str) -> str:
-    """Log a request (already carried out) and return its confirmation code."""
-    code = secrets.token_hex(6).upper()
+def _new_code(log: dict) -> str:
+    while (code := "".join(secrets.choice(CODE_CHARS) for _ in range(6))) in log:
+        pass
+    return code
+
+
+def record(kind: str, platform: str, who: str, source: str, done: str, status: str = "completed", **extra) -> str:
+    """Log a request and return its confirmation code."""
     with store._lock:
         log = _log()
         cutoff = (datetime.now(timezone.utc) - timedelta(days=REQUEST_LOG_DAYS)).isoformat()
         log = {k: v for k, v in log.items() if v["at"] >= cutoff}
+        code = _new_code(log)
         log[code] = {"kind": kind, "platform": platform, "who": who, "source": source, "done": done,
-                     "at": store.now_iso(), "status": "completed"}
+                     "at": store.now_iso(), "status": status, **extra}
         store._write("privacy_requests.json", log)
     return code
 
@@ -56,25 +72,123 @@ def lookup(code: str) -> dict | None:
     return _log().get(code.strip().upper())
 
 
-def apply_request(kind: str, platform: str, user: str, source: str) -> str:
-    """Opt out (and for 'delete', also erase) a viewer at once. Returns the confirmation code."""
-    user = privacy._key(user)
+def _carry_out(kind: str, user: str) -> str:
     if kind == "delete":
-        n = privacy.erase(user)
-        done = f"opted out, and removed from {n} stored record(s)"
-    else:
-        privacy.opt_out(user)
-        done = "opted out"
+        return f"opted out, and removed from {privacy.erase(user)} stored record(s)"
+    privacy.opt_out(user)
+    return "opted out"
+
+
+def apply_request(kind: str, platform: str, user: str, source: str) -> str:
+    """Opt out (and for 'delete', also erase) a viewer at once, for routes that prove who asked.
+    Returns the confirmation code."""
+    user = privacy._key(user)
+    done = _carry_out(kind, user)
     code = record(kind, platform, f"@{user}", source, done)
     notify.send(f":lock: **Privacy request** {code}: {kind} for @{user} ({platform}, via {source}): {done}. "
                 "If they also want a video that shows their name taken down, that's done by hand.")
     return code
 
 
+class TooManyPending(Exception):
+    pass
+
+
+def open_request(kind: str, platform: str, user: str, source: str = "web form") -> str:
+    """A request from the form: waits until the named account confirms it by commenting its code under
+    one of our videos, or the owner approves it. Returns the code."""
+    user = privacy._key(user)
+    if sum(r.get("status") == "pending" for r in _log().values()) >= MAX_PENDING:
+        raise TooManyPending()
+    expires = (datetime.now(timezone.utc) + timedelta(days=PENDING_DAYS)).isoformat(timespec="seconds")
+    code = record(kind, platform, f"@{user}", source, "waiting for confirmation", status="pending",
+                  user=user, expires=expires)
+    notify.send(f":lock: **Privacy request** {code}: {kind} for @{user} ({platform}) is waiting for them to comment "
+                f"the code under one of our videos. It can be approved by hand on the dashboard if they can't.")
+    return code
+
+
+def _settle(code: str, how: str, status: str = "completed") -> dict | None:
+    """Carry out (or close) a pending request. Returns it, or None if it isn't pending."""
+    with store._lock:
+        req = _log().get(code)
+        if not req or req.get("status") != "pending":
+            return None
+        done = _carry_out(req["kind"], req["user"]) if status == "completed" else how
+        log = _log()
+        log[code].update(status=status, done=done, settled_at=store.now_iso(), settled_by=how)
+        store._write("privacy_requests.json", log)
+        req = log[code]
+    if status == "completed":
+        notify.send(f":lock: **Privacy request** {code}: {req['kind']} for {req['who']} ({req['platform']}) confirmed "
+                    f"({how}): {req['done']}. If they also want a video that shows their name taken down, that's done by hand.")
+    return req
+
+
+def approve(code: str) -> dict | None:
+    return _settle(code.strip().upper(), "approved by the owner")
+
+
+def reject(code: str) -> dict | None:
+    return _settle(code.strip().upper(), "rejected by the owner", status="rejected")
+
+
+def pending() -> list[dict]:
+    return sorted(({"code": k, **v} for k, v in _log().items() if v.get("status") == "pending"), key=lambda r: r["at"])
+
+
+def scan_confirmations() -> int:
+    """Carry out pending form requests whose account commented the code, and expire old ones.
+    Returns how many were confirmed."""
+    waiting = pending()
+    now = datetime.now(timezone.utc).isoformat()
+    for r in [r for r in waiting if r["expires"] < now]:
+        _settle(r["code"], "not confirmed within %d days" % PENDING_DAYS, status="expired")
+    waiting = [r for r in waiting if r["expires"] >= now]
+    if not waiting:
+        return 0
+    posts_since = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()  # any recent video will do
+    confirmed = 0
+    for c in _recent_comments(posts_since, everyone=True):  # an opted-out viewer may still confirm a deletion
+        text = c["text"].upper()
+        for r in waiting:
+            if (r["code"] in re.findall(r"[A-Z0-9]+", text) and c["platform"] == r["platform"]
+                    and privacy._key(c["user"]) == r["user"] and (c.get("at") or "") >= r["at"][:19]):
+                if _settle(r["code"], f"they commented the code ({c['platform']})"):
+                    confirmed += 1
+        waiting = [r for r in waiting if lookup(r["code"]).get("status") == "pending"]
+        if not waiting:
+            break
+    return confirmed
+
+
+_last_confirm = 0.0
+_scanning = threading.Lock()
+
+
+def confirmations_tick() -> None:
+    """From the scheduler: scan for confirmations every CONFIRM_EVERY while any request waits, in a
+    thread of its own (reading every recent post's comments takes a while; posting mustn't wait)."""
+    global _last_confirm
+    if time.time() - _last_confirm < CONFIRM_EVERY or _scanning.locked() or not pending():
+        return
+    _last_confirm = time.time()
+
+    def run() -> None:
+        with _scanning:
+            try:
+                scan_confirmations()
+            except Exception:
+                logging.getLogger(__name__).exception("privacy confirmation scan failed")
+
+    threading.Thread(target=run, daemon=True, name="privacy-confirm").start()
+
+
 # ------------------------------------------------------------------ "#optout" comments
 
-def _recent_comments(since: str):
-    """(platform, comment) for every comment under both channels' posts published since `since`."""
+def _recent_comments(since: str, everyone: bool = False):
+    """(platform, comment) for every comment under every channel's posts published since `since`
+    (opted-out viewers' too with `everyone`)."""
     from . import channels
     from .adventure import jobs as adventure_jobs
     from .cliffhanger import read_comments
@@ -83,7 +197,7 @@ def _recent_comments(since: str):
     for job in store.list_jobs(200):
         if job.get("status") == "done" and not job.get("dry_run") and (job.get("published_at") or "") >= since:
             with channels.use(job.get("channel")):
-                rows, _, _ = read_comments(job)
+                rows, _, _ = read_comments(job, everyone=everyone)
             yield from rows
     for job in adventure_jobs.recent(60):
         media = ((job.get("results") or {}).get("instagram") or {}).get("media_id")
@@ -199,6 +313,7 @@ def _page(name: str, **values) -> str:
               "base": html.escape(settings.public_base_url), "days": str(privacy.RETENTION_DAYS),
               "log_days": str(REQUEST_LOG_DAYS)}
     body = Template((TEMPLATES / f"{name}.html").read_text()).safe_substitute(common, **values)
+    body = Template(body).safe_substitute(common)  # placeholders inside the filled-in parts ($mail in a status)
     shell = Template((TEMPLATES / "shell.html").read_text())
     return shell.safe_substitute(common, title=values.get("title", name.title()), body=body)
 
@@ -288,12 +403,41 @@ def request_page(message: str = "") -> str:
     return _page("request", title="Opt out or delete your data", message=message)
 
 
+def _where_to_comment(platform: str) -> str:
+    """Our accounts on a platform, for the "comment your code under any of our videos" step."""
+    from . import channels
+
+    links = []
+    for ch in channels.registry().values():
+        if platform not in ch.platforms or not ch.brand_handle:
+            continue
+        handle = html.escape(_at(ch.brand_handle))
+        url = PROFILE_URLS.get(platform, "").format(html.escape(ch.brand_handle.lstrip("@")))
+        links.append(f'<a href="{url}" rel="noopener">{handle}</a>' if url else f"<strong>{handle}</strong>")
+    return ", ".join(links) or "our accounts"
+
+
 def status_page(code: str) -> str:
     req = lookup(code) if code.strip() else None
     if not code.strip():
         found = "<p>Enter the confirmation code you were given to see where your request stands.</p>"
     elif not req:
         found = f"<p>We have no request with the code <strong>{html.escape(code)}</strong>. Check it, or contact us.</p>"
+    elif req["status"] == "pending":
+        what = "delete your data and opt you out" if req["kind"] == "delete" else "opt you out"
+        until = datetime.fromisoformat(req["expires"]).strftime("%-d %B")
+        platform = PLATFORM_NAMES.get(req["platform"], req["platform"])
+        found = (f"<p><strong>One more step.</strong> To show it's really you, comment this code under any of our "
+                 f"videos on {html.escape(platform)}, from <strong>{html.escape(req['who'])}</strong>:</p>"
+                 f'<p class="code">{html.escape(code.upper())}</p>'
+                 f"<p>Our {html.escape(platform)} accounts: {_where_to_comment(req['platform'])}. Any video will do. We check "
+                 f"every 15 minutes, then {what}. Come back to this page to see it done; once it is, you can delete the comment. If it isn't confirmed by {html.escape(until)}, the request lapses.</p>"
+                 f"<p class=\"small\">Can't comment from that account? Email $mail with this code and we'll sort it out. "
+                 f"Commenting <strong>#optout</strong> under any of our videos also opts you out straight away.</p>")
+    elif req["status"] in ("expired", "rejected"):
+        found = (f"<p><strong>Request {html.escape(code.upper())}</strong> ({html.escape(req['kind'])} for "
+                 f"{html.escape(req['who'])}) was {html.escape(req['status'])}: {html.escape(req['done'])}. Nothing was "
+                 f"changed. You can <a href=\"$base/privacy/request\">make a new request</a> or email $mail.</p>")
     else:
         found = (f"<p><strong>Request {html.escape(code.upper())}</strong>: {html.escape(req['kind'])} for "
                  f"{html.escape(req['who'])} on {html.escape(req['platform'])}, received {html.escape(req['at'][:16].replace('T', ' '))} UTC "

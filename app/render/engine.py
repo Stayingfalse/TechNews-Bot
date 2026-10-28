@@ -118,7 +118,7 @@ def _render_frame(idx: int) -> bytes:
 
 
 def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
-                 cover_path: str | Path | None = None, music_dir: Path | None = None,
+                 cover_path: str | Path | None = None, music_dir: Path | None = None, bundled_music: bool = True,
                  reveal: dict | None = None, voice: host.VoiceConfig | None = None) -> dict:
     """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro.
     `voice` = ElevenLabs settings, used when the spec asks for the host voice-over."""
@@ -127,7 +127,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
     video = Video(spec, brand, reveal)
     workers = workers or max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4"))))
     t0 = time.time()
-    track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec))
+    track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec), bundled_music)
 
     voice_status, vo, voice_used = "off", None, ""
     if getattr(spec, "voice", False):

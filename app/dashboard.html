@@ -149,6 +149,14 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
 
   <div id="connected-msg" class="ok-msg" role="status" hidden></div>
 
+  <section class="notice" id="privacy" hidden aria-labelledby="privacy-h">
+    <strong id="privacy-h">Privacy requests waiting</strong>
+    <div class="tags" style="color:inherit">From the public form. Each is carried out by itself once that account comments its code under
+      one of your videos. Approve one only when you know it's really them (e.g. they emailed you from a known address); reject anything else.</div>
+    <div id="privacy-msg" role="status"></div>
+    <div id="privacy-list"></div>
+  </section>
+
   <section class="card" id="accounts" aria-labelledby="accounts-h">
     <h2 id="accounts-h">Accounts</h2>
     <p class="sub" id="accounts-sub">Checking every channel's connections…</p>
@@ -524,6 +532,33 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     }
   }
 
+  async function loadPrivacy(msg) {
+    const r = await fetch("/privacy/requests", auth);
+    if (!r.ok) return;
+    const reqs = await r.json(), list = $("privacy-list");
+    $("privacy-msg").textContent = msg || "";
+    list.replaceChildren();
+    for (const q of reqs) {
+      const row = el("div", { class: "failed-post" });
+      row.append(el("div", {}, `${q.kind === "delete" ? "Delete data and opt out" : "Opt out"}: ${q.who} on ${pf(q.platform) ? pf(q.platform).name : q.platform}`),
+                 el("div", { class: "err" }, `Code ${q.code} · asked ${when(q.at)} · lapses ${when(q.expires)}`));
+      const acts = el("div", { class: "acts" });
+      for (const [action, label, cls] of [["approve", "Approve", "primary"], ["reject", "Reject", "danger"]]) {
+        const b = el("button", { type: "button", class: cls }, label);
+        b.addEventListener("click", async () => {
+          if (action === "approve" && !confirm(`${q.kind === "delete" ? "Delete all data for" : "Opt out"} ${q.who} now? Only do this if you know it's them.`)) return;
+          b.disabled = true;
+          const res = await fetch(`/privacy/requests/${encodeURIComponent(q.code)}/${action}`, { method: "POST", headers: { ...(auth.headers || {}), "X-Quizbot": "1" } });
+          const d = res.ok ? await res.json() : null;
+          loadPrivacy(d ? `${q.code}: ${d.status} (${d.done}).` : `Not changed: ${res.status}`);
+        });
+        acts.append(b);
+      }
+      row.append(acts); list.append(row);
+    }
+    $("privacy").hidden = !reqs.length && !msg;
+  }
+
   function connectedMessage() {
     const q = new URLSearchParams(location.search), just = q.get("connected");
     if (!just) return;
@@ -866,6 +901,7 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
   (async () => {
     await loadAccounts();
     connectedMessage();
+    loadPrivacy();
     showChannel();  // the quiz's numbers load from here when it's the channel shown
   })();
 })();

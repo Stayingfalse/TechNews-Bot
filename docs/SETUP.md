@@ -46,6 +46,7 @@ Environment variables:
 | `ELEVENLABS_MODEL` | default `eleven_v3`; `eleven_v3` and `eleven_v4` read each line in an `[excited]` delivery, `eleven_multilingual_v2` is steadier |
 | `REPEAT_DAYS` | default `365`: an answer can't be reused within this many days |
 | `MUSIC_DIR` | default `/data/music` |
+| `MUSIC_BUNDLED` | default `true`: the 20 CC0 tracks in `assets/music` join the library |
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |
 | `LOUDNESS_LUFS` | default `-15`: loudness of the final mix |
 | `RENDER_WORKERS` | default `4` |
@@ -65,8 +66,11 @@ or fewer than two days are left in the schedule.
 
 ## 3. Music
 
-With an empty library every video gets a synthesised game-show loop (different tempo, key and
-chords per video), so this step is optional. To use your own tracks, upload them:
+The library starts with 20 CC0 tracks bundled in `assets/music` (upbeat funk, swing, jazz and chiptune
+loops from OpenGameArt; sources in `assets/music/LICENSES.md`), so this step is optional. A spec can
+also ask for `"music": "synth"`: a synthesised game-show loop (different tempo, key and chords per
+video). `MUSIC_BUNDLED=false` leaves the bundled tracks out. To add your own tracks, upload them (a
+file named like a bundled track, e.g. `bossa-nova.ogg`, replaces it):
 
 ```bash
 curl -T upbeat-1.mp3 -H "Authorization: Bearer $API_TOKEN" APP_URL/music/upbeat-1.mp3

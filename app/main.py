@@ -89,7 +89,7 @@ def is_authorised(request: Request, authorization: str = "", token: str = "") ->
     path = request.url.path
     dashboard_change = path == "/metrics/refresh" or (
         path.startswith("/schedule/") and request.method in ("PATCH", "DELETE")) or (
-        request.method == "POST" and re.fullmatch(r"/jobs/[^/]+/retry", path) is not None)
+        request.method == "POST" and re.fullmatch(r"/jobs/[^/]+/retry|/privacy/requests/[^/]+/(approve|reject)", path) is not None)
     return cookie_ok and dashboard_change and request.headers.get("x-quizbot") == "1"
 
 
@@ -178,7 +178,7 @@ def status():
                       for name in settings.platforms},
         "post_time": f"{settings.post_time} {settings.tz.key}",
         "scheduled": [{k: j.get(k) for k in ("slot", "status", "id")} for j in pipeline.scheduled_jobs()],
-        "music_tracks": [p.name for p in music.library(settings.music_dir)],
+        "music_tracks": [p.name for p in music.library(settings.music_dir, settings.music_bundled)],
         "discord": bool(settings.discord_webhook_url),
         "voice_enabled": bool(settings.elevenlabs_api_key),
         "healthchecks": sorted(k for k in store._read("health.json", {}) if not k.startswith("warned:")),
@@ -702,7 +702,10 @@ async def privacy_request(request: Request):
         return HTMLResponse(legal.request_page('<p class="err">Too many requests from here; please try again in an hour, or email us.</p>'), 429)
     if not re.fullmatch(r"@?[\w.\-]{1,60}", user) or platform not in ("instagram", "youtube") or kind not in ("opt-out", "delete"):
         return HTMLResponse(legal.request_page('<p class="err">Please enter your username (letters, numbers, dots, dashes and underscores) and pick the options.</p>'), 400)
-    code = legal.apply_request(kind, platform, user, "web form")
+    try:  # carried out once the named account comments the code (or the owner approves it)
+        code = legal.open_request(kind, platform, user)
+    except legal.TooManyPending:
+        return HTMLResponse(legal.request_page('<p class="err">We have too many unconfirmed requests right now; please email us instead.</p>'), 503)
     return RedirectResponse(f"/privacy/status/{code}", 303)
 
 
@@ -735,6 +738,23 @@ async def meta_deauthorize(request: Request):
     """Meta's deauthorize callback: someone removed the app from their account."""
     await _meta_callback(request, "deauthorize")
     return {"ok": True}
+
+
+@app.get("/privacy/requests", dependencies=[Depends(require_token)])
+def privacy_requests_pending():
+    """Form requests waiting for the viewer to comment their code (approve them by hand if they can't)."""
+    return legal.pending()
+
+
+@app.post("/privacy/requests/{code}/{action}", dependencies=[Depends(require_token)])
+def privacy_request_settle(code: str, action: str):
+    """approve: carry out a waiting request (you've checked it's them, e.g. they emailed); reject: close it."""
+    if action not in ("approve", "reject"):
+        raise HTTPException(404)
+    req = (legal.approve if action == "approve" else legal.reject)(code[:20])
+    if not req:
+        raise HTTPException(404, "no waiting request with that code")
+    return {"code": code.upper(), "status": req["status"], "done": req["done"]}
 
 
 class PrivacyRequest(BaseModel):
@@ -1012,7 +1032,9 @@ def adventure_credits():
 
 @app.get("/music", dependencies=[Depends(require_token)])
 def list_music():
-    return [{"name": p.name, "bytes": p.stat().st_size} for p in music.library(settings.music_dir)]
+    """The library: your uploads and the bundled CC0 tracks (assets/music/LICENSES.md)."""
+    return [{"name": p.name, "bytes": p.stat().st_size, "source": "bundled" if music.is_bundled(p) else "uploaded"}
+            for p in music.library(settings.music_dir, settings.music_bundled)]
 
 
 @app.put("/music/{name}", status_code=201, dependencies=[Depends(require_token)])
@@ -1042,6 +1064,9 @@ async def upload_music(name: str, request: Request):
 @app.delete("/music/{name}", dependencies=[Depends(require_token)])
 def delete_music(name: str):
     path = settings.music_dir / name
+    if MUSIC_NAME.match(name) and not path.is_file() and (music.BUNDLED / name).is_file():
+        raise HTTPException(409, "that's a bundled track: upload a file with the same name to replace it, "
+                                 "or set MUSIC_BUNDLED=false to leave all of them out")
     if not MUSIC_NAME.match(name) or not path.is_file():
         raise HTTPException(404)
     path.unlink()

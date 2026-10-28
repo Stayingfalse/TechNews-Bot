@@ -105,9 +105,10 @@ def pending_for(job: dict) -> dict | None:
     return best
 
 
-def read_comments(job: dict) -> tuple[list[dict], int, list[str]]:
+def read_comments(job: dict, everyone: bool = False) -> tuple[list[dict], int, list[str]]:
     """Viewers' comments on a post across platforms, oldest first (our own left out), how many
-    platforms could be read, and the errors from the rest."""
+    platforms could be read, and the errors from the rest. Opted-out viewers are left out too, unless
+    `everyone` (only to confirm their own privacy requests)."""
     found, readable, errors = [], 0, []
     for platform, res in job.get("results", {}).items():
         if not res.get("ok") or platform not in ("instagram", "youtube") or not PUBLISHERS[platform].configured():
@@ -127,7 +128,7 @@ def read_comments(job: dict) -> tuple[list[dict], int, list[str]]:
             log.warning("comments %s on %s: %s", platform, job["id"], e)
     from .privacy import opted_out
 
-    gone = opted_out()
+    gone = set() if everyone else opted_out()
     found = [c for c in found if c["user"].strip().lstrip("@").lower() not in gone]  # never read, shown or replied to
     found.sort(key=lambda c: c["at"])
     return found, readable, errors

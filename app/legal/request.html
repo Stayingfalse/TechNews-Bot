@@ -1,8 +1,10 @@
 <h1>Opt out or delete your data</h1>
 <p class="meta">For viewers of any of our accounts (listed in the <a href="$base/privacy">privacy policy</a>). One request covers all of them.</p>
 $message
-<p>Use this form to stop the quiz using your comments, or to have your data deleted. It takes effect immediately and you'll get a
-confirmation code. Prefer not to use a form? Comment <strong>#optout</strong> under any of our videos, or email $mail.</p>
+<p>Use this form to stop us using your comments, or to have your data deleted. You'll get a short code: comment it under any of our
+videos from the account you name here, so we know the request really comes from you, and it's done within minutes. (Without that
+step anyone could delete someone else's data, such as a racing balance.) Prefer not to use a form? Comment <strong>#optout</strong>
+under any of our videos, which works straight away, or email $mail.</p>
 <form method="post" action="$base/privacy/request">
   <label>Your username
     <input name="user" required maxlength="60" autocomplete="off" placeholder="e.g. @quiz_fan_22"></label>
@@ -15,6 +17,7 @@ confirmation code. Prefer not to use a form? Comment <strong>#optout</strong> un
     </select></label>
   <button type="submit">Send request</button>
 </form>
-<p class="small">We only ask for your public username so we can match your comments. We don't ask for an email address; if you want a
+<p class="small">We only ask for your public username so we can match your comments, and your confirming comment is read only to
+check the code. We don't ask for an email address; if you want a
 reply or want a video that shows your name taken down, email $mail. See the <a href="$base/privacy">privacy policy</a>.
 Already have a code? <a href="$base/privacy/status">Check a request</a>.</p>

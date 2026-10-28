@@ -51,7 +51,7 @@ If GET APP_URL/schedule returns 404, the old tech-news version of the app is sti
    - title: a hook of max ~8 words with exactly one *highlighted* word, e.g. "Only *real* 90s kids get 5/5", "Guess the Disney film from *emojis*". subtitle: short, e.g. "Guess before the timer runs out".
    - think: 5 s by default; 6-7 s for long descriptions or statements, 4 s for easy emoji rounds, 7-8 s in hard mode. reveal: leave the default.
    - palette: one of the schema's palettes, different from the quiz before.
-   - music: "auto" (picks from the uploaded library, else built-in synth music).
+   - music: "auto" (a random track from the library: 20 bundled CC0 tracks plus any uploads). Name a track (e.g. "bossa-nova") only when the review asks for it.
    - caption: 1-2 short friendly lines ending with a question or call to action ("How many did you get? 👇"), no answers in the caption. 3-6 hashtags (#quiz plus theme tags; add #hardquiz for hard mode).
    - intro, cliffhanger, accept, picked_by, ask_theme, voice, voice_name: see step 2. `ask_comment` (a "Comment your guess!" sticker on one round's countdown) and `pause_hint` (a "Pause to answer" sticker): leave off unless the review asks for them.
    - tags: labels the dashboard and next week's review compare by. Always set `special` (`hard`, `format` or `none`) and `cta` (a 1-3 word label for the call to action you used, e.g. `comment-score`, `cliffhanger-comment`, `tag-a-friend`), plus every tag an experiment from the review asks for. Lowercase keys, short values. intro, cliffhanger, ask_comment, pause_hint, ask_theme, picked_by, voice and voice_name are labelled automatically; don't repeat them.
