@@ -788,12 +788,14 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
 
 
 @app.post("/racing/start", status_code=202, dependencies=[Depends(require_token)])
-def racing_start(at: str = ""):
+def racing_start(at: str = "", now: bool = False, restart: bool = False):
     """Launch the channel: open race 1 and book the launch video (rules + race 1's card) for
-    `at` (HH:MM local or ISO; default the next RACING_POST_TIME). From then on it runs by itself.
+    `at` (HH:MM local or ISO; default the next RACING_POST_TIME), or with now=true as soon as it's
+    rendered (race 1's video then posts at the next RACING_POST_TIME). restart=true starts over,
+    only while nothing has been posted or bet. From then on it runs by itself.
     Needs the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
     try:
-        job = racing_jobs.start(_when(at) if at else None)
+        job = racing_jobs.start(_when(at) if at else None, right_now=now, restart=restart)
     except racing_jobs.NotConnected as e:
         raise HTTPException(409, str(e))
     except ValueError as e:

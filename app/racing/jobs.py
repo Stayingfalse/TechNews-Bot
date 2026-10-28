@@ -123,24 +123,57 @@ def _new_id(kind: str) -> str:
 # ------------------------------------------------------------------ launch
 
 
-def start(at: datetime | None = None) -> dict:
-    """Open race 1 and book the launch video. Refuses if the channel has already started, or can't
-    post yet (a started channel that can't post would sit with race 1 open forever; try the look
-    with preview() instead)."""
+def start(at: datetime | None = None, right_now: bool = False, restart: bool = False) -> dict:
+    """Open race 1 and book the launch video: at `at` (default the next RACING_POST_TIME, with race 1
+    in the video the day after), or with `right_now` as soon as it's rendered, race 1 then running
+    at the next RACING_POST_TIME. Refuses if the channel has already started (unless `restart` and
+    nothing has been posted or bet yet), or can't post (a started channel that can't post would sit
+    with race 1 open forever; try the look with preview() instead)."""
     if state().get("started"):
-        raise ValueError("Sixel Speedway has already started; see GET /racing/state")
+        if not restart:
+            raise ValueError("Sixel Speedway has already started; see GET /racing/state")
+        if why := _posted_anything():
+            raise ValueError(f"can't restart: {why}")
+        _wipe()
     if why := can_publish():
         raise NotConnected(why)
-    slot = at or next_slot()
-    if slot <= now() + timedelta(minutes=10):
-        raise ValueError("pick a time at least 10 minutes ahead")
+    if right_now:
+        slot, first_race = now() + timedelta(minutes=1), next_slot()
+    else:
+        slot = at or next_slot()
+        if slot <= now() + timedelta(minutes=10):
+            raise ValueError("pick a time at least 10 minutes ahead")
+        first_race = _tomorrow(slot)
     stats = sim.initial_stats()
-    race1 = races.open_race(1, stats, store.now_iso(), closes_for(_tomorrow(slot)).isoformat())
+    race1 = races.open_race(1, stats, store.now_iso(), closes_for(first_race).isoformat())
     _set_state(started=True, launched_at=slot.isoformat(), stats=stats)
     job = _book("launch", card=1, run=None, slot=slot)
+    job["next_slot"] = first_race.isoformat()  # when race 1's own video posts
+    save(job)
     notify.send(f":checkered_flag: **Sixel Speedway**: race 1 is open (seal `{race1['seal'][:12]}…`, odds "
                 f"{' · '.join(race1['odds'])}). The launch video posts {_local(job['publish_at'])}.")
     return job
+
+
+def _posted_anything() -> str | None:
+    """Why the channel can't be started again: something went out, or someone has played."""
+    if any(r.get("post") for r in races.all_races()):
+        return "a video has been posted"
+    if any(j.get("status") in ("publishing", "done") and j.get("kind") != "preview" for j in recent(500)):
+        return "a video has been posted or is posting"
+    if ledger.players():
+        return "people have already played"
+    return None
+
+
+def _wipe() -> None:
+    """Back to before the launch: race records, booked jobs and the channel's state."""
+    for p in races._dir().glob("*.json"):
+        p.unlink()
+    for job in recent(500):
+        if job.get("kind") != "preview":
+            (_jobs_dir() / f"{job['id']}.json").unlink(missing_ok=True)
+    ledger._write("state.json", {})
 
 
 def _book(kind: str, card: int, run: int | None, slot: datetime, publish: bool = True) -> dict:
@@ -392,7 +425,8 @@ def post(job: dict) -> None:
             save(job)
             _report(job)
             if ok:
-                nxt = _book("race", card=job["card"] + 1, run=job["card"], slot=_tomorrow(datetime.fromisoformat(job["publish_at"])))
+                after = job.get("next_slot") or _tomorrow(datetime.fromisoformat(job["publish_at"])).isoformat()
+                nxt = _book("race", card=job["card"] + 1, run=job["card"], slot=datetime.fromisoformat(after))
                 notify.send(f":calendar: **Sixel Speedway**: race {job['card']} takes bets until "
                             f"{_local(races.get(job['card'])['closes_at'])}; its video posts {_local(nxt['publish_at'])}.")
     except Exception as e:
