@@ -1,4 +1,4 @@
-"""Mock-up screens for the RACEFAX channel (docs/RACING_PLAN.md). Not app code: a throwaway
+"""Mock-up screens for the Sixel Speedway channel (docs/RACING_PLAN.md). Not app code: a throwaway
 sketch of the look, so the plan has pictures. Run: python docs/racing/mockup.py [--clip]
 
 A portrait teletext page: 30 columns x 32 rows of 36x60 px cells (the real 12:20 cell, scaled),
@@ -56,11 +56,11 @@ class Page:
                 if ch in pal:
                     self.px(x + i, y + j, pal[ch], sep)
 
-    def header(self, page, title="RACEFAX", clock="19:00/07"):
+    def header(self, page, title="SIXEL SPEEDWAY", clock="19:00/07"):
         self.text(0, 3, f"P{page}", WH)
         self.text(5, 3, title, Y, B)
         self.text(5 + len(title), 3, f" {page}", C)
-        self.text(17, 3, "WED 28 OCT", WH)
+        self.text(5, 4, "WED 28 OCT", WH)
         self.text(17, 4, clock, Y)
 
     def footer(self):

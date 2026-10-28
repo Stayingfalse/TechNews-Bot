@@ -1,4 +1,4 @@
-# Third channel: teletext car racing you bet on (name TBD)
+# Third channel: Sixel Speedway, teletext car racing you bet on
 
 Plan only, no code yet. This is a daily ~35 s vertical video in the style of a 1980s teletext page
 (Ceefax/Oracle): blocky mosaic graphics, the 8 teletext colours, a CRT with scan lines and the odd
@@ -12,17 +12,9 @@ glitch, and synth bleeps only, with no voice. Each video:
 Everyone starts with **§1,000** of play money the first time the bot sees them. Balances persist,
 every known player gets a **weekly bonus**, and once a week (Sunday) the video adds a **league table**.
 
-**Name: to be chosen.** "RACEFAX" (in the mock-ups) is out because an existing horse racing game
-uses it, and Ceefax/BBC branding is out too. Shortlist (a quick web search found no game using
-any of the first four; that's not a trademark search):
-
-| Name | Why |
-|---|---|
-| **TURBOTEXT** | teletext + turbo; reads instantly as a page header |
-| **SIXEL SPEEDWAY** | sixels are the teletext mosaic blocks the cars are made of |
-| **MOSAIC MOTORS** | same idea, friendlier word |
-| **PIXEL PADDOCK** | the paddock is where you study form before betting |
-| TELETURBO, CHEQUERED PAGE, P300 GRAND PRIX | backups |
+**Name: Sixel Speedway.** Sixels are the 2×3 teletext mosaic blocks the cars are drawn with.
+A quick web search found no game using the name, but that wasn't a trademark search. RACEFAX
+was dropped because an existing horse racing game uses it. No Ceefax or BBC branding.
 
 ## Example screens
 
@@ -48,13 +40,13 @@ way real teletext did, and the clock ticks every second.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | Name and accounts | **TBD** (shortlist above), Instagram only at launch, like the adventure channel. Add YouTube Shorts later; it's a per-channel `platforms` switch. Balances are per platform account (an Instagram and a YouTube account can't be linked). |
+| 1 | Name and accounts | **Decided: Sixel Speedway.** Instagram only at launch, like the adventure channel. Add YouTube Shorts later; it's a per-channel `platforms` switch. Balances are per platform account (an Instagram and a YouTube account can't be linked). |
 | 2 | Cadence | **Decided: daily at 19:00** Europe/London. Bets close **18:00 the next day**, and the video renders right after. Chosen to keep clear of the other channels' work (adventure counts votes at 08:00 and posts at 09:00; the quiz posts at 12:00), so renders never overlap. |
 | 3 | Which comment counts | **Decided: every comment is its own bet.** Three comments `4 250`, `2 100`, `6 50` are three bets. They're taken in the order they were posted until the balance runs out (§3). One comment = one bet; a comment naming two cars is rejected. |
 | 4 | Bet with no amount (`4`) | **§100**. Stakes over the balance are cut to the balance. `all` / `all in` stakes everything. The minimum is §10. |
 | 5 | Weekly bonus | **Decided: every Sunday, every known player gets §100, plus §50 for each video they commented on that week.** This replaces the relief fund: nobody stays bust for long, and commenting is rewarded. |
 | 6 | League table | **Decided: all-time balance, top 10, on Sundays**, plus a "climber of the week" line so new players have something to win. |
-| 7 | Telling people their balance | **Decided: a bets page on its own domain** (§7), and only there: name lookup with balance and bet history, the league table, and each race's seed check. The bot doesn't reply to bets (which would hit Instagram's spam limits at a few hundred players); the bio and every caption point at the domain. |
+| 7 | Telling people their balance | **Decided: the bot replies to every bet** with what it took and the balance left, and points at **the bets domain** (§7). The domain is the only place with name lookup, bet history, the league table and each race's seed check. Replies are paced and worded a few ways so Instagram doesn't treat them as spam (§3). |
 | 8 | Provably fair | **Decided: yes.** The caption carries `race 15 seal: 3f9a…` (a SHA-256 of the secret seed), and the next caption reveals the seed. Anyone can re-run the race with the open code. It's cheap and it answers "it's rigged". |
 | 9 | Cars | **A fixed roster of six**, one per teletext colour: 1 RED ROCKET, 2 MEAN GREEN, 3 CUSTARD, 4 BLUE STREAK, 5 HOT PINK, 6 CYANARA. They become characters, and their form means something. White is kept for a guest or "ghost" car on special days. |
 
@@ -88,8 +80,31 @@ Every template is true either way, so the hook never lies about the outcome.
   platform + account id, with the handle saved for display. They start with §1,000.
 - **Betting**: comment under the latest video. **Every comment is a separate bet**, so backing
   three cars takes three comments. The bets are taken in the order they were posted: each stake is
-  cut to whatever balance is left, and once it's at zero, later comments that day don't count. An
-  edited comment counts as it reads at the cutoff. The parser is in the style of
+  cut to whatever balance is left, and once it's at zero, later comments that day don't count. A
+  comment deleted before the cutoff is no bet (on YouTube, an edited one counts as it reads then;
+  Instagram comments can't be edited).
+- **Bet replies**: the server checks the open post for new comments every 15 minutes until the
+  cutoff and replies under each bet, for example:
+  > ✅ §250 on 4 BLUE STREAK at 6/1. §750 left. Every bet and balance: sixelspeedway.example
+  - A stake cut to the balance says so: "Only §120 left, so it's §120 on 4 BLUE STREAK at 6/1."
+  - With nothing left: "No § left for race 15. Sunday's bonus is §100 plus §50 for each video you
+    comment on."
+  - A comment that looks like a bet but doesn't parse (a number and something car-like) gets one
+    "Didn't catch that: comment a car and a stake, like `4 250`" per player per race. Ordinary
+    chat gets no reply.
+  - A bet under an older video after its cutoff gets "Betting on race 14 has closed; today's video
+    takes bets on race 15", once per player.
+  - Opted-out viewers get no reply, and their comments aren't read.
+- **What a reply guarantees**: the reply's balance is worked out from the bets seen so far, in
+  comment order. Settlement at the cutoff is the real thing: it re-reads everything in posting
+  order, so a comment the API returned late or a deleted bet can change it. The race page on the
+  domain shows the final word. Odds are fixed when a race opens, so the odds in a reply never
+  change.
+- **Pacing**: replies go out through a queue, a few seconds apart, with an hourly cap
+  (`RACING_REPLY_PER_HOUR`). Each kind of reply has several wordings, because many identical
+  replies look like spam. Instagram comments can't carry clickable links, so the domain is plain
+  text there; on YouTube it's a link. If the cap is reached, the rest of the bets still count;
+  they just don't get a reply. The parser is in the style of
   `app/adventure/votes.py`, and it accepts `4 250`, `#4 250`, `250 on 4`, `car 4 £250`,
   `blue streak 300`, `all in on 3`, `4 all` and `4` (= §100). It rejects anything that names two
   cars, or a number with no clear car.
@@ -168,10 +183,11 @@ No ElevenLabs credits are spent, so this channel doesn't touch the shared voice 
 It's a new channel and content kind, alongside `main` (quiz) and `adventure`:
 
 ```
-channels.py      RACING = "racing" → Channel("racing", NAME, "racing", settings.racing_handle, "19:00", …)
+channels.py      RACING = "racing" → Channel("racing", "Sixel Speedway", "racing", settings.racing_handle, "19:00", …)
 app/racing/
   sim.py         seeded race sim, Monte-Carlo odds, car stat drift, seal/reveal
   bets.py        comment → (car, stake) parser (pattern of adventure/votes.py)
+  replies.py     bet replies: wording variants, paced queue, hourly cap
   ledger.py      players, append-only ledger, balances, settle(), weekly bonus, league table
   hooks.py       hook templates chosen from race data
   jobs.py        the daily cycle (pattern of adventure/jobs.py)
@@ -186,6 +202,7 @@ DATA_DIR/racing/ players.json · ledger.jsonl · races/{n}.json (seed, stats, be
 **Daily cycle** (all on the server's scheduler, with no AI step):
 
 ```
+every 15 min while race N is open: read new comments on video N-1 → reply to bets (queue)
 18:00  close betting on race N: read comments on video N-1 (cliffhanger.read_comments)
        → parse bets → new players get §1,000 → debit stakes
        → run race N from its sealed seed → settle → pick hook
@@ -205,7 +222,7 @@ legal pages (built from the channel registry, so the new channel is listed autom
 `GET /racing/races/{n}`, `GET /racing/players?q=`, and `POST /racing/dry-run` (render tomorrow's
 video from today's comments without settling anything).
 
-**The bets domain**: a second domain (e.g. `turbotext.example`) points at the same Easypanel app.
+**The bets domain**: a second domain (e.g. `sixelspeedway.example`) points at the same Easypanel app.
 A small middleware checks the `Host` header against `RACING_DOMAIN`:
 
 - On the bets domain, **only** the racing public pages exist, and everything else is a 404 there
@@ -256,8 +273,8 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
 | M3 | `racing/bets.py` + `ledger.py`: parser, settlement in comment order, weekly bonus, league table | parser table tests (accepts/rejects); ledger replay = balances |
 | M4 | Sound | engines, events and bed mixed; −14 LUFS |
 | M5 | Channel wiring: `channels.py`, `jobs.py`, endpoints, Discord previews, dry run | a week of dry runs on fake comments, posting off |
-| M6 | Bets domain (host-checked middleware, lookup, race pages with seed check, its own privacy/terms), privacy policy + explainer | other paths 404 on the bets domain; racing pages 404 on the main one; opt-out works end to end |
-| M7 | Launch: pick the name, add the domain in Easypanel, connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
+| M6 | Bet replies (15-min comment check, paced queue, wording variants), bets domain (host-checked middleware, lookup, race pages with seed check, its own privacy/terms), privacy policy + explainer | other paths 404 on the bets domain; racing pages 404 on the main one; opt-out works end to end |
+| M7 | Launch: register the domain and add it in Easypanel in Easypanel, connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
 
 ## 10. Risks
 
@@ -269,5 +286,8 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
   parser improves.
 - **Whales and all-ins** dominate the table. That's acceptable, and it's part of the drama. The
   climber line and the weekly bonus keep new players interested.
+- **Reply limits**: Instagram doesn't publish a reply rate limit, and a new account replying a lot
+  can be restricted. Start with a low hourly cap, watch for "action blocked" errors (they go to
+  Discord and pause the queue for an hour), and raise the cap slowly. Bets never depend on replies.
 - **Comment spam for the bonus**: §50 is per *video* commented on, not per comment, so ten comments
   on one video still earn §50. Bets are what multiple comments are for.
