@@ -1,40 +1,50 @@
-# Third channel: Sixel Speedway, teletext car racing you bet on
+# Third channel: Sixel Speedway, retro car racing you bet on
 
-Plan only, no code yet. This is a daily ~35 s vertical video in the style of a 1980s teletext page
-(Ceefax/Oracle): blocky mosaic graphics, the 8 teletext colours, a CRT with scan lines and the odd
-glitch, and synth bleeps only, with no voice. Each video:
+Plan only, no code yet. This is a daily ~35 s vertical video of a simple, retro-looking car race
+with synth sound only and no voice. It runs entirely on the server: there's no AI step and no
+weekly routine. **The v1 look is still being chosen** (see "Design directions"). The teletext
+style is parked for a v2 or a separate channel, so it doesn't tread on a friend's teletext horse
+racing game. Each video:
 
 1. **Hook**: one line about the race that's about to run ("§48,200 riding on one race").
-2. **Race**: the race everyone bet on under the *previous* video, with simple mosaic cars.
+2. **Race**: the race everyone bet on under the *previous* video, with simple cars.
 3. **Result**: who won, the odds, how many backed it, the biggest win.
 4. **Next race card**: six cars, odds and form. Viewers bet by commenting, e.g. `4 250`.
 
 Everyone starts with **§1,000** of play money the first time the bot sees them. Balances persist,
 every known player gets a **weekly bonus**, and once a week (Sunday) the video adds a **league table**.
 
-**Name: Sixel Speedway.** Sixels are the 2×3 teletext mosaic blocks the cars are drawn with.
-A quick web search found no game using the name, but that wasn't a trademark search. RACEFAX
-was dropped because an existing horse racing game uses it. No Ceefax or BBC branding.
+**Name: Sixel Speedway.** "Sixel" comes from the teletext mosaic block, but it reads as
+"pixel-ish" with any retro look, so it works for every direction below. A quick web search found
+no game using the name, but that wasn't a trademark search. RACEFAX was dropped because an
+existing horse racing game uses it. No Ceefax or BBC branding.
 
-## Example screens
+**Bets domain: `race.onlydan.uk`** (a spare domain for now; a dedicated one can replace it later
+by changing `RACING_DOMAIN`, with the old one redirecting).
 
-Rendered by [`racing/mockup.py`](racing/mockup.py), a throwaway sketch rather than the real
-renderer. It's 1080×1920 on a 30×32 teletext grid with the CRT pass applied.
+## Design directions for v1
 
-![Contact sheet](racing/screens/contact-sheet.jpg)
+Four directions, each drawing the same moment (lap 3 of race 14, Hot Pink has just spun) and the
+same race card, so they compare like for like. Rendered by
+[`racing/styles.py`](racing/styles.py), a throwaway sketch.
 
-| | |
-|---|---|
-| [1 Hook](racing/screens/1-hook.jpg) | P301: a big headline, the stake total, a teaser that doesn't spoil the result |
-| [2 Grid](racing/screens/2-grid.jpg) | P302: five red lights, cars on the chequered line, numbered tiles |
-| [3 Race](racing/screens/3-race.jpg) | P302: lap counter, live order tiles, a scrolling straight, an event banner ("HOT PINK SPINS!"), a glitch band |
-| [4 Result](racing/screens/4-result.jpg) | P303: winner and odds, podium, how many backed it, biggest win, how many went bust |
-| [5 Race card](racing/screens/5-race-card.jpg) | P304: odds and form for the next race, how to bet, deadline, "play money, no prizes" |
-| [6 League table](racing/screens/6-league-table.jpg) | P399 (Sundays): top 10 balances with movement arrows, climber of the week |
-| [Safe zones](racing/screens/safe-zones.jpg) | The race card with the Reels/Shorts overlay areas shaded |
+![Four directions](racing/styles/styles-sheet.jpg)
 
-Each still shows one moment. In the video, the header's page number "searches" (P300 → P301…) the
-way real teletext did, and the clock ticks every second.
+| | Look | Race view | Its "glitch" | Sound | For | Against |
+|---|---|---|---|---|---|---|
+| **A. Vector arcade** ([race](racing/styles/a-vector-race.jpg), [card](racing/styles/a-vector-card.jpg)) | 1979 vector monitor: glowing coloured lines on pure black, wireframe cars, mono type | a whole circuit from above, cars as glowing arrows with beam trails | beam wobble, a row jumping sideways, phosphor ghosting | sine/saw bleeps, Asteroids-style thumps | striking and rare on Reels; cheap to draw; reads well small; the closest to the teletext energy without being teletext | needs pace in the motion (a static circuit looks empty); thin lines suffer from compression, so the lines need to stay thick |
+| **B. Handheld LCD** ([race](racing/styles/b-lcd-race.jpg), [card](racing/styles/b-lcd-card.jpg)) | a 1980s pocket LCD game: grey-green glass with the unlit segments faintly visible, a printed colour faceplate, 7-segment odds | 6 lanes × 9 fixed positions; cars jump a segment at a time | slow-pixel smears, a dying-battery fade, segments stuck on | piezo beeps only, which suits "no voice" perfectly | instantly nostalgic; very legible; jerky segment motion is charming rather than cheap; the faceplate is a natural brand space | the least "race-like" motion; it gets harder to show overtakes and spins; a muted palette is less thumb-stopping |
+| **C. Pit wall** ([race](racing/styles/c-pitwall-race.jpg), [card](racing/styles/c-pitwall-card.jpg)) | a modern TV timing screen: dark navy, timing tower with gaps, sector colours, flags | live track map with numbered dots; the tower reorders on overtakes | broadcast dropouts: macroblocking, a frozen strip, "SIGNAL LOST" | data bleeps, a whoosh on each overtake, a synth bed | the best fit for *betting*: gaps, form chips and flags give viewers something to read; feels serious and fair | not retro, and closest to the real F1 TV look (keep it generic, no F1 marks); dots are less fun than cars |
+| **D. 16-bit top-down** ([race](racing/styles/d-16bit-race.jpg), [card](racing/styles/d-16bit-card.jpg)) | a 1990s console racer: pixel-art sprites, kerbs, tyre walls, a pixel font, light scanlines | a scrolling straight seen from above, as in the teletext mock-up but in pixel art | sprite flicker, a scrolling hiccup, a palette flash | chiptune engines, a 4-channel bed | the most "game"; sprites can show spins, smoke and oil properly; easy for everyone to read | a crowded genre; pixel art needs care (sprites, tiles) to look good rather than cheap |
+
+**Recommendation: A (Vector arcade)**, with C's timing tower as the info layer on the race card
+and result. A is the most distinctive, keeps the glowing-screen, synth-and-glitch feel you liked
+in the teletext version, and is no harder to render. B is a strong second if you'd rather lean
+into nostalgia. They could also be combined later: the parked teletext look as v2, or as a "retro
+night" special.
+
+The original teletext mock-ups are kept in [`racing/screens/`](racing/screens/contact-sheet.jpg)
+(drawn by [`racing/mockup.py`](racing/mockup.py)) for the v2 or separate channel.
 
 ## 1. Decisions to make (recommendations first)
 
@@ -48,20 +58,20 @@ way real teletext did, and the clock ticks every second.
 | 6 | League table | **Decided: all-time balance, top 10, on Sundays**, plus a "climber of the week" line so new players have something to win. |
 | 7 | Telling people their balance | **Decided: the bot replies to every bet** with what it took and the balance left, and points at **the bets domain** (§7). The domain is the only place with name lookup, bet history, the league table and each race's seed check. Replies are paced and worded a few ways so Instagram doesn't treat them as spam (§3). |
 | 8 | Provably fair | **Decided: yes.** The caption carries `race 15 seal: 3f9a…` (a SHA-256 of the secret seed), and the next caption reveals the seed. Anyone can re-run the race with the open code. It's cheap and it answers "it's rigged". |
-| 9 | Cars | **A fixed roster of six**, one per teletext colour: 1 RED ROCKET, 2 MEAN GREEN, 3 CUSTARD, 4 BLUE STREAK, 5 HOT PINK, 6 CYANARA. They become characters, and their form means something. White is kept for a guest or "ghost" car on special days. |
+| 9 | Cars | **A fixed roster of six**, one per colour: 1 RED ROCKET, 2 MEAN GREEN, 3 CUSTARD, 4 BLUE STREAK, 5 HOT PINK, 6 CYANARA. They become characters, and their form means something. White is kept for a guest or "ghost" car on special days. |
 
 ## 2. The video (~35 s, ~40 s on Sundays)
 
-| t (s) | Page | What happens | Sound |
+| t (s) | Scene | What happens | Sound |
 |---|---|---|---|
 | 0.0–0.6 | — | Snow and a tuning sweep snap into the page; this matches the end frame, so a replay loops seamlessly | white noise, carrier whine |
-| 0.6–3.0 | P301 | **Hook**, double-height, typed out a row at a time like a page arriving | page-arrive blips |
-| 3.0–5.5 | P302 | Grid. Five red lights come on one by one, then go out | 5 beeps + a long one |
-| 5.5–21 | P302 | **Race**, 3 laps on a scrolling straight. Order tiles reshuffle on overtakes; event banners (SPIN, TURBO, PIT, BLOWN ENGINE); a glitch burst at each big moment | one detuned saw "engine" per car, pitch follows speed; noise crowd |
-| 21–23 | P302 | Chequered flag. On a close finish, a "PHOTO FINISH" freeze with a sixel zoom | crash cymbal (noise) |
-| 23–28 | P303 | **Result**: winner, odds, podium, how many backed it, the biggest win (@name), bust count | chiptune fanfare |
-| (Sun) +5 | P399 | **League table** | jingle |
-| 28–35 | P304 | **Race card** for the next race and how to bet; holds long enough to read, with the fastext row blinking | a jazz-funk synth loop (an original, in the spirit of "Pages from Ceefax") |
+| 0.6–3.0 | Hook | **Hook**, big type, built up a line at a time | blips as it builds |
+| 3.0–5.5 | Grid | Grid. Five red lights come on one by one, then go out | 5 beeps + a long one |
+| 5.5–21 | Race | **Race**, 3 laps (a whole circuit or a scrolling straight, depending on the style). Order tiles reshuffle on overtakes; event banners (SPIN, TURBO, PIT, BLOWN ENGINE); a glitch burst at each big moment | one detuned saw "engine" per car, pitch follows speed; noise crowd |
+| 21–23 | Finish | Chequered flag. On a close finish, a "PHOTO FINISH" freeze with a zoom | crash cymbal (noise) |
+| 23–28 | Result | **Result**: winner, odds, podium, how many backed it, the biggest win (@name), bust count | chiptune fanfare |
+| (Sun) +5 | Table | **League table** | jingle |
+| 28–35 | Card | **Race card** for the next race and how to bet; holds long enough to read | an original synth loop in the chosen style |
 | 35 | — | Picture collapses to a dot and goes to snow (the same frame as 0.0) | power-off thunk |
 
 **Hooks** come from templates filled from the race data; no AI is needed. We already know the
@@ -85,7 +95,7 @@ Every template is true either way, so the hook never lies about the outcome.
   Instagram comments can't be edited).
 - **Bet replies**: the server checks the open post for new comments every 15 minutes until the
   cutoff and replies under each bet, for example:
-  > ✅ §250 on 4 BLUE STREAK at 6/1. §750 left. Every bet and balance: sixelspeedway.example
+  > ✅ §250 on 4 BLUE STREAK at 6/1. §750 left. Every bet and balance: race.onlydan.uk
   - A stake cut to the balance says so: "Only §120 left, so it's §120 on 4 BLUE STREAK at 6/1."
   - With nothing left: "No § left for race 15. Sunday's bonus is §100 plus §50 for each video you
     comment on."
@@ -142,25 +152,21 @@ Every template is true either way, so the hook never lies about the outcome.
 
 ## 5. Look
 
-- **Grid**: 30 columns × 32 rows, with 36×60 px cells (the real 12:20 teletext cell, scaled).
-  Mosaics use 2×3 sixels of 18×20 px, and graphics are kept to the sixel grid. Double-height rows
-  are used for headings. There are 8 colours only: black, red, green, yellow, blue, magenta,
-  cyan and white.
-- **Font**: [Bedstead](https://bjh21.me.uk/bedstead/), a public-domain clone of the SAA5050
-  teletext character ROM. It's bundled with the mock-ups (`docs/racing/Bedstead.otf`) and has `§`.
-- **Safe area**: text stays in **rows 4–23, columns 0–25**. Above that is the Reels header,
-  below is the caption and buttons, and to the right are the like/comment buttons. Track, grass
-  and the chequered strip run under the overlays as decoration (see the safe-zone screen).
-- **CRT pass**: colour fringing (R/B shifted 3 px), bloom, 6 px scan lines, an RGB aperture grille,
-  barrel curvature, vignette, a slow rolling hum bar and light grain.
+The style is open (see "Design directions"). These rules hold whichever one wins:
+
+- **Six colours, always the same per car** (red, green, yellow, blue, magenta, cyan), and the car
+  number is always shown next to the colour, for colour-blind viewers.
+- **Safe area**: text stays inside **x 48–936, y 240–1440** of the 1080×1920 frame. Above that
+  is the Reels header, below is the caption and buttons, and to the right are the like and
+  comment buttons. Scenery can run under the overlays.
 - **Glitches** are events rather than constant noise: a burst of 2–4 frames on the hook, on
-  overtakes, and on result reveals, plus the odd random one. Tearing bands, one wide colour split,
-  and sometimes a dropped row of characters (the "bad reception" look). They can cross any text,
-  including the race card: a burst lasts a split second and the text is readable again straight after.
-- **Compression**: per-frame grain wrecks the bitrate (the 4 s motion test was 12 MB at CRF 20).
-  The real renderer should use a fixed grain texture that shifts each frame, keep its amplitude
-  low, and encode at a capped bitrate. Instagram re-encodes anyway, and scan lines at 6 px survive
-  the downscale on phones better than 4 px.
+  overtakes, and on result reveals, plus the odd random one. Each style has its own kind (see the
+  table). They can cross any text, including the race card: a burst lasts a split second and the
+  text is readable again straight after.
+- **Compression**: per-frame noise wrecks the bitrate (the teletext motion test was 12 MB for 4 s
+  at CRF 20). Use fixed textures that shift rather than fresh noise per frame, keep lines at least
+  4 px thick, and encode at a capped bitrate.
+- **Fonts** are bundled open-licence files (OFL or public domain), as with the other channels.
 
 ## 6. Sound (synth only, no voice)
 
@@ -168,7 +174,7 @@ Built on `app/render/audio.py` / `music.py` (numpy synthesis, already used for t
 
 - **Engines**: one detuned saw per car, low-passed, pitch from speed, panned by lane. It gets
   louder for the leaders.
-- **Teletext noises**: page-arrive blips, the carrier whine on boot, a click on each page change.
+- **Interface noises** (in the chosen style's voice): blips as screens build, a power-on sound, a click on each scene change.
 - **Start**: five 440 Hz beeps and one 880 Hz.
 - **Events**: spin (falling sweep), turbo (rising sweep), blown engine (noise burst), crowd (pink
   noise swell at overtakes and the finish).
@@ -191,8 +197,8 @@ app/racing/
   ledger.py      players, append-only ledger, balances, settle(), weekly bonus, league table
   hooks.py       hook templates chosen from race data
   jobs.py        the daily cycle (pattern of adventure/jobs.py)
-app/render/teletext/
-  page.py        grid, cells, mosaics, double height, Bedstead
+app/render/racing/
+  style.py       the chosen look: palette, fonts, car and track drawing
   crt.py         CRT + glitch pass (precomputed remap/masks; or ffmpeg filters)
   scenes.py      boot, hook, grid, race, flag, result, table, card, power-off
   sound.py       engines, blips, events, bed
@@ -222,7 +228,7 @@ legal pages (built from the channel registry, so the new channel is listed autom
 `GET /racing/races/{n}`, `GET /racing/players?q=`, and `POST /racing/dry-run` (render tomorrow's
 video from today's comments without settling anything).
 
-**The bets domain**: a second domain (e.g. `sixelspeedway.example`) points at the same Easypanel app.
+**The bets domain**: a second domain, `race.onlydan.uk`, points at the same Easypanel app.
 A small middleware checks the `Host` header against `RACING_DOMAIN`:
 
 - On the bets domain, **only** the racing public pages exist, and everything else is a 404 there
@@ -237,8 +243,8 @@ A small middleware checks the `Host` header against `RACING_DOMAIN`:
 - Easypanel needs the extra domain added to the app and a certificate. That's the only
   infrastructure change.
 
-**Renderer language**: **Python** (PIL + numpy), not the adventure's TypeScript/Skia. A teletext
-frame is a character grid plus rectangles, and the existing quiz renderer, ffmpeg piping and synth
+**Renderer language**: **Python** (PIL + numpy), not the adventure's TypeScript/Skia. Every
+direction is lines, rectangles and sprites, and the existing quiz renderer, ffmpeg piping and synth
 are already Python. The mock-up's CRT pass takes about 0.8 s a frame, which is too slow for
 ~1,050 frames. The fix is to precompute the barrel remap, scanline, grille and vignette as one
 multiplier, bloom at quarter resolution, and use 4 worker processes. The target is under 2
@@ -268,13 +274,13 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
 
 | | Deliverable | Done when |
 |---|---|---|
-| M1 | `app/render/teletext`: page, mosaics, double height, CRT, all scenes from fixture data; `render_cli.py --racing fixture.json` | a 35 s video renders in < 2 min; golden-frame tests; the safe-zone test checks every text cell |
+| M1 | `app/render/racing` in the chosen style: all scenes from fixture data; `render_cli.py --racing fixture.json` | a 35 s video renders in < 2 min; golden-frame tests; the safe-zone test checks every text box |
 | M2 | `racing/sim.py`: sim, events, stat drift, seal/reveal, Monte-Carlo odds | determinism test (same seed = same race); odds calibration test |
 | M3 | `racing/bets.py` + `ledger.py`: parser, settlement in comment order, weekly bonus, league table | parser table tests (accepts/rejects); ledger replay = balances |
 | M4 | Sound | engines, events and bed mixed; −14 LUFS |
 | M5 | Channel wiring: `channels.py`, `jobs.py`, endpoints, Discord previews, dry run | a week of dry runs on fake comments, posting off |
 | M6 | Bet replies (15-min comment check, paced queue, wording variants), bets domain (host-checked middleware, lookup, race pages with seed check, its own privacy/terms), privacy policy + explainer | other paths 404 on the bets domain; racing pages 404 on the main one; opt-out works end to end |
-| M7 | Launch: register the domain and add it in Easypanel in Easypanel, connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
+| M7 | Launch (§11): add `race.onlydan.uk` in Easypanel, connect the account; post **Race 0**, a rules video ("comment a car and a stake, you start with §1,000"); race 1 the next day | the first real settlement posts |
 
 ## 10. Risks
 
@@ -291,3 +297,29 @@ minutes a video; if numpy can't get there, the CRT moves to an ffmpeg filter cha
   Discord and pause the queue for an hour), and raise the cap slowly. Bets never depend on replies.
 - **Comment spam for the bonus**: §50 is per *video* commented on, not per comment, so ten comments
   on one video still earn §50. Bets are what multiple comments are for.
+
+## 11. Launch and the first few weeks
+
+A brand-new account gets few views and fewer comments, so the first posts have to work with zero
+or a handful of bets (the adventure channel had the same problem):
+
+- **Race 0** is a rules video: "comment a car and a stake, you start with §1,000, the race runs
+  tomorrow". Race 1 the next day settles its bets. The first video of every week repeats the rules
+  in one line.
+- **Everything has a zero-bets version.** The race always runs. Hooks that don't need bets come
+  first ("CUSTARD HASN'T LOST IN 3", "PHOTO FINISH LAST TIME"). With no bets, the result says
+  "Nobody backed CUSTARD at 12/1. Be the first: comment `3 100`" instead of a biggest win. The
+  league table waits until there are 5 players and shows "the table opens at 5 punters" until then.
+- **The first comment is the bot's own**: an example bet ("Comment like this: `4 250` = §250 on
+  BLUE STREAK"), the way the adventure channel posts its options. It shows the format where people
+  look, and a post that already has a comment gets more comments.
+- **Every early bet gets a reply** (the reply cap won't be reached for a while), which is the best
+  sign that someone is listening.
+- **Launch bonus**: for the first four weeks, the weekly bonus is doubled (§200 plus §100 per video
+  commented on), to reward the first players for sticking around.
+- **Cross-promotion**, done by hand: a story from the quiz and adventure accounts on launch day.
+  Nothing automatic posts about other channels.
+- **Don't judge the first fortnight.** Comment counts (from `/metrics`) are the measure; the hook
+  templates and how long the race card stays up are the first things to adjust.
+- **No house players.** Fake punters would make the table look busy, but they'd be fake comments
+  in a game sold on fairness.
