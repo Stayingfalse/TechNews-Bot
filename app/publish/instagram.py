@@ -38,6 +38,8 @@ def authorize_url(state: str, login: bool = False) -> str:
         "scope": "instagram_business_basic" if login else SCOPES,
         "state": state,
     }
+    if not login:  # connecting: ask which account, rather than taking whichever this browser is signed in to
+        q["force_reauth"] = "true"
     return f"https://www.instagram.com/oauth/authorize?{urlencode(q)}"
 
 

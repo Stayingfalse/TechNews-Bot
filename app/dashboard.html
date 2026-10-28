@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quiz Performance</title>
+<title>Channels Dashboard</title>
 <style>
 /* Layout: one column of cards; filters in one row on top; numbers first, then charts, then the post table. */
 :root {
@@ -111,15 +111,35 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
 #edit-json { width: 100%; height: 50vh; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--axis); border-radius: 8px; padding: 10px; background: var(--page); color: var(--ink); }
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-@media (max-width: 560px) { .day { grid-template-columns: 1fr; gap: 6px; } }
+.acct { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto; gap: 6px 12px; align-items: center;
+        padding: 10px 0; border-top: 1px solid var(--grid); }
+.acct:first-of-type { border-top: 0; }
+.acct .who { font-weight: 600; }
+.acct .who span { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+.acct .state { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; }
+.acct .detail { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; flex-basis: 100%; }
+.pill.ok { border-color: var(--ok); color: var(--ok); }
+.pill.bad { border-color: #d03b3b; color: #d03b3b; font-weight: 600; }
+.pill.warn { border-color: var(--yt); color: var(--yt); }
+a.button { display: inline-block; font-size: 13px; font-weight: 600; text-decoration: none; border-radius: 6px; padding: 5px 10px;
+           border: 1px solid var(--axis); color: var(--ink); white-space: nowrap; }
+a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; }
+.acct.current .who { box-shadow: inset 3px 0 0 var(--ig); padding-left: 10px; }
+.tabs[hidden], .updated[hidden] { display: none; }
+#channel-posts { min-width: 0; }
+.ok-msg { background: var(--surface); border: 1px solid var(--ok); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+@media (max-width: 560px) { .day { grid-template-columns: 1fr; gap: 6px; }
+  .acct { grid-template-columns: 1fr auto; } .acct .state { grid-column: 1 / -1; grid-row: 2; } }
 @media (prefers-reduced-motion: no-preference) { .chart svg rect.bar { transition: opacity .12s; } }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Quiz bot</h1>
-    <nav class="tabs" role="tablist" aria-label="Views">
+    <h1 id="title">Daily quiz</h1>
+    <label for="channel" class="sr">Channel</label>
+    <select id="channel" aria-label="Channel"><option value="main">Daily quiz</option></select>
+    <nav class="tabs" role="tablist" aria-label="Views" id="quiz-tabs">
       <button type="button" role="tab" id="tab-performance" aria-selected="true">Performance</button>
       <button type="button" role="tab" id="tab-schedule" aria-selected="false">Schedule</button>
     </nav>
@@ -127,7 +147,25 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     <a href="/logout" style="margin-left:auto;font-size:13px">Sign out</a>
   </header>
 
-  <div id="connect" class="notice" hidden></div>
+  <div id="connected-msg" class="ok-msg" role="status" hidden></div>
+
+  <section class="card" id="accounts" aria-labelledby="accounts-h">
+    <h2 id="accounts-h">Accounts</h2>
+    <p class="sub" id="accounts-sub">Checking every channel's connections…</p>
+    <div id="accounts-list"></div>
+  </section>
+
+  <div id="view-channel" class="view" hidden>
+    <section class="card" id="channel-summary" hidden></section>
+    <section class="card">
+      <h2>Coming up</h2>
+      <div id="channel-upcoming"></div>
+    </section>
+    <section class="card">
+      <h2>Recent posts</h2>
+      <div class="table-wrap"><table id="channel-posts"></table></div>
+    </section>
+  </div>
 
   <section id="failed" class="notice" hidden aria-labelledby="failed-h">
     <strong id="failed-h">Didn't post everywhere</strong>
@@ -431,31 +469,73 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     box.append(el("div", {}, "Missing watch time or shares usually means the account needs reconnecting with the new permissions."));
   }
 
-  // Platforms whose connection lacks permissions the bot now asks for get a one-tap reconnect.
-  async function connections() {
-    const box = $("connect"); box.replaceChildren(); box.hidden = true;
-    const just = new URLSearchParams(location.search).get("connected");
-    const r = await fetch("/status", auth);
-    if (!r.ok) return;
-    const st = await r.json();
-    const parts = [];
-    if (just && pf(just)) parts.push(el("div", {}, `${pf(just).name} reconnected. New numbers appear after the next fetch.`));
-    for (const [k, v] of Object.entries(st.platforms || {})) {
-      const miss = v.token && v.token.missing;
-      if (!miss || !miss.length) continue;
-      const row = el("div", { style: "margin-top:6px" });
-      row.append(el("strong", {}, `${pf(k).name} needs reconnecting `), document.createTextNode(v.token.permissions_unknown
-        ? "to make sure the bot can read and reply to comments (this connection is older than the bot's permission check). "
-        : `to give the bot ${miss.length} new permission${miss.length > 1 ? "s" : ""} (numbers${k === "youtube" ? ", watch time and comment replies" : " and comment replies"}). `));
-      if (k === "instagram") row.append(el("div", { class: "tags" }, "First, in the Meta app → Instagram → Permissions and features: make sure instagram_business_manage_comments and instagram_business_manage_insights are added."));
-      if (k === "youtube") row.append(el("div", { class: "tags" }, "First, in Google Cloud: enable YouTube Analytics API, and add the youtube.readonly, yt-analytics.readonly and youtube.force-ssl scopes under Google Auth Platform → Data access."));
-      const a = el("a", { href: v.token.reconnect_url, style: "display:inline-block;margin-top:6px;font-weight:600" }, `Reconnect ${pf(k).name}`);
-      row.append(a); parts.push(row);
+  // ------------------------------------------------------------ accounts
+  // Every channel's accounts, checked live. Reconnect needs only this sign-in: the server sends you
+  // to Instagram or Google, which asks which account to use, and back here afterwards.
+  const STATE = {
+    ok: ["Working", "ok"], broken: ["Not working", "bad"], expiring: ["Expiring", "warn"],
+    missing_permissions: ["Needs permissions", "warn"], not_connected: ["Not connected", "bad"],
+    not_configured: ["App not set up", ""],
+  };
+  const HINT = {
+    instagram: "Instagram will ask which account to use: pick @{handle}, not another of your accounts.",
+    youtube: "Google will ask which account: pick the one that owns the {name} channel.",
+  };
+  let channelList = [];
+
+  async function loadAccounts() {
+    const r = await fetch("/connections", auth);
+    if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.search + location.hash); return; }
+    if (!r.ok) { $("accounts-sub").textContent = "Couldn't check the accounts."; return; }
+    const data = await r.json();
+    channelList = data.channels;
+    fillChannels();
+    const list = $("accounts-list"); list.replaceChildren();
+    const bad = data.accounts.filter(a => a.state !== "ok" && a.state !== "not_configured");
+    $("accounts-sub").textContent = bad.length
+      ? `${bad.length} account${bad.length > 1 ? "s need" : " needs"} attention. Reconnect takes about a minute.`
+      : "Every account is connected and working.";
+    // the channel you're looking at first, then problems, then the rest
+    const order = a => (a.channel === currentChannel() ? 0 : 2) + (a.state === "ok" ? 1 : 0);
+    for (const a of [...data.accounts].sort((x, y) => order(x) - order(y))) {
+      const row = el("div", { class: "acct" + (a.channel === currentChannel() ? " current" : "") });
+      const who = el("div", { class: "who" }, `${a.channel_name} · ${a.label}`);
+      const shown = a.account ? (a.platform === "youtube" ? a.account : `@${a.account.replace(/^@/, "")}`)
+                              : (a.handle && a.platform === "instagram" ? `should be @${a.handle}` : "");
+      who.append(el("span", {}, shown));
+      const [label, cls] = STATE[a.state] || [a.state, ""];
+      const st = el("div", { class: "state" });
+      st.append(el("span", { class: "pill " + cls }, label));
+      if (a.state === "ok" && a.expires_in_days != null) st.append(el("span", { class: "tags" }, `login renews itself (${Math.round(a.expires_in_days)} days left)`));
+      if (a.detail) st.append(el("span", { class: "detail" }, a.detail));
+      if (a.state !== "ok" && a.state !== "not_configured" && HINT[a.platform])
+        st.append(el("span", { class: "detail" }, HINT[a.platform].replace("{handle}", a.handle || "the right account").replace("{name}", a.channel_name)));
+      if (a.state === "missing_permissions" && a.platform === "instagram")
+        st.append(el("span", { class: "detail" }, "If it still lacks them afterwards: in the Meta app → Instagram → Permissions and features, add instagram_business_manage_comments and instagram_business_manage_insights."));
+      if (a.state === "missing_permissions" && a.platform === "youtube")
+        st.append(el("span", { class: "detail" }, "If it still lacks them afterwards: in Google Cloud, enable the YouTube Analytics API and add the youtube.readonly, yt-analytics.readonly and youtube.force-ssl scopes."));
+      const acts = el("div");
+      if (a.state !== "not_configured") {
+        const needed = a.state !== "ok";
+        acts.append(el("a", { class: "button" + (needed ? " primary" : ""), href: a.reconnect_url + (token ? (a.reconnect_url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token) : "") },
+          a.state === "not_connected" ? "Connect" : "Reconnect"));
+      }
+      row.append(who, st, acts); list.append(row);
     }
-    if (parts.length) { box.append(...parts); box.hidden = false; }
   }
 
-  // ------------------------------------------------------------ failed posts
+  function connectedMessage() {
+    const q = new URLSearchParams(location.search), just = q.get("connected");
+    if (!just) return;
+    const ch = q.get("channel") || "main";
+    const name = (channelList.find(c => c.id === ch) || {}).name || ch;
+    $("connected-msg").textContent = `${pf(just) ? pf(just).name : just} reconnected for ${name}. It's checked again below.`;
+    $("connected-msg").hidden = false;
+    q.delete("connected");  // a reload shouldn't say it again
+    history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash);
+  }
+
+    // ------------------------------------------------------------ failed posts
   const changeHeaders = { ...(auth.headers || {}), "X-Quizbot": "1" };
   let failedPoll = null, wasRetrying = false;
 
@@ -535,7 +615,7 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     insight = ins.ok ? await ins.json() : null;
     const stamps = posts.flatMap(p => Object.values(p.platforms).map(v => v.latest.at)).filter(Boolean).sort();
     $("updated").textContent = stamps.length ? `Numbers as of ${when(stamps.at(-1))}` : "No numbers collected yet";
-    tagOptions(); render(); renderInsight(); connections(); loadFailed();
+    tagOptions(); render(); renderInsight(); loadFailed();
     document.querySelector("main").style.opacity = 1;
   }
 
@@ -670,21 +750,124 @@ dialog::backdrop { background: rgba(0,0,0,0.4); }
     $("edit").close(); schedMsg("Saved. The video will be made from the new version before it posts.", true); loadSchedule();
   });
 
+  // ------------------------------------------------------------ channels
+  const KIND = { main: "quiz" };
+  function currentChannel() {
+    const q = new URLSearchParams(location.search).get("channel");
+    if (q) return q;
+    try { return localStorage.getItem("dashboard-channel") || "main"; } catch { return "main"; }
+  }
+
+  function fillChannels() {
+    const sel = $("channel"), cur = currentChannel();
+    sel.replaceChildren(...channelList.map(c => el("option", { value: c.id }, c.name)));
+    for (const c of channelList) KIND[c.id] = c.kind;
+    sel.value = channelList.some(c => c.id === cur) ? cur : "main";
+  }
+
+  function setChannel(id) {
+    try { localStorage.setItem("dashboard-channel", id); } catch {}
+    const q = new URLSearchParams(location.search);
+    q.set("channel", id);
+    history.replaceState(null, "", location.pathname + "?" + q + location.hash);
+    showChannel();
+    loadAccounts();
+  }
+  $("channel").addEventListener("change", e => setChannel(e.target.value));
+
+  function showChannel() {
+    const id = currentChannel(), quiz = (KIND[id] || "quiz") === "quiz";
+    const c = channelList.find(c => c.id === id);
+    $("title").textContent = c ? c.name : "Daily quiz";
+    document.title = `${c ? c.name : "Daily quiz"} · Dashboard`;
+    $("quiz-tabs").hidden = !quiz;
+    $("updated").hidden = !quiz;
+    if (quiz) {
+      $("view-channel").hidden = true;
+      showTab(location.hash === "#schedule" ? "schedule" : "performance", true);
+      if (!posts.length) load();
+    } else {
+      for (const t of ["performance", "schedule"]) $(`view-${t}`).hidden = true;
+      $("failed").hidden = true;
+      $("view-channel").hidden = false;
+      loadChannel(id);
+    }
+  }
+
+  const JOB_STATUS = { booked: "Booked", preparing: "Getting ready", voicing: "Recording voice", rendering: "Making video",
+                       queued: "Making video", scheduled: "Video ready", publishing: "Posting now", done: "Posted",
+                       failed: "Failed", missed: "Missed", cancelled: "Cancelled" };
+  const jobTitle = (kind, j) => kind === "racing"
+    ? (j.kind === "launch" ? "Launch: how to play" : j.kind === "preview" ? "Preview" : `Race ${j.run} + card for race ${j.card}`)
+    : (j.spec && j.spec.kind === "story" ? `Episode ${j.spec.ep ?? ""}`.trim() : `Episode 0, part ${(j.spec || {}).part ?? "?"}`);
+
+  async function loadChannel(id) {
+    const kind = KIND[id];
+    const url = kind === "racing" ? "/racing/jobs?limit=30" : "/adventure/jobs?limit=30";
+    const [jr, sr] = await Promise.all([fetch(url, auth), kind === "racing" ? fetch("/racing/state", auth) : Promise.resolve(null)]);
+    if (currentChannel() !== id) return;  // switched again while loading
+    const jobs = jr.ok ? await jr.json() : [];
+    const sum = $("channel-summary"); sum.replaceChildren(); sum.hidden = true;
+    if (sr && sr.ok) {
+      const st = await sr.json(), open = (st.races || []).filter(r => r.status === "open").at(-1);
+      sum.append(el("h2", {}, "Sixel Speedway"));
+      const facts = [`${st.players} players`, open ? `race ${open.no} open until ${when(open.closes_at)}` : "no race open",
+                     `${st.replies.waiting} bet replies waiting`, `${st.replies.sent} sent`];
+      if (st.replies.paused_until) facts.push(`replies paused until ${when(st.replies.paused_until)}`);
+      sum.append(el("p", { class: "sub" }, facts.join(" · ")));
+      if (st.table && st.table.rows && st.table.rows.length) {
+        const ol = el("ol", { style: "margin:0;padding-left:20px;font-size:13px" });
+        for (const r of st.table.rows.slice(0, 5)) ol.append(el("li", {}, `${r.name}: §${r.balance.toLocaleString("en-GB")}`));
+        sum.append(el("div", { class: "tags" }, "League table"), ol);
+      }
+      sum.hidden = false;
+    }
+    const upcoming = jobs.filter(j => ["booked", "preparing", "voicing", "rendering", "queued", "scheduled", "publishing"].includes(j.status) && j.publish_at)
+      .sort((a, b) => a.publish_at.localeCompare(b.publish_at));
+    const up = $("channel-upcoming"); up.replaceChildren();
+    if (!upcoming.length) up.append(el("div", { class: "free" }, "Nothing booked."));
+    for (const j of upcoming) {
+      const row = el("div", { class: "slot", style: "margin-bottom:8px" }), top = el("div", { class: "top" });
+      top.append(el("span", { class: "time" }, when(j.publish_at)), el("span", { class: "title" }, jobTitle(kind, j)),
+                 el("span", { class: "pill" + (j.status === "scheduled" ? " ready" : "") }, JOB_STATUS[j.status] || j.status));
+      row.append(top);
+      if (j.video_url) { const a = el("div", { class: "acts" }); a.append(el("a", { href: j.video_url, target: "_blank", rel: "noopener" }, "Watch preview")); row.append(a); }
+      up.append(row);
+    }
+    const t = $("channel-posts"); t.replaceChildren();
+    const head = el("tr"); for (const h of ["When", "Post", "Status", "Instagram"]) head.append(el("th", {}, h)); t.append(head);
+    const at = j => j.published_at || j.publish_at || j.created_at || "";
+    const done = jobs.filter(j => !upcoming.includes(j) && j.kind !== "preview").sort((a, b) => at(b).localeCompare(at(a)));
+    if (!done.length) { const r = el("tr"); r.append(el("td", { colspan: 4, class: "empty" }, "No posts yet.")); t.append(r); }
+    for (const j of done) {
+      const tr = el("tr"), ig = (j.results || {}).instagram || {};
+      tr.append(el("td", {}, when(at(j))), el("td", {}, jobTitle(kind, j)));
+      const stc = el("td", {}, JOB_STATUS[j.status] || j.status);
+      const err = j.error || (ig.ok === false ? ig.error : "");
+      if (err) stc.append(el("div", { class: "tags", style: "overflow-wrap:anywhere;max-width:420px" }, String(err).slice(0, 240)));
+      const lc = el("td");
+      if (ig.url) lc.append(el("a", { href: ig.url, target: "_blank", rel: "noopener" }, "Open")); else lc.append(document.createTextNode(ig.ok ? "posted" : "–"));
+      tr.append(stc, lc); t.append(tr);
+    }
+  }
+
   // ------------------------------------------------------------ tabs
-  function showTab(name) {
+  function showTab(name, keepHash) {
     for (const t of ["performance", "schedule"]) {
       $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
       $(`view-${t}`).hidden = t !== name;
     }
     if (name === "schedule") loadSchedule();
-    history.replaceState(null, "", `#${name}`);
+    if (!keepHash || location.hash !== "#accounts") history.replaceState(null, "", location.pathname + location.search + `#${name}`);
     if (name === "performance" && posts.length) render();  // charts size to their now-visible column
   }
   $("tab-performance").addEventListener("click", () => showTab("performance"));
   $("tab-schedule").addEventListener("click", () => showTab("schedule"));
-  if (location.hash === "#schedule") showTab("schedule");
-
-  load();
+  (async () => {
+    await loadAccounts();
+    connectedMessage();
+    showChannel();  // the quiz's numbers load from here when it's the channel shown
+  })();
 })();
 </script>
 </body>

@@ -173,6 +173,19 @@ def _channel_id(token: str) -> str:
     return items[0]["id"]
 
 
+def account() -> dict:
+    """The channel the stored token posts to (refreshing the token, so a revoked one shows here)."""
+    r = httpx.get("https://www.googleapis.com/youtube/v3/channels", timeout=30,
+                  params={"part": "snippet", "mine": "true"}, headers={"Authorization": f"Bearer {access_token()}"})
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube channel lookup failed: {r.text[:200]}")
+    items = r.json().get("items") or []
+    if not items:
+        raise RuntimeError("that Google account has no YouTube channel")
+    sn = items[0]["snippet"]
+    return {"id": items[0]["id"], "title": sn.get("title", ""), "handle": sn.get("customUrl", "")}
+
+
 def login_identity(code: str) -> str:
     """Sign-in: which channel did they pick? Uses a throwaway token; the posting token is untouched."""
     r = httpx.post(TOKEN_URL, timeout=30, data={

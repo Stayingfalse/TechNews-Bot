@@ -118,8 +118,9 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /themes/suggestions?days=8` | Themes viewers commented on recent `ask_theme` posts, grouped and ranked |
 | `GET /instagram/media/{id}` | Link, account and time of a published Reel |
 | `GET /status` | Platforms + tokens + connected accounts, posting time, schedule, music library, recent jobs |
+| `GET /connections` | Every channel's accounts, each checked live (`ok`, `broken`, `missing_permissions`, `expiring`, `not_connected`), with its reconnect link. The dashboard's Accounts card. |
 | `GET /music`, `PUT /music/{name}`, `DELETE /music/{name}` | Music library (raw file body, max 40 MB) |
-| `GET /oauth/{youtube,instagram}/start?token=…` | One-time account connection |
+| `GET /oauth/{youtube,instagram}/start?channel=` | Connect or reconnect an account: the dashboard's Reconnect buttons (sign-in is enough, no token). Instagram asks which account to use; another channel's account is refused, and so is a different account from before unless `switch=true`. Signed in, it comes back to the dashboard. |
 | `GET /media/{file}` | Rendered videos (unguessable names; Instagram fetches from here) |
 | `POST /adventure/episode0?voice=&publish=&at=&series=` | Adventure channel: render an Episode 0 part (body `{"part": 1}`, or with `recap`/`fear`/`hero` for parts 2-4), voiced unless `voice=false`, to Discord. `publish=true` posts it now to the adventure Instagram (options as the first comment). `at=09:00` books it: votes on the previous part counted and the video rendered an hour before, posted at that time, and (with `series`, the default) the next part booked for the same time tomorrow, built from this one's votes. |
 | `GET /adventure/jobs`, `GET /adventure/jobs/{id}`, `DELETE /adventure/jobs/{id}` | Adventure jobs: status, votes, video, post; cancel a booked or ready one |
