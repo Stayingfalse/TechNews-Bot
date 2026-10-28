@@ -430,8 +430,9 @@ def _posted_part4(slot):
 
 
 def test_the_first_arc_runs_from_after_episode0_to_tuesday(story):
-    slot = datetime(2026, 10, 27, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
-    jobs.submit({"kind": "episode0", "part": 1}, at=slot, series=True)
+    slot = datetime(2026, 10, 27, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)  # a Tuesday
+    jobs.save({"id": "adv-part1", "kind": "episode0", "spec": {"kind": "episode0", "part": 1}, "series": True,
+               "status": "done", "publish_at": slot.isoformat(), "results": {}})
     e = campaign.expected()
     assert (e["start_date"], e["days"]) == ("2026-10-31", 4)
     assert e["links_from"][0]["id"] == "episode0" and e["links_from"][0]["options"][1]["recap"] == "You chose to pick the old lock."
