@@ -18,7 +18,7 @@ W, H, FPS = 1080, 1920, 30
 # Text must stay inside this box: the Reels/Shorts header is above it, the caption and buttons
 # below it, the like/comment buttons to its right.
 SAFE = (48, 240, 936, 1440)
-SCENES = ("boot", "hook", "rules", "grid", "race", "finish", "result", "table", "card", "outro")
+SCENES = ("boot", "hook", "rules", "grid", "race", "finish", "result", "table", "schedule", "card", "outro")
 FONTS = Path(__file__).resolve().parents[4] / "assets" / "fonts" / "racing"
 
 
@@ -36,6 +36,19 @@ def fit_track(pts, box: tuple[float, float, float, float]) -> np.ndarray:
     p = np.array(pts, float)
     size = min(x1 - x0, y1 - y0)
     return np.stack([x0 + (x1 - x0 - size) / 2 + p[:, 0] * size, y0 + (y1 - y0 - size) / 2 + p[:, 1] * size], 1)
+
+
+def wrap(text: str, width: int) -> list[str]:
+    """Split text into at most two lines of about `width` characters."""
+    rows, cur = [], ""
+    for w in text.split():
+        if len(cur) + len(w) + 1 > width and cur:
+            rows.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+    rows.append(cur)
+    return rows if len(rows) <= 2 else [rows[0], " ".join(rows[1:])]
 
 
 def point_at(track: np.ndarray, frac: float, closed: bool = True) -> tuple[float, float, float]:

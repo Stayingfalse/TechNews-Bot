@@ -138,7 +138,7 @@ Every template is true either way, so the hook never lies about the outcome.
 ## 4. Race formats, tracks and the simulation
 
 **A different race every day**, from a weekly calendar (`RACING_CALENDAR`, keyed by the day the
-race's video posts):
+race's video posts; `a|b` alternates week by week):
 
 | Day | Format | Laps | What decides it | Extras |
 |---|---|---|---|---|
@@ -147,7 +147,7 @@ race's video posts):
 | Wed | **Grand Prix** | 5 | a mix: fast straights and every kind of corner | slipstreaming, light tyre wear |
 | Thu | **Figure 8** | 8 | grip and acceleration | tangles at the crossing |
 | Fri | **Drag** | one run | acceleration and the start (reaction times) | jump starts are disqualified |
-| Sat | **Endurance** | 24 | tyres, reliability, then pace | tyre wear, pit stops (~24 s, the odd slow one), punctures, more breakdowns |
+| Sat | **Endurance** (every other week; an oval in between) | 18 | tyres, reliability, then pace | tyre wear, about two pit stops each (~24 s, the odd slow one), punctures, more breakdowns |
 | Sun | **Grand Prix** | 5 | as Wednesday | plus the league table |
 
 **Tracks** (`app/racing/tracks.py`) are new for every race, generated from a public track seed
@@ -164,6 +164,16 @@ car has a strength, so each format has its own favourite: 1 RED ROCKET top speed
 after every race, pulled back towards each car's character. The race card's form column shows
 each car's last five results **in that format**.
 
+**Commentary** (`app/racing/commentary.py`): while the race runs, a box above the timing tower
+types out light-hearted lines about what's actually happening: the start, lead changes, spins,
+punctures, pit stops (and slow ones), tangles, breakdowns, the last lap, close battles, runaway
+leaders and whoever's last, plus a word about one of the cars in quiet moments ("Custard: smooth
+as... well, custard."). The best moments win the screen for 2.6 s each; wording is picked with the
+race's seed, so a re-render says the same. Text only: the channel has no voice.
+
+**Coming up**: before the race card, every video shows the next five days' races (format and laps),
+with endurance weeks marked.
+
 **The simulation** (`app/racing/sim.py`):
 
 - Each car gets a speed profile for the track: its top speed caps it on straights, its grip caps it
@@ -173,7 +183,7 @@ each car's last five results **in that format**.
   (less for consistent cars), spins (mostly in corners), slipstreaming, punctures, breakdowns,
   pit stops, tangles at the crossing, reaction times and jump starts.
 - Races run in real time (a 30-minute endurance race, a 10-second drag run) and are fitted to
-  their slot in the video: sped up (endurance gets 50 s on screen, about ×37, with a "×37 SPEED" badge) or slowed down. Gaps in the timing
+  their slot in the video: sped up (endurance gets 40 s on screen, about ×37, with a "×37 SPEED" badge) or slowed down. Gaps in the timing
   tower are real race seconds.
 - **Seed**: drawn when betting opens and kept private. The caption publishes the seal,
   `sha256("race|seed|format|track seed|stats")`, and the next video's caption reveals the seed.

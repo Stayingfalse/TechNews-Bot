@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..config import settings
-from . import hooks, races, sim
+from . import commentary, hooks, races, sim
 
 
 def format_part(fmt: str) -> dict:
@@ -29,6 +29,7 @@ def race_part(race: dict) -> dict:
     for k in ("wear", "pit", "reaction"):
         if k in res:
             out[k] = res[k]
+    out["commentary"] = commentary.lines(out, int(race["seal"][:8], 16))
     return out
 
 
@@ -50,11 +51,22 @@ def card_part(race: dict) -> dict:
             "closes": closes.strftime("%a %H:%M").upper()}
 
 
+def schedule_part(card_race: dict, days: int = 5) -> list[dict]:
+    """The coming races, from the card's race on: what runs on which day."""
+    out = []
+    for k, row in enumerate(races.upcoming(card_race["closes_at"], days)):
+        day = datetime.fromisoformat(row["date"])
+        fmt = card_race["format"] if k == 0 else row["format"]
+        out.append({"day": "TOMORROW" if k == 0 else day.strftime("%a %d").upper(), "format": format_part(fmt),
+                    "no": card_race["no"] + k, "open": k == 0})
+    return out
+
+
 def spec(theme: str, card_race: dict, ran: dict | None = None, settled: dict | None = None,
          table: dict | None = None, bust: int = 0) -> dict:
     """A race video (ran = the race just run), or the launch video (ran None: rules then the card)."""
     out = {"theme": theme, "cars": sim.CARS, "domain": settings.racing_domain, "card": card_part(card_race),
-           "seed": int(card_race["seal"][:8], 16)}
+           "schedule": schedule_part(card_race), "seed": int(card_race["seal"][:8], 16)}
     if ran is None:
         out.update(launch=True, hook=hooks.LAUNCH)
         return out

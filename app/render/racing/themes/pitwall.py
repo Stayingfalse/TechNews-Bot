@@ -12,7 +12,7 @@ import math
 import numpy as np
 from PIL import Image, ImageDraw
 
-from .base import FPS, H, SAFE, W, Theme, fit_track, font, point_at
+from .base import FPS, H, SAFE, W, Theme, fit_track, font, point_at, wrap
 
 NAVY, PANEL, PANEL2 = (10, 14, 30), (22, 28, 52), (28, 36, 66)
 MUTED, DIM, WHITE = (140, 150, 190), (60, 70, 110), (255, 255, 255)
@@ -21,9 +21,10 @@ COLOURS = {"red": (232, 52, 52), "green": (40, 200, 110), "yellow": (250, 205, 4
            "magenta": (240, 80, 190), "cyan": (30, 210, 230)}
 DARK_TEXT = {"green", "yellow", "cyan"}  # colours that need dark type on them
 X0, X1 = SAFE[0] + 12, SAFE[2] - 6  # text column
-MAP_BOX = (110, 390, 970, 1090)  # where the track map goes
+MAP_BOX = (110, 400, 970, 1000)  # where the track map goes
 TOWER_Y, ROW = 1150, 48
-LANES_Y = (1060, 420)  # drag strip: start line, finish line
+LANES_Y = (980, 430)  # drag strip: start line, finish line
+BOX_Y = 1012  # the commentary box, above the timing tower
 EVENTS = {"spin": "SPINS!", "blowup": "ENGINE FAILURE", "puncture": "PUNCTURE", "tangle": "TANGLE AT THE CROSSING",
           "jumpstart": "JUMP START · OUT", "pit": "PITS"}
 YELLOW_FLAG = {"spin", "blowup", "puncture", "tangle"}
@@ -254,16 +255,53 @@ class PitWall(Theme):
             self.pill(d, X1, 300, "YELLOW", YELLOW)
         elif not self.drag:
             self.pill(d, X1, 300, "GREEN", GREEN)
-        if ev and (ev["kind"] != "pit" or ev.get("dur", 0) > 27):
-            no = ev["car"]
-            label = EVENTS[ev["kind"]] if ev["kind"] != "pit" else f"SLOW STOP · {ev['dur']:.1f}s"
-            fill = RED if ev["kind"] in ("blowup", "jumpstart") else self.colour(no)
-            ink = WHITE if ev["kind"] in ("blowup", "jumpstart") else self.ink_on(no)
-            d.rectangle([X0 - 12, 1092, X1 + 6, 1140], fill=fill)
-            line = f"{self.car_name(no)} · {label}"
-            self.text(d, (X0, 1116), line, self.fit(line, "bold", 34, X1 - X0), ink, anchor="lm")
         self._dots(d, t)
+        self._commentary(d, t)
         self._tower(d, t)
+        return im
+
+    def _commentary(self, d, t: float) -> None:
+        """The line being said now, typed out, in a box with the car's colour down its side."""
+        line = next((c for c in self.race.get("commentary", []) if c["t"] <= t < c["until"]), None)
+        if not line:
+            return
+        d.rounded_rectangle([X0 - 12, BOX_Y, X1 + 6, BOX_Y + 128], 16, fill=PANEL2)
+        if line.get("car"):
+            d.rounded_rectangle([X0 - 12, BOX_Y, X0 + 4, BOX_Y + 128], 8, fill=self.colour(line["car"]))
+        shown = line["text"][: max(1, int(len(line["text"]) * min(1.0, (t - line["t"]) / 0.45)))]
+        rows = wrap(line["text"], 38)
+        f = min((self.fit(r, "bold", 36, X1 - X0 - 40) for r in rows), key=lambda f: f.size)
+        n = 0
+        for i, row in enumerate(rows):
+            part = shown[n:n + len(row)]
+            n += len(row) + 1
+            if part:
+                self.text(d, (X0 + 24, BOX_Y + 20 + i * 48), part, f, WHITE)
+
+    def _schedule(self, t: float, dur: float) -> Image.Image:
+        """Coming up: the next five days' races."""
+        im = self.bg.copy()
+        d = ImageDraw.Draw(im)
+        self.header(d, "THE WEEK AHEAD")
+        self.text(d, (X0, 296), "COMING UP", font("black", 84), WHITE)
+        for i, row in enumerate(self.spec["schedule"]):
+            if t < 0.15 + i * 0.12:
+                break
+            y = 440 + i * 150
+            fmt = row["format"]
+            hot = fmt["key"] == "endurance"
+            d.rounded_rectangle([X0 - 12, y, X1 + 6, y + 132], 20, fill=PANEL if not row["open"] else (36, 44, 80))
+            if row["open"]:
+                d.rounded_rectangle([X0 - 12, y, X0 + 8, y + 132], 8, fill=YELLOW)
+            self.text(d, (X0 + 30, y + 24), row["day"], font("semi", 30), YELLOW if row["open"] else MUTED)
+            self.text(d, (X0 + 30, y + 64), fmt["name"].upper(), font("black", 50), WHITE)
+            laps = f"{fmt['laps']} LAPS" if fmt["laps"] > 1 else "1/4 MILE"
+            self.text(d, (X1 - 150, y + 24), laps, font("mono", 28), MUTED, anchor="ra")
+            if row["open"]:
+                self.text(d, (X1 - 150, y + 72), "BETS OPEN", font("bold", 30), YELLOW, anchor="ra")
+            elif hot:
+                self.text(d, (X1 - 150, y + 72), "PIT STOPS", font("bold", 30), AMBER, anchor="ra")
+            icon(d, fmt["key"], X1 - 70, y + 66, AMBER if hot else (150, 160, 200))
         return im
 
     def _flag(self, d, x1: int, y: int) -> None:
@@ -484,6 +522,25 @@ class PitWall(Theme):
         a[y:y + 30, :, 0] = np.roll(a[y:y + 30, :, 0], 14, axis=1)
         a[y:y + 30, :, 2] = np.roll(a[y:y + 30, :, 2], -14, axis=1)
         return Image.fromarray(a)
+
+
+def icon(d: ImageDraw.ImageDraw, kind: str, cx: float, cy: float, col) -> None:
+    """A little line drawing of each kind of track, about 100 px across."""
+    if kind == "oval":
+        d.rounded_rectangle([cx - 28, cy - 44, cx + 28, cy + 44], 28, outline=col, width=6)
+    elif kind == "figure8":
+        d.ellipse([cx - 22, cy - 46, cx + 22, cy - 2], outline=col, width=6)
+        d.ellipse([cx - 22, cy + 2, cx + 22, cy + 46], outline=col, width=6)
+    elif kind == "drag":
+        for x in (-20, 0, 20):
+            d.line([(cx + x, cy - 44), (cx + x, cy + 44)], fill=col, width=6)
+    elif kind == "rally":
+        pts = [(cx - 40, cy + 30), (cx - 22, cy - 20), (cx - 6, cy + 18), (cx + 10, cy - 30), (cx + 26, cy + 10), (cx + 40, cy - 34)]
+        d.line(pts, fill=col, width=6, joint="curve")
+    else:  # gp, endurance
+        pts = [(cx - 40, cy + 34), (cx - 40, cy - 10), (cx - 12, cy - 40), (cx + 38, cy - 30), (cx + 20, cy + 4),
+               (cx + 40, cy + 34), (cx - 40, cy + 34)]
+        d.line(pts, fill=col, width=6, joint="curve")
 
 
 def draw_track(d: ImageDraw.ImageDraw, track: np.ndarray, full: bool = True) -> None:

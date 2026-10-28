@@ -77,6 +77,40 @@ def test_drag_races_have_reaction_times_and_no_laps():
     assert all(t is None or 8 < t < 14 for t in res["times"].values())
 
 
+def test_endurance_comes_every_other_saturday():
+    from datetime import date
+
+    sats = [races.format_on(date(2026, 10, 31) + timedelta(weeks=k)) for k in range(4)]
+    assert sats.count("endurance") == 2 and sats[0] != sats[1]
+    assert races.format_on(date(2026, 11, 2)) == "oval" and races.format_on(date(2026, 11, 6)) == "drag"
+    assert sim.FORMATS["endurance"]["laps"] == 18
+
+
+def test_the_video_shows_the_week_ahead():
+    race = _race(1)
+    sched = video.schedule_part(race)
+    assert len(sched) == 5 and sched[0]["day"] == "TOMORROW" and sched[0]["open"]
+    assert sched[0]["format"]["key"] == race["format"] and [r["no"] for r in sched] == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.parametrize("fmt", ["gp", "endurance", "drag"])
+def test_commentary_follows_the_race_and_never_overlaps(fmt):
+    race = races.draft(1, STATS, "2026-10-27T18:00:00+00:00", "2026-10-28T17:00:00+00:00", fmt)
+    race["result"] = races.run(race)
+    part = json.loads(json.dumps(video.race_part(race)))
+    lines = part["commentary"]
+    assert len(lines) >= 2
+    for a, b in zip(lines, lines[1:]):
+        assert a["until"] <= b["t"]
+    assert all(0 < c["t"] and c["until"] <= part["race_end"] for c in lines)
+    names = {c["name"].title() for c in sim.CARS}
+    assert all(any(n in c["text"] for n in names) or "mile" in c["text"].lower() for c in lines)
+    spun = {e["car"] for e in part["events"] if e["kind"] == "spin"}
+    for c in lines:  # a spin line names a car that really spun
+        if "spin" in c["text"].lower() and c.get("car"):
+            assert c["car"] in spun
+
+
 def test_odds_carry_the_margin_and_cover_every_car():
     chances = sim.win_chances(STATS, "gp", 11, runs=3000)
     assert abs(sum(chances) - 1) < 1e-9

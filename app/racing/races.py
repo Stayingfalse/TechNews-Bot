@@ -54,13 +54,27 @@ def public(race: dict) -> dict:
     return out
 
 
+def format_on(day) -> str:
+    """The calendar's format for a date (RACING_CALENDAR). "a|b" alternates by ISO week."""
+    options = settings.racing_calendar.get(DAYS[day.weekday()], "gp").split("|")
+    fmt = options[day.isocalendar()[1] % len(options)].strip()
+    return fmt if fmt in sim.FORMATS else "gp"
+
+
 def format_for(closes_at: str) -> str:
-    """The calendar's format for the day a race's video posts (RACING_CALENDAR)."""
+    """The format for a race, from the day its video posts (bets close the same day)."""
     from datetime import datetime
 
-    day = DAYS[datetime.fromisoformat(closes_at).astimezone(settings.tz).weekday()]
-    fmt = settings.racing_calendar.get(day, "gp")
-    return fmt if fmt in sim.FORMATS else "gp"
+    return format_on(datetime.fromisoformat(closes_at).astimezone(settings.tz).date())
+
+
+def upcoming(closes_at: str, days: int = 5) -> list[dict]:
+    """The calendar from a race's video day on: [{date, format}], the first being that race."""
+    from datetime import datetime, timedelta
+
+    first = datetime.fromisoformat(closes_at).astimezone(settings.tz).date()
+    return [{"date": (first + timedelta(days=k)).isoformat(), "format": format_on(first + timedelta(days=k))}
+            for k in range(days)]
 
 
 def open_race(no: int, stats: list[dict], opened_at: str, closes_at: str, fmt: str | None = None) -> dict:

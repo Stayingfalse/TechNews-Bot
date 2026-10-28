@@ -1,8 +1,8 @@
 """The race video: scenes in order, glitch moments, sound, and the ffmpeg encode. Theme-agnostic:
 the spec names its theme, and the theme draws each scene.
 
-Scenes: boot → hook → grid → race → finish → result → [table on Sundays] → card → outro.
-A launch video ("launch": true) is boot → hook → rules → card → outro. The outro fades back to
+Scenes: boot → hook → grid → race → finish → result → [table on Sundays] → schedule → card → outro.
+A launch video ("launch": true) is boot → hook → rules → schedule → card → outro. The outro fades back to
 the boot screen's first frame, so an autoplay replay loops without a jump.
 """
 from __future__ import annotations
@@ -31,12 +31,12 @@ GLITCH_FRAMES = 3
 
 def timeline(spec: dict) -> list[tuple[str, float]]:
     if spec.get("launch"):
-        return [("boot", 0.6), ("hook", 2.8), ("rules", 9.0), ("card", 8.0), ("outro", 0.6)]
+        return [("boot", 0.6), ("hook", 2.8), ("rules", 9.0), ("schedule", 3.5), ("card", 8.0), ("outro", 0.6)]
     scenes = [("boot", 0.6), ("hook", 2.6), ("grid", 3.0), ("race", spec["race"]["race_end"]),
               ("finish", 2.2), ("result", 5.0)]
     if spec.get("table"):
         scenes.append(("table", 5.0))
-    return scenes + [("card", 7.5), ("outro", 0.6)]
+    return scenes + [("schedule", 3.5), ("card", 7.5), ("outro", 0.6)]
 
 
 def starts(scenes: list[tuple[str, float]]) -> dict[str, float]:
@@ -89,6 +89,9 @@ def sfx(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, str]]:
         ev.append((at["finish"], "flag"))
         ev.append((at["result"], "reveal"))
         ev += [(at["result"] + 0.6 + i * 0.35, "blip") for i in range(4)]
+    if "race" in at:  # a blip as each commentary line types out
+        ev += [(at["race"] + c["t"], "blip") for c in spec["race"].get("commentary", [])]
+    ev += [(at["schedule"] + 0.2 + i * 0.12, "blip") for i in range(0, 5, 2)]
     if "table" in at:
         ev += [(at["table"] + 0.2 + i * 0.08, "blip") for i in range(0, 10, 3)]
     ev.append((at["card"], "card"))
