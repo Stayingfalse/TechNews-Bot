@@ -683,6 +683,40 @@ def privacy_erase(req: PrivacyRequest):
     return {"erased": req.user, "records_changed": privacy.erase(req.user)}
 
 
+class CreditRequest(BaseModel):
+    platform: str = Field(pattern="^(instagram|youtube)$")
+    comment_id: str = Field(min_length=1, max_length=100)
+    user: str = Field(min_length=1, max_length=80)
+    text: str = Field(default="", max_length=200)
+    message: str = Field(default="", max_length=300, description="The reply; defaults to the usual 'your theme won' one")
+
+
+@app.post("/jobs/{job_id}/credit", dependencies=[Depends(require_token)])
+def credit_theme(job_id: str, req: CreditRequest):
+    """Credit a viewer for a posted quiz's theme after the fact: records them as `picked_by` and
+    replies under their suggestion (for a pick that went out uncredited)."""
+    from .publish import PUBLISHERS
+    from .spec import PickedBy
+
+    job = store.get_job(job_id)
+    if not job or job.get("status") != "done":
+        raise HTTPException(404, "no posted quiz with that id")
+    if privacy.is_opted_out(req.user):
+        raise HTTPException(409, "that viewer opted out")
+    res = job.get("results", {}).get(req.platform, {})
+    message = req.message or themes.REPLIES[req.platform].format(url=res.get("url") or "")
+    with channels.use(job.get("channel")):
+        try:
+            PUBLISHERS[req.platform].reply(req.comment_id, message)
+        except Exception as e:
+            raise HTTPException(502, str(e)[:300])
+    job["spec"]["picked_by"] = PickedBy(user=req.user.lstrip("@"), platform=req.platform, comment_id=req.comment_id,
+                                        text=req.text).model_dump()
+    job["picked_reply"] = {"ok": True, "user": req.user.lstrip("@"), "late": True, "at": store.now_iso()}
+    store.save_job(job)
+    return {"credited": req.user, "job_id": job_id, "reply": message}
+
+
 @app.get("/themes/suggestions", dependencies=[Depends(require_token)])
 def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked

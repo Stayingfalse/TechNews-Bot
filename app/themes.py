@@ -23,11 +23,24 @@ NOT_A_THEME = re.compile(r"^(\d+\s*(/\s*\d+|out of \d+)?|first|me|yes|no|lol|hah
                          r"easy|hard|too easy|too hard|great|good|fun)\W*$", re.I)
 
 
+# Words that make a comment a sentence about the quiz rather than a topic ("I would never have
+# guessed shining", "can't decide if I prefer...", "had no clue for round 4")
+SENTENCE = re.compile(r"(?i)\b(i|i'?m|i'?ve|i'?d|my|me|we|our|you|your|it'?s|this|that|was|were|is|are|am|would|should|"
+                      r"can'?t|didn'?t|don'?t|won'?t|wasn'?t|isn'?t|got|get|guess(ed)?|knew|know|think|thought|"
+                      r"prefer|had|have|has|never|clue|answer|round|question|wrong|right|score|voice|video|videos)\b")
+MAX_WORDS = 5
+
+
 def _theme_text(text: str) -> str | None:
+    """The theme a comment suggests, or None if it reads as a reaction, an answer or a sentence."""
     t = re.sub(r"@\w[\w.]*", " ", text)  # drop tags of friends
-    t = re.sub(r"(?i)\b(theme|next week|please|pls|plz|do|can you|could you|how about|maybe)\b[:!,.]*", " ", t)
+    t = re.sub(r"(?i)\b(theme|next week|please|pls|plz|do|can you|could you|how about|maybe|what about)\b[:!,.?]*", " ", t)
     t = " ".join(t.split()).strip(" -:,.!?")
-    if not 2 <= len(t) <= 60 or not re.search(r"[A-Za-z]", t) or NOT_A_THEME.match(t):
+    t = re.sub(r"(?i)^(a|an|the|some)\s+(?=\S+\s)", "", t)  # "a Harry Potter one" -> "Harry Potter one"
+    t = re.sub(r"(?i)\s+(one|quiz|round|edition|special)$", "", t).strip()
+    if not 2 <= len(t) <= 40 or not re.search(r"[A-Za-z]", t) or NOT_A_THEME.match(t):
+        return None
+    if len(t.split()) > MAX_WORDS or SENTENCE.search(t) or t.count(",") > 1:
         return None
     if any(b in t.lower() for b in BLOCKED):
         return None

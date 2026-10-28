@@ -15,6 +15,11 @@ from tests.helpers import comment, posted
     ("do marvel next week", "marvel"),
     ("5/5", None), ("4 out of 5", None), ("lol", None), ("too easy", None), ("🔥🔥", None),
     ("fuck off", None),
+    ("Disney movies", "Disney movies"), ("can you do a Harry Potter one?", "Harry Potter"), ("what about 90s cartoons", "90s cartoons"),
+    ("Star Wars quiz pls", "Star Wars"), ("Lord of the Rings", "Lord of the Rings"),
+    ("I would never have guessed shining.", None), ("can't decide if I prefer the videos without a voice or not", None),
+    ("Also had no clue for Round 4", None), ("this was so hard", None), ("you got me", None),
+    ("my favourite was the last one honestly it was great", None),
 ])
 def test_theme_text(text, theme):
     assert themes._theme_text(text) == theme
@@ -47,3 +52,22 @@ def test_winner_gets_one_reply(quiz, platforms):
     themes.after_publish(job)
     assert [(p, k, c) for p, k, c, _ in platforms["calls"]] == [("instagram", "reply", "c1")]
     assert job["picked_reply"] == {"ok": True, "user": "early_bird"}
+
+
+def test_late_credit_replies_and_records(quiz, platforms):
+    from fastapi.testclient import TestClient
+
+    from app import privacy, store
+    from app.main import app
+
+    posted("disney-1", quiz, hours_ago=20)
+    c = TestClient(app)
+    auth = {"Authorization": "Bearer test-token"}
+    body = {"platform": "instagram", "comment_id": "c9", "user": "@fan_1", "text": "Disney movies", "message": "Thanks!"}
+    r = c.post("/jobs/disney-1/credit", headers=auth, json=body)
+    assert r.status_code == 200
+    assert platforms["calls"][-1] == ("instagram", "reply", "c9", "Thanks!")
+    job = store.get_job("disney-1")
+    assert job["spec"]["picked_by"]["user"] == "fan_1" and job["picked_reply"]["ok"]
+    privacy.opt_out("other")
+    assert c.post("/jobs/disney-1/credit", headers=auth, json=dict(body, user="other")).status_code == 409
