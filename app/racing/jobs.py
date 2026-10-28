@@ -29,6 +29,8 @@ from . import ledger, races, replies, sim, video
 log = logging.getLogger(__name__)
 _render_lock = threading.Lock()
 MISSED_AFTER = timedelta(hours=6)
+STALE = timedelta(minutes=20)  # in progress this long untouched, and not ours: the process doing it died
+_mine: set[str] = set()  # jobs this process is preparing or posting
 LATE_REPLY_HOURS = 48  # answer bets left under an old post for this long after it closed
 WORKING = ("preparing", "rendering", "publishing")
 
@@ -114,6 +116,19 @@ def can_publish() -> str | None:
         if not store.get_tokens("instagram"):
             return "Instagram isn't connected for the racing channel: /oauth/instagram/start?channel=racing"
     return None
+
+
+def _spawn(target, job: dict, name: str) -> None:
+    """Run a step in its own thread, remembered as ours while it runs (so recover() leaves it be)."""
+    _mine.add(job["id"])
+
+    def run() -> None:
+        try:
+            target(job)
+        finally:
+            _mine.discard(job["id"])
+
+    threading.Thread(target=run, args=(), daemon=True, name=name).start()
 
 
 def _new_id(kind: str) -> str:
@@ -434,17 +449,18 @@ def post(job: dict) -> None:
 
 
 def retry(job: dict) -> dict:
-    """A failed post: post the video again (rendering it again if it's gone)."""
-    if job.get("status") != "failed":
-        raise ValueError("only failed jobs can be retried")
+    """A failed or missed post: post the video now (rendering it again if it's gone)."""
+    if job.get("status") not in ("failed", "missed"):
+        raise ValueError("only failed or missed jobs can be retried")
+    job["retry"] = True  # posts as soon as it's ready, however long ago its slot was
     if not job.get("video") or not (settings.videos_dir / job["video"]).exists():
-        job.update(status="booked", error=None)
+        job.update(status="preparing", error=None)  # not "booked": the next tick would prepare it a second time
         save(job)
-        threading.Thread(target=prepare, args=(job,), daemon=True).start()
+        _spawn(prepare, job, f"racing-{job['id']}")
     else:
         job.update(status="publishing", error=None, results={})
         save(job)
-        threading.Thread(target=post, args=(job,), daemon=True).start()
+        _spawn(post, job, f"racing-post-{job['id']}")
     return job
 
 
@@ -508,7 +524,7 @@ def tick(t: datetime | None = None) -> None:
         if job.get("status") not in ("booked", "scheduled"):
             continue
         due = datetime.fromisoformat(job["publish_at"])
-        if t - due > MISSED_AFTER:
+        if t - due > MISSED_AFTER and not job.get("retry"):
             job.update(status="missed", error=f"the server was not running at {due.isoformat()}")
             save(job)
             notify.send(f":warning: **Sixel Speedway**: `{job['id']}` missed its slot ({_local(job['publish_at'])}). "
@@ -516,16 +532,24 @@ def tick(t: datetime | None = None) -> None:
         elif job["status"] == "booked" and t >= due - _lead(job):
             job["status"] = "preparing"
             save(job)
-            threading.Thread(target=prepare, args=(job,), daemon=True, name=f"racing-{job['id']}").start()
+            _spawn(prepare, job, f"racing-{job['id']}")
         elif job["status"] == "scheduled" and t >= due:
             job["status"] = "publishing"
             save(job)
-            threading.Thread(target=post, args=(job,), daemon=True, name=f"racing-post-{job['id']}").start()
+            _spawn(post, job, f"racing-post-{job['id']}")
 
 
-def recover() -> None:
+def recover(stale: timedelta = STALE) -> None:
+    """Jobs left mid-way by a process that died. Only ones untouched for `stale` and not ours: during
+    a deploy the old server is still finishing its own, and preparing a race twice settles it twice."""
+    cutoff = time.time() - stale.total_seconds()
     for job in recent(200):
         st = job.get("status")
+        if st not in WORKING or job["id"] in _mine:
+            continue
+        p = _jobs_dir() / f"{job['id']}.json"
+        if p.exists() and p.stat().st_mtime > cutoff:
+            continue
         if st in ("preparing", "rendering"):
             job["status"] = "booked"  # races already run aren't re-run (_run_race checks)
             save(job)
@@ -583,6 +607,7 @@ def _loop() -> None:
             if lease.held() and state().get("started"):
                 if time.time() - last_tick > 30:
                     last_tick = time.time()
+                    recover()
                     tick()
                 if time.time() - last_poll > settings.racing_poll_minutes * 60:
                     last_poll = time.time()
@@ -596,5 +621,4 @@ def _loop() -> None:
 
 
 def start_background() -> None:
-    recover()
     threading.Thread(target=_loop, daemon=True, name="racing-schedule").start()

@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import health as monitoring  # "health" is the /health endpoint below
-from . import channels, legal, metrics, notify, pipeline, privacy, social, store, themes
+from . import channels, connections, legal, metrics, notify, pipeline, privacy, social, store, themes
 from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
@@ -188,6 +188,15 @@ def status():
         "recent_jobs": [{k: j.get(k) for k in ("id", "status", "created_at", "video_url", "error")} for j in store.list_jobs(5)],
         "channels": {cid: _channel_status(cid) for cid in channels.registry()},
     }
+
+
+@app.get("/connections", dependencies=[Depends(require_token)])
+def get_connections():
+    """Every channel's accounts, each checked live: state (ok, broken, missing_permissions,
+    expiring, not_connected, not_configured), which account it is, and its reconnect link."""
+    return {"channels": [{"id": cid, "name": ch.name, "kind": ch.kind, "handle": ch.brand_handle}
+                         for cid, ch in channels.registry().items()],
+            "accounts": connections.report()}
 
 
 def _channel_status(cid: str) -> dict:
@@ -663,7 +672,9 @@ REQUESTS_PER_HOUR = 10
 
 
 def _form_limited(request: Request) -> bool:
-    ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?")
+    # Cloudflare's header names the real visitor; the first X-Forwarded-For entry is whatever the client wrote
+    ip = (request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+          or (request.client.host if request.client else "?"))
     now = time.time()
     recent = [t for t in _request_times.get(ip, []) if now - t < 3600]
     _request_times[ip] = recent + [now]
@@ -1039,13 +1050,28 @@ def delete_music(name: str):
 
 # ------------------------------------------------------------------ OAuth (one-time browser setup)
 
-_states: dict[str, tuple[str, float, str, str]] = {}  # state -> (provider, expiry, "connect"|"login", next page | channel)
+# state -> (provider, expiry, "login", next page) or (provider, expiry, "connect", channel, switch)
+_states: dict[str, tuple] = {}
 PROVIDERS = PUBLISHERS
+
+
+def _new_state(entry: tuple) -> str:
+    """Remember an OAuth round trip, dropping expired ones (/login/... is public, so this must not grow)."""
+    t = time.time()
+    for k in [k for k, v in _states.items() if v[1] < t]:
+        _states.pop(k, None)
+    state = secrets.token_urlsafe(16)
+    _states[state] = entry
+    return state
 
 
 def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
     html = (Path(__file__).parent / "login.html").read_text()
     return HTMLResponse(html.replace("{{title}}", title).replace("{{body}}", body), status_code=status)
+
+
+def _connected_anywhere(provider: str) -> bool:
+    return any(store.get_tokens(provider, channel=c) for c in channels.registry())
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -1056,7 +1082,7 @@ def login_page(request: Request, next: str = "/dashboard"):
         return RedirectResponse(nxt)
     buttons = "".join(
         f'<a class="btn {p}" href="/login/{p}?next={quote(nxt)}">Sign in with {LABELS[p]}</a>'
-        for p in ("instagram", "youtube") if PUBLISHERS[p].configured() and store.get_tokens(p))
+        for p in ("instagram", "youtube") if PUBLISHERS[p].configured() and _connected_anywhere(p))
     if not buttons:
         buttons = '<p class="note">No account is connected yet. Use the API token for now.</p>'
     return _page("Sign in", f"<h1>Quiz bot</h1><p class='note'>Sign in with the account the bot posts to.</p>{buttons}")
@@ -1064,11 +1090,10 @@ def login_page(request: Request, next: str = "/dashboard"):
 
 @app.get("/login/{provider}")
 def login_start(provider: str, next: str = "/dashboard"):
-    if provider not in ("instagram", "youtube") or not store.get_tokens(provider):
+    if provider not in ("instagram", "youtube") or not _connected_anywhere(provider):
         raise HTTPException(404)
-    state = secrets.token_urlsafe(16)
     nxt = next if next.startswith("/") and not next.startswith("//") else "/dashboard"
-    _states[state] = (provider, time.time() + 600, "login", nxt)
+    state = _new_state((provider, time.time() + 600, "login", nxt))
     return RedirectResponse(PROVIDERS[provider].authorize_url(state, login=True))
 
 
@@ -1080,16 +1105,17 @@ def logout():
 
 
 @app.get("/oauth/{provider}/start", dependencies=[Depends(require_token)])
-def oauth_start(provider: str, channel: str = channels.MAIN):
-    """Connect a platform account. ?channel=adventure connects that channel's own account; approve
-    it while signed in to that account (a private window avoids picking up the quiz's login)."""
+def oauth_start(provider: str, channel: str = channels.MAIN, switch: bool = False):
+    """Connect (or reconnect) a channel's account on a platform. Works from the dashboard with the
+    sign-in cookie. ?channel=adventure connects that channel's own account. A reconnect must approve
+    the same account as before (switch=true connects a different one on purpose), and never one that
+    another channel already posts to."""
     mod = PROVIDERS.get(provider)
     if not mod:
         raise HTTPException(404)
     if channel not in channels.registry():
         raise HTTPException(404, f"no channel {channel!r}; channels: {sorted(channels.registry())}")
-    state = secrets.token_urlsafe(16)
-    _states[state] = (provider, time.time() + 600, "connect", channel)
+    state = _new_state((provider, time.time() + 600, "connect", channel, switch))
     return RedirectResponse(mod.authorize_url(state))
 
 
@@ -1103,13 +1129,9 @@ def oauth_callback(request: Request, provider: str, code: str = "", state: str =
         raise HTTPException(400, f"{provider} returned an error: {error} {error_description}")
     if expected[2] == "login":
         return _finish_login(provider, code.removesuffix("#_"), expected[3])
-    channel = expected[3] or channels.MAIN
-    if channel != channels.MAIN:
-        return _connect_channel(provider, channel, code.removesuffix("#_"))
-    PROVIDERS[provider].exchange_code(code.removesuffix("#_"))
-    if valid_session(request.cookies.get(SESSION_COOKIE, "")):  # started from the dashboard: go back there
-        return RedirectResponse(f"/dashboard?connected={provider}")
-    return f"<h2>{LABELS[provider]} connected ✔</h2><p>You can close this tab.</p>"
+    signed_in = valid_session(request.cookies.get(SESSION_COOKIE, ""))
+    return _connect(provider, expected[3] or channels.MAIN, code.removesuffix("#_"),
+                    switch=len(expected) > 4 and expected[4], signed_in=signed_in)
 
 
 def _account_name(provider: str) -> str:
@@ -1117,26 +1139,60 @@ def _account_name(provider: str) -> str:
     return acct.get("username") or acct.get("title") or PROVIDERS[provider].connected_identity() or "an account"
 
 
-def _connect_channel(provider: str, channel: str, code: str):
-    """Save another channel's connection, refusing the account the quiz already posts to."""
+def _stored_identity(provider: str, tok: dict | None) -> str | None:
+    """Which account a saved connection belongs to, from what was saved (no network)."""
+    if not tok:
+        return None
+    return str(tok.get("user_id") or tok.get("channel_id") or "") or None
+
+
+def _identity(provider: str, channel: str) -> str | None:
+    with channels.use(channel):
+        try:
+            return PROVIDERS[provider].connected_identity()
+        except Exception:  # a dead connection still names its account in what was saved
+            return _stored_identity(provider, store.get_tokens(provider))
+
+
+def _connect(provider: str, channel: str, code: str, switch: bool = False, signed_in: bool = False):
+    """Save a channel's connection. Refused (and the old one put back) when the approved account is
+    one another channel posts to, or, on a reconnect, a different account from before."""
     mod, ch = PROVIDERS[provider], channels.get(channel)
+    again = f"/oauth/{provider}/start" + ("" if channel == channels.MAIN else f"?channel={channel}")
+    retry = f"<a class='btn {provider}' href='{escape(again)}'>Try again</a>"
     with channels.use(channel):
         previous = store.get_tokens(provider)
-        mod.exchange_code(code)
-        who = mod.connected_identity()
-    with channels.use(channels.MAIN):
-        main_who = mod.connected_identity()
-    if who and main_who and who == main_who:
+        before = _stored_identity(provider, previous)
+        try:
+            mod.exchange_code(code)
+        except Exception as e:
+            logging.getLogger(__name__).warning("%s connect failed (%s): %s", provider, channel, e)
+            return _page("Not connected", f"<h1>Not connected</h1><p class='note'>{escape(str(e)[:300])}</p>{retry}", 400)
+    who = _identity(provider, channel)
+    clash = next((c for c in channels.registry() if c != channel and who and _identity(provider, c) == who), None)
+    refused = None
+    if clash:
+        other = channels.get(clash)
+        refused = _page("Wrong account", f"<h1>That's the {escape(other.name)} account</h1><p class='note'>You approved "
+                        f"with the {LABELS[provider]} account that <b>{escape(other.name)}</b> posts to. Choose "
+                        f"<b>@{escape(ch.brand_handle)}</b> instead when {LABELS[provider]} asks which account.</p>{retry}", 409)
+    elif before and who and who != before and not switch:
+        switch_url = again + ("&" if "?" in again else "?") + "switch=true"
+        refused = _page("Different account", f"<h1>That's a different account</h1><p class='note'><b>{escape(ch.name)}</b> "
+                        f"was connected to another {LABELS[provider]} account, so nothing was changed. Choose "
+                        f"<b>@{escape(ch.brand_handle)}</b> when {LABELS[provider]} asks.</p>{retry}"
+                        f"<a class='btn plain' href='{escape(switch_url)}'>Connect a different account on purpose</a>", 409)
+    if refused:
         store.set_tokens(provider, previous, channel=channel)  # put back whatever was there
-        return _page("Wrong account", f"<h1>That's the quiz's account</h1><p class='note'>You approved with the "
-                     f"{LABELS[provider]} account the quiz already posts to. Sign in to <b>@{escape(ch.brand_handle)}</b> "
-                     "(a private window is easiest) and start again.</p>", 409)
+        return refused
     with channels.use(channel):
         name = _account_name(provider)
-    expected = ch.brand_handle.lower().lstrip("@")
-    note = "" if not expected or name.lower().lstrip("@") == expected else (
-        f"<p class='note'>Expected @{escape(expected)}. If that's wrong, sign in to the right account and start again.</p>")
     notify.send(f":link: **{ch.name}**: {LABELS[provider]} connected as @{name}")
+    if signed_in:  # started from the dashboard: go back there
+        return RedirectResponse(f"/dashboard?connected={provider}&channel={channel}#accounts", status_code=303)
+    expected = ch.brand_handle.lower().lstrip("@")
+    note = "" if provider != "instagram" or not expected or name.lower().lstrip("@") == expected else (
+        f"<p class='note'>Expected @{escape(expected)}. If that's wrong, sign in to the right account and start again.</p>")
     return _page("Connected", f"<h1>{LABELS[provider]} connected ✔</h1><p>@{escape(name)} is now connected to the "
                  f"<b>{escape(ch.name)}</b> channel.</p>{note}<p class='note'>You can close this tab.</p>")
 
@@ -1144,7 +1200,7 @@ def _connect_channel(provider: str, channel: str, code: str):
 def _finish_login(provider: str, code: str, nxt: str):
     mod = PROVIDERS[provider]
     try:
-        who, owner = mod.login_identity(code), mod.connected_identity()
+        who = mod.login_identity(code)
     except Exception as e:
         # 400, not 5xx: Cloudflare swaps an origin 502 for its own "Bad gateway" page, hiding this message
         logging.getLogger(__name__).warning("%s sign-in failed: %s", provider, e)
@@ -1153,9 +1209,11 @@ def _finish_login(provider: str, code: str, nxt: str):
                 if provider == "youtube" and "scope" in str(e).lower() else "")
         return _page("Sign-in failed", f"<h1>Sign-in failed</h1><p class='note'>{escape(str(e)[:300])}{hint}</p>"
                      "<a class='btn plain' href='/login'>Try again</a>", 400)
-    if not owner or not secrets.compare_digest(who, owner):
-        return _page("Not this account", f"<h1>That's a different account</h1><p class='note'>Sign in with the "
-                     f"{LABELS[provider]} account this bot posts to.</p><a class='btn plain' href='/login'>Try again</a>", 403)
+    # any channel's account will do: they're all yours, and the browser is often signed in to another one
+    owners = [o for c in channels.registry() if (o := _identity(provider, c))]
+    if not any(secrets.compare_digest(who, o) for o in owners):
+        return _page("Not this account", f"<h1>That's a different account</h1><p class='note'>Sign in with one of the "
+                     f"{LABELS[provider]} accounts this bot posts to.</p><a class='btn plain' href='/login'>Try again</a>", 403)
     resp = RedirectResponse(nxt or "/dashboard")
     resp.set_cookie(SESSION_COOKIE, make_session(provider), max_age=SESSION_DAYS * 86400, httponly=True,
                     secure=settings.public_base_url.startswith("https"), samesite="lax", path="/")

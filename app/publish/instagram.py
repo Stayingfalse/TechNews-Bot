@@ -38,7 +38,17 @@ def authorize_url(state: str, login: bool = False) -> str:
         "scope": "instagram_business_basic" if login else SCOPES,
         "state": state,
     }
+    if not login:  # connecting: ask which account, rather than taking whichever this browser is signed in to
+        q["force_reauth"] = "true"
     return f"https://www.instagram.com/oauth/authorize?{urlencode(q)}"
+
+
+def _ok(r: httpx.Response, what: str) -> dict:
+    """The JSON body, or an error naming the step. Not raise_for_status(): its message carries the
+    request URL, and these URLs carry the access token or the app secret."""
+    if r.status_code >= 400:
+        raise RuntimeError(f"Instagram {what} failed (HTTP {r.status_code}): {r.text[:300]}")
+    return r.json()
 
 
 def _save(token: str, expires_in: int, user_id: str | None = None, permissions: list | None = None) -> dict:
@@ -65,8 +75,7 @@ def exchange_code(code: str) -> dict:
         },
         timeout=30,
     )
-    r.raise_for_status()
-    short = r.json()
+    short = _ok(r, "code exchange")
     r = httpx.get(
         "https://graph.instagram.com/access_token",
         params={
@@ -76,8 +85,7 @@ def exchange_code(code: str) -> dict:
         },
         timeout=30,
     )
-    r.raise_for_status()
-    long = r.json()
+    long = _ok(r, "long-lived token exchange")
     perms = short.get("permissions")
     if isinstance(perms, str):
         perms = perms.split(",")
@@ -95,8 +103,7 @@ def refresh_if_needed(force: bool = False) -> None:
             params={"grant_type": "ig_refresh_token", "access_token": tok["access_token"]},
             timeout=30,
         )
-        r.raise_for_status()
-        d = r.json()
+        d = _ok(r, "token refresh")
         _save(d["access_token"], d.get("expires_in", 5184000))
 
 

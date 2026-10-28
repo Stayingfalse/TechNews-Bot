@@ -18,8 +18,7 @@ def claim() -> None:
 
 
 def held() -> bool:
-    """True while this process holds the lease (refreshing it as a heartbeat)."""
-    if store._read("lease.json", {}).get("holder") != ME:
-        return False
-    claim()
-    return True
+    """True while this process holds the lease. Only reads: writing it back here (as a heartbeat)
+    could land just after a new server's claim() and take the lease back for the old one, which
+    then stops with nobody left scheduling."""
+    return store._read("lease.json", {}).get("holder") == ME
