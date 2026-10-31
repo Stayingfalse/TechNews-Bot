@@ -108,22 +108,30 @@ Rules:
 
 
 def _ask(messages: list[dict]) -> tuple[dict, dict]:
-    """One API call: (parsed json, usage). Blank or unparseable content is retried once."""
+    """One API call: (parsed json, usage). Blank or unparseable content is retried once.
+    Thinking is off: it's a short rewrite, and with it on the reasoning used up max_tokens before any
+    json came out (finish_reason "length", blank content)."""
+    why = ""
     for _ in range(2):
+        req = {"model": settings.deepseek_model, "messages": messages, "max_tokens": 1200,
+               "temperature": 0.9, "response_format": {"type": "json_object"}}
+        if settings.deepseek_thinking in ("disabled", "enabled"):
+            req["thinking"] = {"type": settings.deepseek_thinking}
         r = httpx.post(f"{settings.deepseek_base_url}/chat/completions", timeout=90,
-                       headers={"Authorization": f"Bearer {settings.deepseek_api_key}"},
-                       json={"model": settings.deepseek_model, "messages": messages, "max_tokens": 900,
-                             "temperature": 0.9, "response_format": {"type": "json_object"}})
+                       headers={"Authorization": f"Bearer {settings.deepseek_api_key}"}, json=req)
         if r.status_code >= 400:
             raise WriterError(f"DeepSeek {r.status_code}: {r.text[:200]}")
         body = r.json()
-        content = (body["choices"][0]["message"].get("content") or "").strip()
+        choice = body["choices"][0]
+        content = (choice["message"].get("content") or "").strip()
         if content:
             try:
                 return json.loads(content), body.get("usage") or {}
             except json.JSONDecodeError:
-                pass
-    raise WriterError("DeepSeek returned no usable json")
+                why = f"not json: {content[:80]!r}"
+                continue
+        why = f"blank content (finish_reason {choice.get('finish_reason')!r})"
+    raise WriterError(f"DeepSeek returned no usable json: {why}")
 
 
 def _apply(node: dict, out: dict) -> dict:

@@ -207,7 +207,7 @@ Comments do more than vote ([docs/VOICES_STORY_PLAN.md](docs/VOICES_STORY_PLAN.m
   is sent back with its problems at most twice, and otherwise the plan plays as written. It's only ever given
   `writer.prompt_input()`: the plan, the hero, recent episodes' text, the arc's notes, the party as story characters and
   totals. Never usernames, comments or anything about a viewer (tests/test_writer.py). Settings: `DEEPSEEK_API_KEY` (off
-  without it), `DEEPSEEK_MODEL` (`deepseek-flash`), `DEEPSEEK_BASE_URL`, `ADVENTURE_WRITER=off` to switch it off.
+  without it), `DEEPSEEK_MODEL` (`deepseek-flash`), `DEEPSEEK_BASE_URL`, `DEEPSEEK_THINKING` (`disabled`: the reasoning otherwise uses up the reply), `ADVENTURE_WRITER=off` to switch it off.
 - **Moderation** also covers the first shouters, the shouted word ("Remake without this word": the writer writes the day
   again without it) and the writer's text ("Use the planned text"). Changing the text means new narration, so it costs voice credits.
 - Only totals are kept with an episode.

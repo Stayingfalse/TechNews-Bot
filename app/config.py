@@ -95,6 +95,7 @@ class Settings:
         self.deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
         self.deepseek_base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
         self.adventure_writer = os.environ.get("ADVENTURE_WRITER", "deepseek").strip().lower()
+        self.deepseek_thinking = os.environ.get("DEEPSEEK_THINKING", "disabled").strip().lower()  # disabled / enabled / default
 
         # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
         # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.
