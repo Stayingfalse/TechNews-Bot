@@ -284,3 +284,169 @@ def overview() -> dict:
         "example_arc": json.loads((settings.adventure_dir / "examples" / "arc-s1w1.json").read_text())
         if (settings.adventure_dir / "examples" / "arc-s1w1.json").exists() else None,
     }
+
+
+# ------------------------------------------------------------------ the story map (dashboard)
+
+_odds_cache: dict[str, dict] = {}
+
+
+def _hero_odds(hero: dict | None) -> dict:
+    """{skill: {dc: percent}} for this hero, from the engine (cached: it only changes with a new hero)."""
+    if not hero:
+        return {}
+    key = json.dumps(hero, sort_keys=True)
+    if key not in _odds_cache:
+        try:
+            _odds_cache[key] = {k: v.get("success_pct_by_dc") or {} for k, v in vocab(hero).get("skills", {}).items()}
+        except Exception:
+            return {}
+    return _odds_cache[key]
+
+
+def _local_date(iso: str | None) -> str | None:
+    return datetime.fromisoformat(iso).astimezone(settings.tz).date().isoformat() if iso else None
+
+
+def _episode0_chain(all_jobs: list[dict]) -> list[dict]:
+    """The posted (and booked) Episode 0 parts of the current series, part 1 first."""
+    by_from = {j["from_job"]: j for j in all_jobs if j.get("from_job") and j.get("status") not in ("cancelled",)}
+    starts = [j for j in all_jobs if j.get("kind") == "episode0" and j.get("series") and (j.get("spec") or {}).get("part") == 1
+              and j.get("publish_at") and j.get("status") not in ("cancelled", "failed", "missed")]
+    if not starts:
+        return []
+    chain = [max(starts, key=lambda j: j["publish_at"])]
+    while (nxt := by_from.get(chain[-1]["id"])) and nxt.get("kind") == "episode0":
+        chain.append(nxt)
+    return chain
+
+
+def story_map() -> dict:
+    """Every scene of the campaign so far and to come, how they connect, and the path the votes took.
+
+    nodes: {id, kind (episode0|story|unwritten), date, title, status, ...details}
+      status: played | ready (rendered, posting soon) | next (booked, its vote still open) |
+              possible (still reachable) | missed (a path not taken) | upcoming (Episode 0, not yet booked)
+    edges: {from, to, letter, label, status (taken|chosen|possible|missed), votes?, breaks?, default?}"""
+    from . import jobs as jobs_mod
+    all_jobs = jobs_mod.recent(500)
+    by_id = {j["id"]: j for j in all_jobs}
+    s = state()
+    odds = _hero_odds(s["hero"])
+    nodes: dict[str, dict] = {}
+    edges: list[dict] = []
+    LETTER = "ABC"
+
+    def votes_on(job_id: str) -> dict | None:
+        """The vote counted on a post: kept on the job made from it."""
+        nxt = next((j for j in all_jobs if j.get("from_job") == job_id and j.get("votes")), None)
+        return nxt["votes"] if nxt else None
+
+    # Episode 0: one node per part, joined by the winning answer
+    chain = _episode0_chain(all_jobs)
+    first = datetime.fromisoformat(chain[0]["publish_at"]).astimezone(settings.tz).date() if chain else None
+    for part in range(1, 5):
+        job = chain[part - 1] if part <= len(chain) else None
+        sc = (job or {}).get("script") or {}
+        status = {"done": "played", "scheduled": "ready", "publishing": "ready"}.get((job or {}).get("status"), "next" if job else "upcoming")
+        nodes[f"episode0-{part}"] = {
+            "id": f"episode0-{part}", "kind": "episode0", "part": part, "title": f"Episode 0 · part {part}",
+            "date": _local_date(job.get("publish_at")) if job else (first + timedelta(days=part - 1)).isoformat() if first else None,
+            "status": status, "options": sc.get("options") or [], "default": sc.get("default"),
+            "job": (job or {}).get("id"), "url": ((job or {}).get("results", {}).get("instagram") or {}).get("url"),
+            "video_url": (job or {}).get("video_url"), "error": (job or {}).get("error")}
+        if part > 1:
+            v = votes_on(chain[part - 2]["id"]) if part - 2 < len(chain) else None
+            edges.append({"from": f"episode0-{part - 1}", "to": f"episode0-{part}", "letter": LETTER[v["pick"]] if v else "",
+                          "label": v["option"] if v else "the vote", "status": "taken" if v else "possible",
+                          "votes": v and {"counts": v["counts"], "how": v["how"]}})
+
+    # the story: every node of every arc
+    arc_list = arcs()
+    played = [h["node"] for h in s["history"]]
+    pending = sorted((j for j in all_jobs if j.get("kind") == "story" and j.get("node")
+                      and j.get("status") in ("preparing", "voicing", "rendering", "scheduled", "publishing")),
+                     key=lambda j: j.get("publish_at") or "")
+    for arc in arc_list:
+        start = date.fromisoformat(arc["start_date"])
+        for n in arc["nodes"]:
+            ck = n.get("check")
+            nodes[n["id"]] = {
+                "id": n["id"], "kind": "story", "arc": arc["id"], "arc_title": arc["title"],
+                "date": (start + timedelta(days=n["day"])).isoformat(), "title": " ".join(n["hook"]).title(),
+                "scene": n["scene"].get("name") or n["scene"]["type"], "scene_type": n["scene"]["type"], "foe": n.get("foe"),
+                "story": n["story"], "ask": n["ask"], "rest": bool(n.get("rest")), "after": n.get("after"),
+                "check": ck and {**ck, "pct": odds.get(ck["skill"], {}).get(str(ck["dc"]))},
+                "default": n["default"], "status": "missed"}
+        for n in arc["nodes"]:
+            for i, c in enumerate(n["choices"]):
+                if c.get("next"):
+                    targets = [c["next"]]
+                else:  # the last day: the next arc picks it up, or it's still to be written
+                    after = next((a for a in arc_list if n["id"] in a["links"]), None)
+                    if after:
+                        targets = [after["links"][n["id"]][i]]
+                    else:
+                        tbd = f"unwritten-{arc['id']}"
+                        nodes.setdefault(tbd, {"id": tbd, "kind": "unwritten", "title": "Next week",
+                                               "date": (start + timedelta(days=arc["days"])).isoformat(), "status": "possible",
+                                               "story": "Not written yet: the weekly routine writes it on Tuesday at 00:05."})
+                        targets = [tbd]
+                for t in targets:
+                    edges.append({"from": n["id"], "to": t, "letter": LETTER[i], "label": c["label"], "status": "missed",
+                                  "breaks": c.get("breaks"), "default": i == n["default"]})
+        if "episode0" in arc["links"]:
+            for i, t in enumerate(arc["links"]["episode0"]):
+                edges.append({"from": "episode0-4", "to": t, "letter": LETTER[i], "label": FIRST_CHOICES[i], "status": "missed",
+                              "default": None})
+
+    # the path taken: Episode 0, then each played episode, then whatever is being made now
+    def mark_edge(a: str, b: str, pick: int | None, status: str, votes: dict | None = None) -> None:
+        for e in edges:
+            if e["from"] == a and e["to"] == b and (pick is None or e["letter"] == LETTER[pick]):
+                e["status"] = status
+                if votes:
+                    e["votes"] = {"counts": votes.get("counts"), "how": votes.get("how")}
+                return
+
+    prev = "episode0-4"
+    for h in s["history"]:
+        job = by_id.get(h.get("job") or "") or {}
+        roll = ((job.get("spec") or {}).get("check") or {}).get("roll")
+        nodes.get(h["node"], {}).update(status="played", ep=h["ep"], success=h.get("success"), hearts=h.get("hearts"),
+                                        roll=roll and {"total": roll.get("total"), "kept": roll.get("kept"), "mod": roll.get("mod"),
+                                                       "ok": roll.get("ok"), "natural": roll.get("natural")},
+                                        url=((job.get("results") or {}).get("instagram") or {}).get("url"))
+        mark_edge(prev, h["node"], h.get("pick"), "taken", job.get("votes"))
+        prev = h["node"]
+    for j in pending:
+        nodes.get(j["node"], {}).update(status="ready", ep=(j.get("spec") or {}).get("ep"), video_url=j.get("video_url"))
+        mark_edge(prev, j["node"], (j.get("votes") or {}).get("pick"), "chosen", j.get("votes"))
+        prev = j["node"]
+
+    # what can still happen: everything reachable from where the story stands now
+    at = prev if (s["history"] or pending) else ("episode0-4" if nodes.get("episode0-4") else None)
+    frontier, seen = [at] if at else [], set()
+    while frontier:
+        cur = frontier.pop()
+        for e in edges:
+            if e["from"] == cur and e["status"] == "missed":
+                e["status"] = "possible"
+                if e["to"] not in seen:
+                    seen.add(e["to"])
+                    if nodes.get(e["to"], {}).get("status") == "missed":
+                        nodes[e["to"]]["status"] = "possible"
+                    frontier.append(e["to"])
+    # tomorrow's options are being voted on now
+    if at and nodes.get(at, {}).get("status") in ("played", "ready"):
+        for e in edges:
+            if e["from"] == at and e["status"] == "possible" and nodes.get(e["to"], {}).get("kind") != "episode0":
+                nodes[e["to"]]["voting"] = True
+    for n in nodes.values():  # Episode 0 parts are a fixed line, never "missed"
+        if n["kind"] == "episode0" and n["status"] == "missed":
+            n["status"] = "upcoming"
+
+    return {"nodes": list(nodes.values()), "edges": edges, "at": at,
+            "hero": s["hero"], "fear": s["fear"], "hearts": s["hearts"], "ep": s["ep"], "dead": s["dead"],
+            "rules_broken": s["rules_broken"], "arcs": [{"id": a["id"], "title": a["title"], "start_date": a["start_date"],
+                                                          "days": a["days"]} for a in arc_list]}
