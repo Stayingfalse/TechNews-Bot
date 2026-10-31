@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type StorySpec, dailyText, planStory, resolveNode, scriptStory } from "../packages/engine/src/index.ts";
+import { type StorySpec, WAY_SKILLS, dailyText, planStory, resolveNode, scriptStory, waySkill } from "../packages/engine/src/index.ts";
+import { modifier, odds } from "../packages/engine/src/sheet.ts";
 import { type ArcContext, type ArcNode, Story, validateArc } from "../packages/shared/src/index.ts";
 import { assembleStory } from "../packages/renderer/src/assemble.ts";
 import { loadFonts, mapFor, prepare } from "../packages/renderer/src/canvas.ts";
@@ -74,6 +75,20 @@ describe("resolveNode", () => {
     expect(resolveNode(node("gate-force"), { ...ctx, dice: [1] }).check!.roll).toMatchObject({ ok: false, natural: 1 });
     const hard = { ...node("gate-force"), check: { ...node("gate-force").check!, dc: 20 } };
     expect(resolveNode(hard, { ...ctx, dice: [20] }).check!.roll).toMatchObject({ ok: true, natural: 20 });
+  });
+  it("the Voices: the winning way picks the hero's best skill for it, and Rally adds to the roll", () => {
+    const base = resolveNode(node("gate-force"), ctx).check!;
+    const sly = resolveNode(node("gate-force"), { ...ctx, way: "sly", rally: 2 });
+    expect(WAY_SKILLS.sly).toContain(sly.check!.skill);
+    expect(sly.check!.skill).toBe(waySkill(hero.cls, "sly"));
+    expect(sly.check).toMatchObject({ way: "sly", rally: 2 });
+    expect(sly.check!.roll.mod).toBe(modifier(hero.cls, sly.check!.skill) + 2);
+    expect(sly.check!.roll.p).toBeGreaterThan(odds(modifier(hero.cls, sly.check!.skill), sly.check!.dc) - 1e-9);
+    expect(base.way).toBeUndefined();
+    expect(base.rally).toBeUndefined();
+    const withParty = { ...sly, party: [{ name: "Ash", cls: "rogue", look: 1, handle: "mira" }], credits: { rolledBy: "amy" },
+      voices: { ways: [1, 5, 0], way: "sly", voters: 12 } };
+    expect(() => Story.parse(withParty)).not.toThrow();
   });
   it("advantage keeps the higher die, disadvantage the lower", () => {
     const n = node("gate-force");

@@ -22,7 +22,7 @@ from pathlib import Path
 from .. import channels, lease, notify, privacy, store
 from ..config import settings
 from ..publish import instagram
-from . import campaign, votes, voice
+from . import campaign, party, votes, voice
 
 log = logging.getLogger(__name__)
 _render_lock = threading.Lock()
@@ -171,10 +171,17 @@ def _resolve_votes(job: dict) -> None:
     if error:
         how = "default (comments unreadable)" if not any(t["counts"]) else how
         notify.send(f":warning: **Adventure**: couldn't read the votes on `{prev['id']}` ({error}); going with {'ABC'[pick]}")
+    way = votes.top_way(t["ways"])
     job["votes"] = {"from_job": prev["id"], "counts": t["counts"], "comments": t["comments"], "voters": len(t["voters"]),
-                    "pick": pick, "how": how, "option": opts[pick], "counted_at": store.now_iso()}
+                    "pick": pick, "how": how, "option": opts[pick], "counted_at": store.now_iso(),
+                    "ways": t["ways"], "way": votes.WAYS[way] if way is not None else None,
+                    "joins": len(t["joins"]), "leaves": len(t["leaves"])}  # totals only
     if job["kind"] == "story":
-        job.update(campaign.build_story(prev, pick, t["counts"]))
+        ep = campaign.state()["ep"] + 1
+        moved = party.update(ep, t)
+        bonus = party.rally(len(t["voters"]))
+        job.update(campaign.build_story(prev, pick, t["counts"], job["votes"]["way"], bonus))
+        _add_party(job, party.pick_roller(ep, t["voters"]), moved)
     else:
         job["spec"] = next_spec(prev["spec"], pick, t["counts"])
         campaign.note_episode0(job["spec"])
@@ -184,6 +191,82 @@ def _resolve_votes(job: dict) -> None:
     rolled = f"\nRolled {roll['total']} vs DC {job['spec']['check']['dc']}: {'success' if roll['ok'] else 'failure'}" if roll else ""
     notify.send(f":ballot_box: **Adventure votes** on {_title(prev)}: {counts} "
                 f"({t['comments']} comments) → **{'ABC'[pick]}: {opts[pick]}** ({how}){rolled}")
+
+
+def _add_party(job: dict, roller: str | None, moved: dict | None = None) -> None:
+    """The party, credits and the Voices' totals into today's spec, and what needs a moderation look:
+    every name about to be shown that hasn't been approved before."""
+    comp = party.spec_party()
+    spec = job["spec"]
+    spec["party"] = [{k: c[k] for k in ("name", "cls", "look", "handle")} for c in comp]
+    spec["credits"] = {"rolledBy": party.shown_name(roller)}
+    v = job.get("votes") or {}
+    spec["voices"] = {"ways": v.get("ways") or [0, 0, 0], "way": v.get("way"), "voters": v.get("voters", 0)}
+    items = [{"kind": "party", "key": c["key"], "handle": c["handle"], "companion": c["name"]} for c in comp if c["handle"]]
+    if spec["credits"]["rolledBy"]:
+        items.append({"kind": "rolled_by", "key": roller.lower(), "handle": spec["credits"]["rolledBy"]})
+    for it in items:
+        it["status"] = "approved" if party.approved(it["key"]) else "pending"
+    job["moderation"] = items
+    job["credits"] = {"rolledBy": spec["credits"]["rolledBy"]}
+    if moved:
+        job["party_moves"] = {"joined": len(moved["joined"]), "left": len(moved["left"]), "places": moved["places"],
+                              "members": moved["members"], "waiting": moved["waiting"]}
+
+
+# ------------------------------------------------------------------ moderation
+
+
+def moderation_queue() -> list[dict]:
+    """Episodes not yet posted that show viewers' names, with each name's state."""
+    out = []
+    for job in recent(30):
+        if job.get("status") in ("scheduled", "rendering", "preparing", "voicing") and job.get("moderation"):
+            out.append({"job": job["id"], "title": _title(job), "status": job["status"], "publish_at": job.get("publish_at"),
+                        "video_url": job.get("video_url"), "items": job["moderation"]})
+    return sorted(out, key=lambda j: j.get("publish_at") or "")
+
+
+def moderate(job: dict, key: str, action: str) -> dict:
+    """Approve a name, or remove it: it's blocked from the party and credits, and the episode is
+    rendered again without it (in the background; it posts as usual once ready)."""
+    if job.get("status") != "scheduled":
+        raise ValueError(f"the episode is {job.get('status')}: names can be changed once it's ready and before it posts")
+    items = [i for i in job.get("moderation") or [] if key == "*" and i["status"] == "pending" or i["key"] == key.lower()]
+    if not items:
+        raise ValueError("no such name in this episode")
+    if action == "approve":
+        for i in items:
+            party.approve(i["key"])
+            i["status"] = "approved"
+        save(job)
+        return job
+    spec = job["spec"]
+    for i in items:
+        party.block(i["key"])
+        i["status"] = "removed"
+        if i["kind"] == "party":
+            spec["party"] = [c for c in spec.get("party", []) if c["name"] != i.get("companion")]
+        elif i["kind"] == "rolled_by":
+            spec.setdefault("credits", {})["rolledBy"] = None
+            job.setdefault("credits", {})["rolledBy"] = None
+    job["status"] = "rendering"
+    save(job)
+
+    def again() -> None:
+        try:
+            with _render_lock, channels.use(channels.ADVENTURE):
+                job["script"] = script(spec)
+                _render(job)
+                job["status"] = "scheduled"
+                save(job)
+                notify.send(f":broom: **Adventure**: {_title(job)} made again without "
+                            + ", ".join(f"@{i['handle']}" for i in items) + f"; posts at {_local(job['publish_at'])}\n{job['video_url']}")
+        except Exception as e:
+            _fail(job, e, "rendering again after moderation")
+
+    _spawn(lambda j: again(), job, f"adventure-moderate-{job['id']}")
+    return job
 
 
 def next_spec(prev: dict, pick: int, counts: list[int]) -> dict:
@@ -293,6 +376,10 @@ def _report(job: dict) -> None:
     video = settings.videos_dir / job["video"] if job.get("video") else None
     what = f"{_title(job)} ({job['node']})" if job.get("node") else _title(job)
     dead = "\n:skull: The hero falls in this one." if spec.get("dead") else ""
+    pend = [i for i in job.get("moderation") or [] if i["status"] == "pending"]
+    if pend and title != "Adventure post":
+        dead += (f"\n:eyes: {len(pend)} name(s) shown for the first time: " + ", ".join(f"@{i['handle']}" for i in pend)
+                 + ". Check them on the dashboard (Adventure → Moderation) before it posts.")
     notify.send(f":crossed_swords: **{title}** `{job['id']}`: {what}{dead}, "
                 f"{summary.get('duration', 0):.1f}s, rendered in {summary.get('seconds', 0):.0f}s, {said}{posted}\n{job.get('video_url', '')}",
                 attach=video if title != "Adventure post" else None)
@@ -353,6 +440,8 @@ def _post(job: dict) -> None:
                 job["error"] = job["results"]["instagram"]["error"]
             if ok and job["spec"].get("kind") == "story":
                 campaign.commit(job)
+                if (job.get("credits") or {}).get("rolledBy"):
+                    party.credit(job["state_after"]["ep"], job["id"], "rolled_by", job["credits"]["rolledBy"])
             save(job)
             _report(job)
             if ok and job.get("series"):

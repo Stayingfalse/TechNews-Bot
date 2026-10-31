@@ -89,7 +89,8 @@ def is_authorised(request: Request, authorization: str = "", token: str = "") ->
     path = request.url.path
     dashboard_change = path == "/metrics/refresh" or (
         path.startswith("/schedule/") and request.method in ("PATCH", "DELETE")) or (
-        request.method == "POST" and re.fullmatch(r"/jobs/[^/]+/retry|/privacy/requests/[^/]+/(approve|reject)", path) is not None)
+        request.method == "POST" and re.fullmatch(r"/jobs/[^/]+/retry|/privacy/requests/[^/]+/(approve|reject)"
+                                                   r"|/adventure/moderation/[^/]+/(approve|remove)", path) is not None)
     return cookie_ok and dashboard_change and request.headers.get("x-quizbot") == "1"
 
 
@@ -669,6 +670,12 @@ def privacy_policy():
     return legal.privacy_page()
 
 
+@app.get("/chronicle", response_class=HTMLResponse)
+def chronicle():
+    """Public: the story's party, past companions and credits (privacy policy section 3)."""
+    return legal.chronicle_page()
+
+
 @app.get("/terms", response_class=HTMLResponse)
 def terms_of_service():
     return legal.terms_page()
@@ -991,7 +998,31 @@ def adventure_votes(job_id: str):
         comments = [c for c in PUBLISHERS["instagram"].comments(media) if c["user"].lower() != own]
     t = adventure_votes_mod.tally(comments, job["script"]["options"])
     pick, how = adventure_votes_mod.decide(t["counts"], job["script"]["default"], job["id"])
-    return t | {"leading": job["script"]["options"][pick], "how": how}
+    way = adventure_votes_mod.top_way(t["ways"])
+    return {"counts": t["counts"], "voters": len(t["voters"]), "comments": t["comments"], "ways": t["ways"],
+            "way": adventure_votes_mod.WAYS[way] if way is not None else None, "joins": len(t["joins"]),
+            "leaves": len(t["leaves"]), "leading": job["script"]["options"][pick], "how": how}  # totals only
+
+
+@app.get("/adventure/moderation", dependencies=[Depends(require_token)])
+def adventure_moderation():
+    """Names about to be shown in the next episodes (the party, "rolled by"), for a look before they post."""
+    return adventure_jobs.moderation_queue()
+
+
+@app.post("/adventure/moderation/{job_id}/{action}", dependencies=[Depends(require_token)])
+def adventure_moderate(job_id: str, action: str, key: str = Query(..., description="the item's key (a username, lowercase), or * for every pending one")):
+    """approve: show it (now and in later episodes). remove: take it out of this episode, which is made
+    again without it (and keep that name out of the party and credits for good)."""
+    if action not in ("approve", "remove"):
+        raise HTTPException(404, "action is approve or remove")
+    job = adventure_jobs.get(job_id) if re.fullmatch(r"adv-[\w-]+", job_id) else None
+    if not job:
+        raise HTTPException(404, "no such adventure job")
+    try:
+        return adventure_jobs.moderate(job, key, action)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
 
 
 @app.get("/adventure/jobs", dependencies=[Depends(require_token)])

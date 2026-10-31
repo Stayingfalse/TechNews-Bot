@@ -47,7 +47,8 @@ export const Story = z.object({
   hook: z.tuple([z.string(), z.string()]),
   recap: z.object({ pick: z.number().int(), votes: z.array(z.number().int()), label: z.string(), line: z.string() }).nullable().optional(),
   story: z.string(),
-  check: z.object({ skill: z.string(), dc: z.number().int(), mode: z.enum(["normal", "advantage", "disadvantage"]), harm: z.boolean(), roll: Roll }).nullable().optional(),
+  check: z.object({ skill: z.string(), dc: z.number().int(), mode: z.enum(["normal", "advantage", "disadvantage"]), harm: z.boolean(), roll: Roll,
+    way: z.enum(["bold", "sly", "wise"]).optional(), rally: z.number().int().min(0).max(5).optional() }).nullable().optional(),
   after: z.string(),
   hearts: z.object({ before: z.number().int(), after: z.number().int() }),
   dead: z.boolean().optional(),
@@ -56,6 +57,11 @@ export const Story = z.object({
   default: z.number().int(),
   tone: z.object({ story: z.string().optional(), after: z.string().optional() }).optional(),
   cues: z.record(z.string(), z.number().min(0)).optional(),
+  party: z.array(z.object({ name: z.string().max(16), cls: z.enum(["fighter", "rogue", "wizard"]), look: z.number().int().min(0).max(2),
+    handle: z.string().max(30).nullable().optional() })).max(6).optional(),
+  credits: z.object({ rolledBy: z.string().max(30).nullable().optional() }).optional(),
+  voices: z.object({ ways: z.array(z.number().int().min(0)).length(3), way: z.enum(["bold", "sly", "wise"]).nullable().optional(),
+    voters: z.number().int().min(0) }).optional(),
 });
 
 export type AnySpec = Episode0Spec | StorySpec;

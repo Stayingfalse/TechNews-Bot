@@ -24,7 +24,7 @@ export type StorySpec = {
   hook: [string, string];
   recap?: { pick: number; votes: number[]; label: string; line: string } | null;
   story: string;
-  check?: { skill: string; dc: number; mode: Mode; harm: boolean; roll: Roll } | null;
+  check?: { skill: string; dc: number; mode: Mode; harm: boolean; roll: Roll; way?: Way; rally?: number } | null;
   after: string;
   hearts: { before: number; after: number };
   dead?: boolean;
@@ -33,7 +33,26 @@ export type StorySpec = {
   default: number;
   tone?: { story?: string; after?: string };
   cues?: Cues;
+  /** The party: companions the server drew, each with the viewer's handle to show (or none). */
+  party?: Companion[];
+  /** Credits shown on screen: the viewer the roll is credited to. */
+  credits?: { rolledBy?: string | null };
+  /** What the comments added up to: votes per way, the winner, how many voted. */
+  voices?: { ways: number[]; way?: Way | null; voters: number };
 };
+
+export type Way = "bold" | "sly" | "wise";
+export type Companion = { name: string; cls: ClassKey; look: number; handle?: string | null };
+export const WAYS: Way[] = ["bold", "sly", "wise"];
+/** The skills each way can use; the hero rolls their best one. */
+export const WAY_SKILLS: Record<Way, string[]> = {
+  bold: ["athletics", "intimidation"],
+  sly: ["stealth", "sleight_of_hand", "deception"],
+  wise: ["perception", "arcana", "persuasion"],
+};
+export function waySkill(cls: ClassKey, way: Way): string {
+  return WAY_SKILLS[way].reduce((best, sk) => (modifier(cls, sk) > modifier(cls, best) ? sk : best));
+}
 
 export type StoryPlan = { dur: number; hook: [number, number]; story: [number, number]; check?: [number, number]; after: [number, number]; cta: number; throwAt?: number };
 
@@ -142,8 +161,15 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   c.drawImage(S.map.cv as unknown as CanvasImageSource, vx * S.map.k, vy * S.map.k, vw * S.map.k, vh * S.map.k, 0, 0, W, H);
 
   const out = ez(seg(T, P.cta - 0.8, P.cta + 0.2));
-  const toks: { d: Creature; x: number; y: number; ph: number; a: number; rim: string }[] = [];
+  const toks: { d: Creature; x: number; y: number; ph: number; a: number; rim: string; sc?: number; tag?: string | null }[] = [];
   if (out < 1) toks.push({ d: hero, x: hp[0], y: hp[1], ph: 0, a: 1 - out, rim: GOLD });
+  // the party: viewers' companions walk behind the hero, each with its viewer's handle
+  const crew = T > HE ? s.party || [] : [];
+  crew.forEach((m, i) => {
+    const cp = along(S.map, Math.max(0, p - 0.04 * (i + 1)));
+    const a = seg(T, HE, HE + 0.6 + i * 0.15) * (1 - out);
+    if (a > 0) toks.push({ d: storyHero(S.defs, { cls: m.cls, look: m.look }), x: cp[0], y: cp[1], ph: 0.9 + i, a, rim: CREAM, sc: 0.68, tag: m.handle });
+  });
   if (foe && T > P.story[0]) {
     let gap = 0.14;
     if (s.check) gap = lp(0.14, fail ? 0.045 : 0.1, ez(seg(T, land, land + 0.7)));
@@ -153,7 +179,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   }
   toks.sort((a, b) => a.y - b.y).forEach((o) => {
     c.globalAlpha = o.a;
-    standee(F, o.d, sx(o.x), sy(o.y), z * 0.95, face, T, o.ph, o.rim);
+    standee(F, o.d, sx(o.x), sy(o.y), z * 0.95 * (o.sc || 1), face, T, o.ph, o.rim);
     c.globalAlpha = 1;
   });
   if (out > 0) {
@@ -173,6 +199,18 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   S.map.flames.forEach((f, i) => {
     const X = sx(f.x), Y = sy(f.y);
     if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) flame(F, X, Y, f.s * z * 0.95, i * 1.9);
+  });
+
+  // the companions' handle tags, over the lighting so they stay readable
+  toks.forEach((o) => {
+    if (!o.tag) return;
+    c.globalAlpha = o.a;
+    const X = sx(o.x), Y = sy(o.y) + 14;
+    c.font = font(700, 9);
+    const w = Math.min(90, c.measureText(`@${o.tag}`).width + 12);
+    parch(F, X - w / 2, Y, w, 15);
+    fit(F, `@${o.tag}`, X, Y + 11, 9, w - 8, INK, "center", 700);
+    c.globalAlpha = 1;
   });
 
   // HUD: episode and hearts
@@ -236,6 +274,8 @@ function hook(F: Frame, s: StorySpec, hero: Creature, foe: Creature | undefined,
       seal(F, 44, y, 9, "ABC"[i]);
       fit(F, o.label, 60, y + 5, 13, W - 140, CREAM, "left", 600);
     });
+    const crew = (s.party || []).length;
+    fit(F, `+ HOW? BOLD · SLY · WISE   ·   JOIN THE PARTY${crew ? ` (${crew} IN IT)` : ""}`, 170, 442 + s.choices.length * 25 + 4, 10, W - 100, GOLD, "center", 700);
   }
   c.globalAlpha = 1;
 }
@@ -268,7 +308,14 @@ function checkBeat(F: Frame, s: StorySpec, P: StoryPlan, hx: number, hy: number)
   const mode = ck.mode === "advantage" ? " · ADV" : ck.mode === "disadvantage" ? " · DIS" : "";
   if (T > P.check![0] + 0.1 && T < land + 0.2) {
     parch(F, 30, 200, W - 86, 40);
-    fit(F, `${skillName(ck.skill).toUpperCase()} · DC ${ck.dc} · ${pct(r.p)}${mode}`, 152, 226, 17, W - 110, RED, "center", 900);
+    const rallied = ck.rally ? ` · +${ck.rally} RALLY` : "";
+    fit(F, `${skillName(ck.skill).toUpperCase()} · DC ${ck.dc} · ${pct(r.p)}${mode}${rallied}`, 152, 226, 17, W - 130, RED, "center", 900);
+  }
+  const by = s.credits?.rolledBy, voters = s.voices?.voters || 0;
+  if ((by || ck.rally || ck.way) && T > P.check![0] + 0.3 && T < P.after[1]) {
+    const bits = [ck.way ? `THE VOICES SAID ${ck.way.toUpperCase()}` : "", ck.rally ? `${voters} VOICES` : "", by ? `ROLLED BY @${by}` : ""].filter(Boolean);
+    parch(F, 50, 244, W - 126, 22);
+    fit(F, bits.join(" · "), 152, 259, 10, W - 140, INK, "center", 700);
   }
   if (T > land + 0.2 && T < P.after[1]) {
     parch(F, 30, 200, W - 86, 40, r.ok ? "#d3e2bf" : "#e9c0b2");
@@ -320,7 +367,7 @@ function cta(F: Frame, s: StorySpec, P: StoryPlan) {
     c.roundRect(16, CARD_Y - 36, W - 76, 31, 6);
     c.fill();
     fit(F, `COMMENT ${letters(s.choices.length).toUpperCase()} BY 8AM · NEXT EPISODE AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
-    fit(F, `No votes? We go with ${"ABC"[s.default]}.`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
+    fit(F, `+ BOLD, SLY or WISE · comment JOIN to join the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
     c.restore();
   }
   s.choices.forEach((o, i) => {
@@ -353,16 +400,21 @@ export type ArcNode = {
 export function resolveNode(n: ArcNode, ctx: {
   ep: number; hero: { cls: ClassKey; look: number }; hearts: number; dice: number[];
   recap?: { pick: number; votes: number[]; label: string; line: string } | null;
+  way?: Way | null; rally?: number;
 }): StorySpec {
   let check: StorySpec["check"] = null, after = n.after || "", hearts = ctx.hearts;
   if (n.rest) hearts = Math.min(3, hearts + 1);
   if (n.check) {
-    const mode = n.check.mode || "normal", mod = modifier(ctx.hero.cls, n.check.skill);
+    // the Voices: the winning way picks the skill (the hero's best for it); Rally adds to the roll
+    const skill = ctx.way ? waySkill(ctx.hero.cls, ctx.way) : n.check.skill, rally = Math.max(0, ctx.rally || 0);
+    const mode = n.check.mode || "normal", mod = modifier(ctx.hero.cls, skill) + rally;
     const d = mode === "normal" ? [ctx.dice[0]] : [ctx.dice[0], ctx.dice[1]];
     const kept = mode === "advantage" ? Math.max(...d) : mode === "disadvantage" ? Math.min(...d) : d[0];
     const natural = kept === 20 ? 20 : kept === 1 ? 1 : undefined;
     const ok = kept === 20 || (kept !== 1 && kept + mod >= n.check.dc);
-    check = { skill: n.check.skill, dc: n.check.dc, mode, harm: !!n.check.harm, roll: { dice: d, kept, mod, total: kept + mod, ok, p: odds(mod, n.check.dc, mode), natural } };
+    check = { skill, dc: n.check.dc, mode, harm: !!n.check.harm, roll: { dice: d, kept, mod, total: kept + mod, ok, p: odds(mod, n.check.dc, mode), natural } };
+    if (ctx.way) check.way = ctx.way;
+    if (rally) check.rally = rally;
     after = ok ? n.check.success : n.check.fail;
     if (!ok && n.check.harm) hearts -= 1;
   }

@@ -74,6 +74,9 @@ def erase(user: str) -> int:
     from .racing import ledger
 
     n += ledger.erase(key)  # their racing balance and every bet
+    from .adventure import party
+
+    n += party.erase(key)  # the story's party and credits
     return n
 
 
@@ -90,5 +93,8 @@ def anonymise_old(days: int = RETENTION_DAYS) -> int:
                 n += 1
         if n:
             store._write("jobs.json", jobs)
+    from .adventure import party
+
+    n += party.purge_old(days)  # past party members' usernames and story credits
     return n
 
