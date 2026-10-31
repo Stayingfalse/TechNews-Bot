@@ -8,9 +8,20 @@
 | Dungeon crawl | @dungeoncrawlergram | Instagram | 27 Oct | 5 (Episode 0 parts 1-4, Episode 1) | weekly arc routine | **yes**: A/B/C votes drive the story |
 | Sixel Speedway | @sixelspeedway | Instagram | 28 Oct | 4 (launch, races 1-3) | none | **yes**: play-money bets are the point |
 
-Numbers below come from `GET /metrics` on 31 Oct 21:20. That endpoint only covers the quiz;
-the adventure and racing numbers (`/racing/metrics`, adventure job stats) weren't pulled for this
-review. Both channels are under a week old anyway, so they can't be judged yet.
+The quiz numbers in §2 come from `GET /metrics` on 31 Oct 21:20. The adventure and racing numbers
+in §2a were pulled at 22:00 the same day, after every channel's numbers started being collected
+(PR #11: `GET /metrics?channel=all`, `GET /metrics/summary`, and the dashboard for every channel).
+
+### Every channel at a glance (Instagram, 24 h snapshot)
+
+| | Quiz | Dungeon crawl | Sixel Speedway |
+|---|---|---|---|
+| Posts | 14 | 5 | 4 |
+| Median views at 24 h | 139 | **492** | 34 |
+| Average watch time | 11.9 s | 8.4 s | 1-2.6 s on race videos |
+| Average % watched | 24 % | 25 % (43 % on the 21 s part) | 3-8 % on race videos |
+| Comments per 1,000 views | 14 | 24 | (too few views to say) |
+| Comment mechanic in use | 3-5 comments a post | 3-19 votes a part | 1 bet in 4 races, 1 player |
 
 ## 2. How the quiz has done
 
@@ -42,10 +53,48 @@ What it says, from strongest to weakest:
 5. **YouTube is a lottery:** 0 to 776 views with no link to Instagram's numbers. It still gave the
    single biggest result, so a new channel should post there from day one.
 
-What this means for the other two channels: both depend on comments, and the quiz, with more
-reach than either, gets 3-5 comments a post. With a few hundred views a video, races will have very
-few bettors and episodes very few voters. They need more reach before their mechanics can work. A
-third comment-driven channel would hit the same cold-start problem.
+What this means for the other two channels (§2a has their numbers): comments can work. The
+adventure's best part had 19 voters and 22 comments from 1,114 views. But comments only come once
+a video reaches people and holds them. The adventure does that when a part is short and asks about
+the viewer. Racing doesn't yet, because people leave in the first two seconds. So a new channel shouldn't
+*depend* on comments to work, but it can use them.
+
+## 2a. The adventure and racing channels
+
+**Dungeon crawl: the best performer per post.**
+
+| Part | Length | Views at 24 h | % watched | Likes | Comments | Saves | Votes on it |
+|---|---|---|---|---|---|---|---|
+| Episode 0, part 1 | 55 s | 221 | 15 % | 4 | 8 | 1 | 4 |
+| Episode 0, part 2 | 38 s | 763 | 27 % | 11 | 14 | 2 | 8 |
+| Episode 0, part 3 | **21 s** | **1,114** | **43 %** | 25 | 22 | 6 | **19** |
+| Episode 0, part 4 | 34 s | 171 | 17 % | 3 | 4 | 0 | 3 |
+| Episode 1 (13 h old) | 28 s | 221 so far | 33 % | 7 | 11 | 0 | voting now |
+
+- Part 3 is the best post on any of our channels: the most views, the highest % watched, the
+  most comments and saves, and 19 voters. It was also the shortest.
+- People watch about 8-10 s whatever the length, so the shorter the part, the larger the share
+  watched and the further Instagram pushes it. That matches the quiz, where people leave at about 12 s.
+- Part 3's choice was the hero's class (fighter, rogue or wizard): a question about *you*.
+  Part 4 (picking the hero's look) is a weaker question, and it fell to 171 views and 3 votes.
+  Identity questions win here as they do in the quiz.
+- Votes go up with reach (4 → 8 → 19 → 3). At these numbers about 1 in 60 viewers votes, so
+  every story choice needs a few hundred viewers to be decided by more than a handful.
+
+**Sixel Speedway: people leave within 1-3 seconds.**
+
+| Video | Length | Views at 24 h | Average watch | % watched | Bets placed under it |
+|---|---|---|---|---|---|
+| Launch: how to play | 24 s | 3 | 65 s (loops) | 100 % | 1 (§100, 1 player) |
+| Race 1 + card for race 2 | 42 s | 133 | 1.1 s | 3 % | 0 |
+| Race 2 + card for race 3 | 32 s | 34 | 2.6 s | 8 % | 0 |
+| Race 3 + card for race 4 (3 h old) | 65 s | 111 so far | 2.3 s | 4 % | open |
+
+- Instagram showed the race videos to 34-133 people, and almost all of them swiped away in the
+  first two seconds. The opening frame (a timing screen and a hook line) isn't stopping anyone.
+- With no viewers there are no bets: 1 bet across 4 races. The betting design can't be judged
+  until people watch.
+- It needs a new opening before anything else (see §6).
 
 ## 3. What the next channel has to do
 
@@ -97,6 +146,11 @@ stay until it goes out or wins. The payoff comes in the last 2 seconds.
   replies at launch. Later, the most-commented side can get a visible "crowd favourite" halo
   (purely cosmetic, never changes the result).
 
+**What the other channels add to the case for it (§2a):** the adventure's best part was its
+shortest (21 s) and asked the viewer about themselves, and racing shows that a sim video loses
+everyone if the first second doesn't ask the viewer something. Try the pick-your-side opening on
+racing first (M0.5). If watch time recovers there, build this channel; if not, rethink it before building.
+
 **Why it should beat the quiz:**
 - It deals with the drop at ~12 s directly. There's no reading, no rounds and no countdown. The
   reason to keep watching is still there at second 29.
@@ -133,7 +187,8 @@ ledger, bet parser or reply queue.
 
 | Milestone | What | Done when |
 |---|---|---|
-| M0 | Pull racing and adventure numbers into the review routine (`/racing/metrics`, adventure job views), so all three channels are measured the same way. | The weekly review covers every channel |
+| M0 | ~~Collect every channel's numbers~~ (done, PR #11). Next: give the weekly review routine the adventure and racing too (`/metrics?channel=…`, `POST /insights` with `channel`). | The weekly review covers every channel |
+| M0.5 Fix racing's opening | Start the video with the cars already moving and a one-line question ("Pick a car. Does it win?"), leave the timing tower until later, and cut to ≤ 30 s. This tests the pick-your-side hook on the existing account and sim before a fourth channel is built. | 1-3 s average watch rises above 8 s |
 | M1 Look test | `render_survival.py`: sim + one theme, 30 s, four arenas, sent to Discord. Pick the look, as with the racing styles. | Owner picks a look |
 | M2 Channel | Channel `survival` in `channels.py`, daily job (render 45 min before, post at **16:00**, clear of 09:00 / 12:00 / 19:00), seal in the caption, standings store, IG + YT accounts connected. | First automatic post |
 | M3 Retention loop | End tally, Sunday table, champions day, loop ending. Metrics tags. | Two weeks of posts |
@@ -143,7 +198,14 @@ ledger, bet parser or reply queue.
 **watched % ≥ 40 %** (the quiz averages 24 %) **and median views ≥ 300** (the quiz: 146).
 Otherwise change one thing (length, arena, groups) for one more week, then stop.
 
-## 7. For the quiz in the meantime (for the weekly review/batch to pick up)
+## 7. For the existing channels in the meantime
+
+Adventure:
+- Keep parts **under 25 s**: the 21 s part did about twice as well as the 34-55 s ones on every number.
+- Make every choice about the viewer ("which would *you* be", "what are you most afraid of"), as
+  in part 3. Avoid cosmetic choices like part 4's.
+
+Quiz (for the weekly review/batch to pick up):
 
 - Shorter: try 3 rounds / ~30 s on some days (tag `rounds: 3`). Viewers leave at 12 s.
 - Lean on broad nostalgic fandoms (cartoons, superheroes, Disney, 90s films) with "Only real X fans" titles.
