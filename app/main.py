@@ -1004,6 +1004,29 @@ def adventure_votes(job_id: str):
             "leaves": len(t["leaves"]), "leading": job["script"]["options"][pick], "how": how}  # totals only
 
 
+class WriterTry(BaseModel):
+    pick: int = Field(0, ge=0, le=2, description="which option of the latest episode won (0 = A)")
+    way: str | None = Field(None, pattern="^(bold|sly|wise)$")
+    shouts: list[str] = Field(default_factory=list, max_length=3, description="words from the Shout List")
+    voters: int = Field(12, ge=0, le=10000)
+    node: str | None = Field(None, description="any node of an accepted arc, instead of the next episode's")
+
+
+@app.post("/adventure/writer/try", dependencies=[Depends(require_token)])
+def adventure_writer_try(body: WriterTry):
+    """Run the AI writer on the next episode's planned node with these sample totals and return what it
+    was given, every attempt and what it wrote. Nothing is saved, rendered or posted (one API call or three)."""
+    from .adventure import shouts as shout_list
+
+    bad = [w for w in body.shouts if shout_list.shout_of(w) != w.lower()]
+    if bad:
+        raise HTTPException(422, f"not on the Shout List: {', '.join(bad)}")
+    try:
+        return adventure_jobs.writer_try(body.pick, body.way, [w.lower() for w in body.shouts], body.voters, body.node)
+    except (ValueError, adventure_campaign.NoArc) as e:
+        raise HTTPException(409, str(e))
+
+
 @app.get("/adventure/moderation", dependencies=[Depends(require_token)])
 def adventure_moderation():
     """Names about to be shown in the next episodes (the party, "rolled by"), for a look before they post."""
