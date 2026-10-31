@@ -232,6 +232,48 @@ def _add_party(job: dict, roller: str | None, moved: dict | None = None, shout: 
                               "members": moved["members"], "waiting": moved["waiting"]}
 
 
+# ------------------------------------------------------------------ trying the writer
+
+
+def writer_try(pick: int = 0, way: str | None = None, shouts: list[str] | None = None, voters: int = 12,
+               node_id: str | None = None) -> dict:
+    """Run the AI writer on the next episode's planned node with sample totals, and say what happened.
+    Nothing is saved, rendered or posted. `pick`: which option of the latest episode won (0 = A);
+    `node_id`: any node of an accepted arc instead."""
+    from . import writer
+
+    s = campaign.state()
+    if node_id:
+        arc = next((a for a in campaign.arcs() if any(n["id"] == node_id for n in a["nodes"])), None)
+        if not arc:
+            raise ValueError(f"no accepted arc has a node {node_id!r}")
+        node, recap, label = campaign._node_of(arc, node_id), "You chose to press on.", "Press on"
+    else:
+        nxt = next((j for j in sorted(recent(50), key=lambda j: j.get("publish_at") or "")
+                    if j.get("status") == "booked" and j.get("kind") == "story" and j.get("from_job")), None)
+        prev = get(nxt["from_job"]) if nxt else None
+        if not prev or not prev.get("script"):
+            raise ValueError("no booked story episode to try it on; pass node=<id>")
+        opts = prev["script"]["options"]
+        pick = max(0, min(pick, len(opts) - 1))
+        arc, node, choice = campaign.next_node(prev["spec"], {"arc": prev.get("arc"), "node": prev.get("node")}, pick, opts[pick])
+        recap, label = choice["recap"], opts[pick]
+    crew = party.story_party(party.spec_party())
+    ep = s["ep"] + 1
+    counts = [0, 0, 0][: len(node["choices"])]
+    story = {"party": crew, "moment": party.moment_slot(ep, len(crew)), "ep": ep, "hero": s["hero"], "hearts": s["hearts"],
+             "recap": recap, "recent": campaign._recent_text(s), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")},
+             "voices": {"counts": counts, "chosen": label, "voters": voters, "way": way, "rally": party.rally(voters),
+                        "shouts": [{"word": w, "n": 3} for w in (shouts or [])]}}
+    check = lambda n: campaign._run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": recap})["problems"]  # noqa: E731
+    out, record = writer.adapt(node, story, check)
+    text = lambda n: {"hook": n["hook"], "story": n["story"], "check": n.get("check") and {k: n["check"][k] for k in ("skill", "dc", "success", "fail")},  # noqa: E731
+                      "after": n.get("after")}
+    return {"enabled": writer.enabled(), "model": settings.deepseek_model, "node": node["id"], "status": record["status"],
+            "planned": text(node), "written": text(out) if record["status"] == "written" else None,
+            "attempts": record["attempts"], "tokens": record["tokens"], "seconds": record.get("seconds"), "input": record["input"]}
+
+
 # ------------------------------------------------------------------ moderation
 
 

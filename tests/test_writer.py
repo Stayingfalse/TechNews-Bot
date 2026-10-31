@@ -182,3 +182,17 @@ def test_posting_credits_the_first_shouters_and_the_chronicle_lists_them(day, cl
     assert "shout" in client.get("/privacy").text
     s = campaign.state()
     assert s["history"][-1]["story"] == job["spec"]["story"] and s["history"][-1]["written"]
+
+
+def test_trying_the_writer_saves_nothing(day, client):
+    make, answers, sent, rendered, _ = day
+    answers.append(good())
+    before = {j["id"]: j["status"] for j in jobs.recent(20)}
+    r = client.post("/adventure/writer/try", json={"pick": 1, "way": "sly", "shouts": ["torch"], "voters": 30}, headers=AUTH)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "written" and out["written"]["story"] == good()["story"] and out["node"] == "gate-lock"
+    assert out["input"]["voices"]["rally"] == 2 and out["input"]["voices"]["shouted"] == [{"word": "torch", "times": 3}]
+    assert {j["id"]: j["status"] for j in jobs.recent(20)} == before and not rendered and not party.load()["credits"]
+    assert client.post("/adventure/writer/try", json={"shouts": ["bananas"]}, headers=AUTH).status_code == 422
+    assert client.post("/adventure/writer/try", json={}).status_code == 401
