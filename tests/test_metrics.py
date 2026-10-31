@@ -85,6 +85,7 @@ def test_every_channel_is_collected_as_itself(fetched, quiz):
     assert a1["channel"] == "adventure" and a1["title"] == "Episode 0, part 1"
     assert a1["extra"] == {"votes": 4, "voters": 4, "comments_read": 7}  # counted on the part after it
     assert a1["tags"]["voice"] == "yes" and rows["adv-2"]["tags"]["voice"] == "no"
+    assert a1["tags"]["hook"] == "episode0"
     assert a1["platforms"]["instagram"]["latest"]["watched_pct"] == 30.0  # 12 s of 40 s
     assert rows["adv-2"]["extra"] == {}  # still being voted on
     assert set(a1["platforms"]["instagram"]["snapshots"]) == {"1h", "24h"}
