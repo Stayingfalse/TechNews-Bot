@@ -13,6 +13,7 @@ import re
 import unicodedata
 
 from ..config import settings
+from .shouts import counted, shout_of
 
 LETTERS = "abc"
 STOP = {"the", "and", "for", "with", "your", "this", "that", "into", "from", "another", "way", "old"}
@@ -95,6 +96,8 @@ def tally(comments: list[dict], options: list[str]) -> dict:
     counts, voters, seen = [0] * len(options), [], set()
     ways, way_seen = [0, 0, 0], set()
     joins, leaves, commenters, asked = [], [], [], set()
+    shouted: dict[str, list[str]] = {}  # word → who shouted it (first list word per person), in comment order
+    shout_seen = set()
     for c in comments:
         who = (c.get("user") or "").lower() or (f"id:{c['uid']}" if c.get("uid") else "")
         if not who:
@@ -105,6 +108,9 @@ def tally(comments: list[dict], options: list[str]) -> dict:
         if who not in way_seen and (w := way_of(text)) is not None:
             way_seen.add(who)
             ways[w] += 1
+        if who not in shout_seen and (w := shout_of(text)):
+            shout_seen.add(who)
+            shouted.setdefault(w, []).append(c.get("user"))
         if who not in asked and (pw := party_word(text)):
             asked.add(who)
             (joins if pw == "join" else leaves).append({"key": who, "user": c.get("user"), "uid": c.get("uid"), "at": c.get("at")})
@@ -117,7 +123,7 @@ def tally(comments: list[dict], options: list[str]) -> dict:
         counts[pick] += 1
         voters.append({"user": c.get("user"), "pick": pick})
     return {"counts": counts, "voters": voters, "comments": len(comments), "ways": ways,
-            "joins": joins, "leaves": leaves, "commenters": commenters}
+            "joins": joins, "leaves": leaves, "commenters": commenters, "shouts": counted(shouted)}
 
 
 def top_way(ways: list[int]) -> int | None:

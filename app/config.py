@@ -88,6 +88,13 @@ class Settings:
         self.adventure_voice_budget = int(os.environ.get("ADVENTURE_VOICE_BUDGET", "7200"))
         # The narrator's pauses are shortened to this many seconds (its [long pause] runs to 3-4 s).
         self.adventure_max_pause = float(os.environ.get("ADVENTURE_MAX_PAUSE", "0.6"))
+        # The story's AI writer (DeepSeek, OpenAI-compatible): adapts each planned episode to what the
+        # comments added up to. Off without a key, or with ADVENTURE_WRITER=off. It's only ever given
+        # story data and totals (app/adventure/writer.py prompt_input).
+        self.deepseek_api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+        self.deepseek_model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
+        self.deepseek_base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+        self.adventure_writer = os.environ.get("ADVENTURE_WRITER", "deepseek").strip().lower()
 
         # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
         # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.

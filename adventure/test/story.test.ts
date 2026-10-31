@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type StorySpec, WAY_SKILLS, dailyText, planStory, resolveNode, scriptStory, waySkill } from "../packages/engine/src/index.ts";
 import { modifier, odds } from "../packages/engine/src/sheet.ts";
-import { type ArcContext, type ArcNode, Story, validateArc } from "../packages/shared/src/index.ts";
+import { type ArcContext, type ArcNode, Story, validateArc, validateNode } from "../packages/shared/src/index.ts";
 import { assembleStory } from "../packages/renderer/src/assemble.ts";
 import { loadFonts, mapFor, prepare } from "../packages/renderer/src/canvas.ts";
 
@@ -59,6 +59,23 @@ describe("validateArc", () => {
   });
   it("refuses ids an earlier arc used", () => {
     expect(validateArc(ARC, { ...CTX, known_ids: ["gate-lock"] }).problems).toContain("gate-lock: id already used by an earlier arc");
+  });
+});
+
+describe("validateNode", () => {
+  it("passes a planned node and lists every problem with a rewritten one", () => {
+    const n = node("gate-force");
+    expect(validateNode(n, hero, "You chose to force the gate.").problems).toEqual([]);
+    const bad = { ...n, hook: ["A HOOK FAR TOO LONG", "OK"], story: "word ".repeat(25).trim(), check: { ...n.check!, success: "Blood and gore everywhere." } };
+    const p = validateNode(bad, hero, "You chose to force the gate.").problems.join("\n");
+    expect(p).toMatch(/hook/);
+    expect(p).toMatch(/story: at most 20 words/);
+  });
+  it("catches gore and narration that's too long", () => {
+    const n = node("gate-force");
+    expect(validateNode({ ...n, check: { ...n.check!, success: "Gore drips from the walls." } }, hero, "").problems.join()).toMatch(/teen-friendly/);
+    const long = "x".repeat(400);
+    expect(validateNode(n, hero, long).problems.join()).toMatch(/characters of narration/);
   });
 });
 

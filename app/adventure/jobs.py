@@ -180,8 +180,14 @@ def _resolve_votes(job: dict) -> None:
         ep = campaign.state()["ep"] + 1
         moved = party.update(ep, t)
         bonus = party.rally(len(t["voters"]))
-        job.update(campaign.build_story(prev, pick, t["counts"], job["votes"]["way"], bonus))
-        _add_party(job, party.pick_roller(ep, t["voters"]), moved)
+        job["votes"]["shouts"] = [{"word": s["word"], "n": s["n"]} for s in t["shouts"]]  # totals only
+        crew = party.story_party(party.spec_party())
+        story = {"party": crew, "moment": party.moment_slot(ep, len(crew)),
+                 "voices": {"counts": t["counts"], "chosen": opts[pick], "voters": len(t["voters"]), "way": job["votes"]["way"],
+                            "rally": bonus, "shouts": job["votes"]["shouts"]}}
+        job.update(campaign.build_story(prev, pick, t["counts"], job["votes"]["way"], bonus, story=story))
+        top = t["shouts"][0] if t["shouts"] and (job.get("writer") or {}).get("status") == "written" else None
+        _add_party(job, party.pick_roller(ep, t["voters"]), moved, top)
     else:
         job["spec"] = next_spec(prev["spec"], pick, t["counts"])
         campaign.note_episode0(job["spec"])
@@ -193,7 +199,7 @@ def _resolve_votes(job: dict) -> None:
                 f"({t['comments']} comments) → **{'ABC'[pick]}: {opts[pick]}** ({how}){rolled}")
 
 
-def _add_party(job: dict, roller: str | None, moved: dict | None = None) -> None:
+def _add_party(job: dict, roller: str | None, moved: dict | None = None, shout: dict | None = None) -> None:
     """The party, credits and the Voices' totals into today's spec, and what needs a moderation look:
     every name about to be shown that hasn't been approved before."""
     comp = party.spec_party()
@@ -205,10 +211,22 @@ def _add_party(job: dict, roller: str | None, moved: dict | None = None) -> None
     items = [{"kind": "party", "key": c["key"], "handle": c["handle"], "companion": c["name"]} for c in comp if c["handle"]]
     if spec["credits"]["rolledBy"]:
         items.append({"kind": "rolled_by", "key": roller.lower(), "handle": spec["credits"]["rolledBy"]})
+    if shout:  # the word made it into the story: credit the first to shout it
+        blocked = set(party.load()["blocked"])
+        names = [h for u in shout["first"] if u and u.lower() not in blocked and (h := party.shown_name(u))]
+        spec["voices"]["shout"] = {"word": shout["word"], "n": shout["n"]}
+        spec["credits"]["shouters"] = names
+        items += [{"kind": "shout", "key": h.lower(), "handle": h, "word": shout["word"]} for h in names]
+        items.append({"kind": "word", "key": f"word:{shout['word']}", "handle": None, "word": shout["word"]})
     for it in items:
-        it["status"] = "approved" if party.approved(it["key"]) else "pending"
+        if it["kind"] in ("party", "rolled_by", "shout"):
+            it["status"] = "approved" if party.approved(it["key"]) else "pending"
+        else:
+            it.setdefault("status", "pending")
     job["moderation"] = items
-    job["credits"] = {"rolledBy": spec["credits"]["rolledBy"]}
+    job["credits"] = {"rolledBy": spec["credits"]["rolledBy"], "shouters": spec["credits"].get("shouters") or []}
+    if (job.get("writer") or {}).get("status") == "written":
+        items.append({"kind": "writer", "key": "writer", "handle": None, "status": "pending"})
     if moved:
         job["party_moves"] = {"joined": len(moved["joined"]), "left": len(moved["left"]), "places": moved["places"],
                               "members": moved["members"], "waiting": moved["waiting"]}
@@ -218,54 +236,104 @@ def _add_party(job: dict, roller: str | None, moved: dict | None = None) -> None
 
 
 def moderation_queue() -> list[dict]:
-    """Episodes not yet posted that show viewers' names, with each name's state."""
+    """Episodes not yet posted with something to look at: viewers' names (the party, "rolled by", the
+    first to shout) and the AI writer's text next to the plan's."""
     out = []
     for job in recent(30):
         if job.get("status") in ("scheduled", "rendering", "preparing", "voicing") and job.get("moderation"):
+            spec, plan = job.get("spec") or {}, job.get("plan_node") or {}
+            text = None
+            if (job.get("writer") or {}).get("status") == "written":
+                text = {"hook": spec.get("hook"), "story": spec.get("story"), "after": spec.get("after"),
+                        "planned": {"hook": plan.get("hook"), "story": plan.get("story")}}
             out.append({"job": job["id"], "title": _title(job), "status": job["status"], "publish_at": job.get("publish_at"),
-                        "video_url": job.get("video_url"), "items": job["moderation"]})
+                        "video_url": job.get("video_url"), "items": job["moderation"], "text": text})
     return sorted(out, key=lambda j: j.get("publish_at") or "")
 
 
+def _redo(job: dict, node: dict, story_writer: dict | None = None) -> None:
+    """Resolve `node` again with the same dice and votes, keep the party and credits, render."""
+    old = job["spec"]
+    if story_writer is not None:  # the writer again, e.g. without the shouted word
+        from . import writer
+
+        s = campaign.state()
+        check = lambda n: campaign._run_node("validate-node", payload={"node": n, "hero": s["hero"],  # noqa: E731
+                                                                         "recap": job["resolve_ctx"]["recap"]["line"]})["problems"]
+        node, job["writer"] = writer.adapt(job["plan_node"], story_writer, check)
+    spec = campaign._run_node("resolve", payload={"node": node, "ctx": job["resolve_ctx"]})
+    for k in ("party", "credits", "voices"):
+        if k in old:
+            spec[k] = old[k]
+    job["spec"] = spec
+    job["script"] = script(spec)
+    _render(job)
+
+
 def moderate(job: dict, key: str, action: str) -> dict:
-    """Approve a name, or remove it: it's blocked from the party and credits, and the episode is
-    rendered again without it (in the background; it posts as usual once ready)."""
+    """approve: show it (names: now and in later episodes). remove: take it out and make the episode
+    again (in the background; it posts as usual once ready):
+      a name (party, rolled by, first to shout) → blocked from the party and credits for good;
+      the shouted word → the writer writes the day again without it (no shout credits);
+      the writer's text → the plan's own text plays (no shout credits either)."""
     if job.get("status") != "scheduled":
-        raise ValueError(f"the episode is {job.get('status')}: names can be changed once it's ready and before it posts")
-    items = [i for i in job.get("moderation") or [] if key == "*" and i["status"] == "pending" or i["key"] == key.lower()]
+        raise ValueError(f"the episode is {job.get('status')}: it can be changed once it's ready and before it posts")
+    items = [i for i in job.get("moderation") or []
+             if (key == "*" and i["status"] == "pending") or i["key"] == key.lower()]
     if not items:
-        raise ValueError("no such name in this episode")
+        raise ValueError("nothing like that in this episode")
     if action == "approve":
         for i in items:
-            party.approve(i["key"])
+            if i["kind"] in ("party", "rolled_by", "shout"):
+                party.approve(i["key"])
             i["status"] = "approved"
         save(job)
         return job
     spec = job["spec"]
+    redo_node, redo_writer = None, None  # a name only needs the video made again; text changes resolve again
     for i in items:
-        party.block(i["key"])
         i["status"] = "removed"
+        if i["kind"] in ("party", "rolled_by", "shout"):
+            party.block(i["key"])
         if i["kind"] == "party":
             spec["party"] = [c for c in spec.get("party", []) if c["name"] != i.get("companion")]
         elif i["kind"] == "rolled_by":
             spec.setdefault("credits", {})["rolledBy"] = None
-            job.setdefault("credits", {})["rolledBy"] = None
+        elif i["kind"] == "shout":
+            spec.setdefault("credits", {})["shouters"] = [h for h in spec["credits"].get("shouters") or [] if h.lower() != i["key"]]
+        elif i["kind"] in ("word", "writer"):
+            spec.get("voices", {}).pop("shout", None)
+            spec.setdefault("credits", {})["shouters"] = []
+            for o in job["moderation"]:
+                if o["kind"] in ("shout", "word"):
+                    o["status"] = "removed"
+            if i["kind"] == "writer":
+                redo_node, redo_writer = job.get("plan_node"), None
+            else:
+                story = json.loads(json.dumps(job.get("writer_story") or {}))
+                story.setdefault("voices", {})["shouts"] = []
+                redo_writer = story
+    job["credits"] = {"rolledBy": spec.get("credits", {}).get("rolledBy"), "shouters": spec.get("credits", {}).get("shouters") or []}
     job["status"] = "rendering"
     save(job)
+    removed = [i.get("handle") and f"@{i['handle']}" or (f'the word "{i["word"]}"' if i["kind"] == "word" else "the AI text") for i in items]
 
-    def again() -> None:
+    def again(_job: dict) -> None:
         try:
             with _render_lock, channels.use(channels.ADVENTURE):
-                job["script"] = script(spec)
-                _render(job)
+                if job.get("resolve_ctx") and (redo_writer is not None or redo_node is not None):
+                    _redo(job, redo_node if redo_node is not None else job["plan_node"], redo_writer)
+                else:
+                    job["script"] = script(spec)
+                    _render(job)
                 job["status"] = "scheduled"
                 save(job)
-                notify.send(f":broom: **Adventure**: {_title(job)} made again without "
-                            + ", ".join(f"@{i['handle']}" for i in items) + f"; posts at {_local(job['publish_at'])}\n{job['video_url']}")
+                notify.send(f":broom: **Adventure**: {_title(job)} made again without " + ", ".join(removed)
+                            + f"; posts at {_local(job['publish_at'])}\n{job['video_url']}")
         except Exception as e:
             _fail(job, e, "rendering again after moderation")
 
-    _spawn(lambda j: again(), job, f"adventure-moderate-{job['id']}")
+    _spawn(again, job, f"adventure-moderate-{job['id']}")
     return job
 
 
@@ -376,7 +444,13 @@ def _report(job: dict) -> None:
     video = settings.videos_dir / job["video"] if job.get("video") else None
     what = f"{_title(job)} ({job['node']})" if job.get("node") else _title(job)
     dead = "\n:skull: The hero falls in this one." if spec.get("dead") else ""
-    pend = [i for i in job.get("moderation") or [] if i["status"] == "pending"]
+    pend = [i for i in job.get("moderation") or [] if i["status"] == "pending" and i.get("handle")]
+    w = job.get("writer") or {}
+    if w and title != "Adventure post":
+        why = "; ".join(p for a in w.get("attempts", []) for p in (a.get("problems") or [a.get("error", "")]) if p)[:300]
+        dead += {"written": f"\n:pen_ballpoint: Written by the AI writer ({len(w.get('attempts', []))} tries); compare it with the plan on the dashboard.",
+                 "fallback": f"\n:pen_ballpoint: The AI writer didn't manage it, so the plan plays as written ({why}).",
+                 }.get(w.get("status"), "")
     if pend and title != "Adventure post":
         dead += (f"\n:eyes: {len(pend)} name(s) shown for the first time: " + ", ".join(f"@{i['handle']}" for i in pend)
                  + ". Check them on the dashboard (Adventure → Moderation) before it posts.")
@@ -440,8 +514,11 @@ def _post(job: dict) -> None:
                 job["error"] = job["results"]["instagram"]["error"]
             if ok and job["spec"].get("kind") == "story":
                 campaign.commit(job)
-                if (job.get("credits") or {}).get("rolledBy"):
-                    party.credit(job["state_after"]["ep"], job["id"], "rolled_by", job["credits"]["rolledBy"])
+                cr, ep = job.get("credits") or {}, job["state_after"]["ep"]
+                if cr.get("rolledBy"):
+                    party.credit(ep, job["id"], "rolled_by", cr["rolledBy"])
+                for h in cr.get("shouters") or []:
+                    party.credit(ep, job["id"], "shout", h, ((job["spec"].get("voices") or {}).get("shout") or {}).get("word"))
             save(job)
             _report(job)
             if ok and job.get("series"):

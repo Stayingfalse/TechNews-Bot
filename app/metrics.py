@@ -131,6 +131,10 @@ def _adventure_posts() -> list[dict]:
         if job.get("votes"):
             tags["followed_vote"] = job["votes"].get("how", "")
             tags["way"] = job["votes"].get("way") or "none"
+        if job.get("writer"):
+            tags["writer"] = job["writer"].get("status") or "off"
+        if "voices" in spec:
+            tags["shout_used"] = "yes" if (spec.get("voices") or {}).get("shout") else "no"
         if "party" in spec:
             tags["party"] = "yes" if spec["party"] else "empty"
             tags["rally"] = str((spec.get("check") or {}).get("rally", 0))
@@ -139,6 +143,8 @@ def _adventure_posts() -> list[dict]:
                  if v else {})
         if v and "joins" in v:  # the party and the Voices: totals counted on this post
             extra.update(joins=v["joins"], way_votes=sum(v.get("ways") or []))
+        if v and "shouts" in v:
+            extra["shouts"] = sum(s["n"] for s in v["shouts"])
         if "party" in spec:
             extra["party_size"] = len(spec["party"])
         out.append({"id": job["id"], "channel": channels.ADVENTURE, "published_at": job["published_at"],

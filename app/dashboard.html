@@ -232,9 +232,10 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
   </div>
 
   <section id="moderation" class="notice" hidden aria-labelledby="moderation-h">
-    <strong id="moderation-h">Names in the next story episode</strong>
-    <div class="tags" style="color:inherit">Viewers' usernames shown on their companions and as "rolled by". New names are shown unless you
-      remove them before the episode posts. Removing one makes the episode again without it (a couple of minutes) and keeps that name out of the story for good.</div>
+    <strong id="moderation-h">Check the next story episode</strong>
+    <div class="tags" style="color:inherit">Viewers' usernames (companions, "rolled by", first to shout), the shouted word and the AI writer's text.
+      Everything is used unless you change it before the episode posts. Removing a name makes the episode again without it (a couple of minutes) and keeps
+      that name out for good; "Remake without this word" has the writer write the day again without it; "Use the planned text" plays the weekly plan's own words.</div>
     <div id="moderation-msg" role="status"></div>
     <div id="moderation-list"></div>
   </section>
@@ -667,13 +668,22 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     const eps = await r.json();
     $("moderation-msg").textContent = msg || "";
     list.replaceChildren();
-    const WHAT = { party: i => `companion ${i.companion}`, rolled_by: () => "credited with the roll" };
+    const WHAT = { party: i => `@${i.handle} · companion ${i.companion}`, rolled_by: i => `@${i.handle} · credited with the roll`,
+                   shout: i => `@${i.handle} · named as first to shout "${i.word}"`,
+                   word: i => `The shouted word "${(i.word || "").toUpperCase()}", written into the story`, writer: () => "The AI writer's text (below)" };
+    const REMOVE = { word: "Remake without this word", writer: "Use the planned text instead" };
     const STATE = { pending: "Not checked", approved: "Approved", removed: "Removed" };
     for (const ep of eps) {
       const row = el("div", { class: "failed-post" });
       const head = el("div", {}, `${ep.title} · posts ${when(ep.publish_at)}${ep.status === "rendering" ? " · being made again…" : ""}`);
       if (ep.video_url && ep.status === "scheduled") { head.append(document.createTextNode(" · ")); head.append(el("a", { href: ep.video_url, target: "_blank", rel: "noopener" }, "Watch preview")); }
       row.append(head);
+      if (ep.text) {
+        const t = el("div", { class: "tags", style: "color:inherit;margin:6px 0;white-space:pre-wrap" });
+        t.textContent = `Written: ${(ep.text.hook || []).join(" ")} · ${ep.text.story || ""}${ep.text.after ? " " + ep.text.after : ""}\n`
+                      + `Planned: ${((ep.text.planned || {}).hook || []).join(" ")} · ${(ep.text.planned || {}).story || ""}`;
+        row.append(t);
+      }
       const act = async (key, action) => {
         const res = await fetch(`/adventure/moderation/${encodeURIComponent(ep.job)}/${action}?key=${encodeURIComponent(key)}`,
                                 { method: "POST", headers: { ...(auth.headers || {}), "X-Quizbot": "1" } });
@@ -682,10 +692,10 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
       };
       for (const i of ep.items) {
         const line = el("div", { class: "acts", style: "align-items:center;gap:8px;flex-wrap:wrap" });
-        line.append(el("span", {}, `@${i.handle} · ${(WHAT[i.kind] || (() => i.kind))(i)}`), el("span", { class: "pill" }, STATE[i.status] || i.status));
+        line.append(el("span", {}, (WHAT[i.kind] || (() => i.kind))(i)), el("span", { class: "pill" }, STATE[i.status] || i.status));
         if (ep.status === "scheduled" && i.status !== "removed") {
           if (i.status === "pending") { const b = el("button", { type: "button" }, "Approve"); b.addEventListener("click", () => act(i.key, "approve")); line.append(b); }
-          const b = el("button", { type: "button" }, "Remove and remake"); b.addEventListener("click", () => act(i.key, "remove")); line.append(b);
+          const b = el("button", { type: "button" }, REMOVE[i.kind] || "Remove and remake"); b.addEventListener("click", () => act(i.key, "remove")); line.append(b);
         }
         row.append(line);
       }

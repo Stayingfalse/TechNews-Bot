@@ -221,9 +221,31 @@ def dice(ep: int, node_id: str) -> tuple[list[int], str]:
     return out, proof
 
 
-def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0) -> dict:
+def _recent_text(s: dict, n: int = 3) -> list[dict]:
+    """The last episodes' text as they played (the writer's words when it wrote them), for the writer."""
+    out = []
+    for h in s["history"][-n:]:
+        if h.get("story"):
+            out.append({"story": h["story"], "outcome": h.get("outcome") or ""})
+            continue
+        arc = _arc(h["arc"]) if h.get("arc") else None
+        try:
+            node = _node_of(arc, h["node"]) if arc else None
+        except StopIteration:
+            node = None
+        if node:
+            ck = node.get("check")
+            out.append({"story": node["story"], "outcome": (ck["success"] if h.get("success") else ck["fail"]) if ck else node.get("after", "")})
+    return out
+
+
+def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0,
+                story: dict | None = None) -> dict:
     """The spec (and everything to remember) for today's story episode. `way` (bold/sly/wise, the
-    comments' winning way) picks the check's skill; `rally` (from turnout) adds to the roll."""
+    comments' winning way) picks the check's skill; `rally` (from turnout) adds to the roll.
+    `story` (party as story characters, the companion with a moment, the Voices' totals) goes to
+    the AI writer, which adapts the planned node's words; without it, or if the writer fails, the
+    planned node plays as written."""
     opts = prev_job["script"]["options"]
     prev_node = {"arc": prev_job.get("arc"), "node": prev_job.get("node")}
     arc, node, choice = next_node(prev_job["spec"], prev_node, pick, opts[pick])
@@ -237,9 +259,18 @@ def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = 
     ctx = {"ep": ep, "hero": s["hero"], "hearts": s["hearts"], "dice": rolled,
            "recap": {"pick": pick, "votes": counts, "label": opts[pick], "line": choice["recap"]},
            "way": way, "rally": rally}
+    planned, written = node, None
+    if story is not None:
+        from . import writer
+
+        full = {**story, "ep": ep, "hero": s["hero"], "hearts": s["hearts"], "recap": choice["recap"],
+                "recent": _recent_text(s), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")}}
+        check = lambda n: _run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": choice["recap"]})["problems"]  # noqa: E731
+        node, written = writer.adapt(node, full, check)
     spec = _run_node("resolve", payload={"node": node, "ctx": ctx})
     broken = choice.get("breaks")
     return {"spec": spec, "arc": arc["id"], "node": node["id"], "dice": {"rolled": rolled, "proof": proof},
+            "writer": written, "plan_node": planned, "resolve_ctx": ctx, "writer_story": full if story is not None else None,
             "state_after": {"ep": ep, "arc": arc["id"], "node": node["id"], "hearts": spec["hearts"]["after"], "dead": spec["dead"],
                             "broke": {"rule": broken, "choice": opts[pick], "at": prev_node["node"] or "episode0"} if broken else None,
                             "ok": (spec.get("check") or {}).get("roll", {}).get("ok")}}
@@ -251,7 +282,10 @@ def commit(job: dict) -> dict:
     s.update(ep=a["ep"], arc=a["arc"], node=a["node"], hearts=a["hearts"], dead=a["dead"])
     if a.get("broke"):
         s["rules_broken"].append({**a["broke"], "ep": a["ep"]})
+    spec = job.get("spec") or {}
     s["history"].append({"ep": a["ep"], "arc": a["arc"], "node": a["node"], "date": datetime.now(settings.tz).date().isoformat(),
+                         "story": spec.get("story"), "outcome": spec.get("after"),
+                         "written": (job.get("writer") or {}).get("status") == "written",
                          "pick": (job.get("votes") or {}).get("pick"), "votes": (job.get("votes") or {}).get("counts"),
                          "success": a.get("ok"), "hearts": a["hearts"], "job": job["id"]})
     save_state(s)
