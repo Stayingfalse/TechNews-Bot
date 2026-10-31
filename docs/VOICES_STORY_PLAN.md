@@ -1,10 +1,14 @@
-# The Voices: a story the comments steer more directly
+# The Voices and the party: a story the commenters steer and join
 
-**Status: proposal, for decisions (§9).** An upgrade to the dungeon crawl
-([ADVENTURE_PLAN.md](ADVENTURE_PLAN.md)), the channel that has done best so far (§1). Comments
-get far more say over each episode, a daily DeepSeek step writes each episode from the planned
-story plus what the comments added up to, and **nothing about any commenter leaves the server or
-appears on screen**.
+**Status: proposal, for decisions (§10).** An upgrade to the dungeon crawl
+([ADVENTURE_PLAN.md](ADVENTURE_PLAN.md)), the channel that has done best so far (§1):
+
+- **The party**: viewers can join the story. Their username goes on a companion who travels with
+  the hero, as the quiz shows shout-out winners. The privacy policy gets the matching update (§7).
+- **The Voices**: comments decide *what* the hero does, *how*, *how well*, and *what* turns up.
+- **A daily DeepSeek step** writes each episode from the planned story and the comments' totals.
+  **DeepSeek never receives anything about a person** (§5), so it isn't a processor of personal
+  data and doesn't need listing in the privacy policy.
 
 ## 1. Why
 
@@ -17,38 +21,43 @@ channels (24 h, Instagram):
 | Comments per 1,000 views | 14 | **24** | – |
 | Best post | 597 views | **1,114 views, 22 comments, 19 voters** | 133 |
 
-Today a comment can only pick one of three options. The aim is for the comments to decide *how*
-things happen, *how well*, and *what* turns up in the story, and for every commenter to see that
-the crowd they were part of did it.
+Today a comment only picks one of three options, and the voter disappears into a total. Two
+things should drive more comments, and bring people back: seeing *yourself* in the next video
+(the party, credits), and seeing *the crowd you were part of* change the story (the Voices).
 
-## 2. The rule: totals only (the current privacy policy, unchanged)
+## 2. The party: viewers in the story (names on screen)
 
-The privacy policy says that on story videos we read comments to count votes, keep "only the totals
-and how many people voted", and that names "aren't stored, shown or read out", and that the AI that
-plans story videos "only sees vote totals". Everything below works within that:
+| Mechanic | What happens | On screen |
+|---|---|---|
+| **Join** | Comment `join` under an episode. There are up to **5 companion places**. Open places go to joiners in the order they commented, and once a week one place goes to a random joiner who hasn't had one, so newcomers get in. | A companion walks behind the hero with a parchment `@handle` tag |
+| **Stay or leave** | You stay while you keep commenting. After **3 episodes without a comment**, your companion heads home in the story and the place opens up. Comment `leave` (or `#optout`) to go now. | "Ash (@amy) heads home" |
+| **Companion moments** | Each episode, one companion gets a line in the story ("Ash spots the trap"). The server picks who, at random from the companions; it's never based on what anyone wrote. | The story line, with the `@handle` tag lit up |
+| **Rolled by** | One of the day's voters, picked at random, is credited with the roll. The server still rolls, with the same real odds. | "ROLLED BY @tom" on the die card |
+| **First to shout** | The first 3 people (by time) who shouted the word that made it into the story (§3.3) are credited. | "@mira, @sam, @lee and 11 others cried: TORCH" |
+| **The Chronicle** | A public page (`/chronicle`) with the party now, past companions and credits per episode. | Linked in the bio and captions |
 
-- Comments are read on the server, as now. **Only counts come out**: how many voted for each
-  option, each way of doing it (§3.1), each word from a fixed list (§3.3), and how many voted in all.
-- **No usernames, no comment text and nothing a single person wrote** reach DeepSeek, the screen,
-  Discord or the stored records. A shouted word only counts once **3 or more different people**
-  have used it, so no single comment can be picked out. That rule also stops one troll from steering
-  the story.
-- Opted-out viewers aren't counted (the existing opt-out list).
-- DeepSeek receives the story plan, the campaign state and these totals, none of which is personal
-  data. That's also why DeepSeek storing data in China (its own privacy policy) doesn't affect
-  commenters here.
-- **Optional, for transparency (decision 2)**: one line in the policy's processors list saying
-  that the AI writing story episodes (DeepSeek) also sees only totals, including counts of shouted
-  words. No new data is collected, so this is a clarification, not a change.
+**Companions are story characters, drawn by the server.** A joiner's companion gets a class, a
+look and a name from fixed lists (seeded draws, so they're the same on every re-render), not from
+anything the person wrote. The link between a companion and a username exists only on our server
+and in the rendered video. That's what lets DeepSeek write the companions without ever knowing who
+they belong to (§5).
 
-## 3. What the comments decide
+**What companions face:** they can be wounded, and in a dramatic moment fall. That's always the
+story's doing (dice, choices), never aimed at the person, and handled gently: a fallen companion
+gets an epitaph card, and its owner can rejoin with a new one.
 
-All of this goes in the same comment as the vote: `A sly torch` counts as option A, done slyly, shouting "torch".
-The existing parser already reads `A ...` as a vote for A; the rest is new.
+Names are **shown, never spoken**: the narrator never says usernames, so voice costs don't change and
+nothing new goes to ElevenLabs. Offensive usernames are never shown, as on the quiz: they're dropped
+from joining and from credits.
 
-### 3.1 How: choose a way as well as an option
+## 3. The Voices: what the comments decide
 
-Every ask offers three **ways**, the same three all season so they become familiar:
+All of this fits in one comment with the vote: `A sly torch` counts as option A, done slyly, shouting
+"torch" (the parser already reads `A ...` as a vote for A).
+
+### 3.1 What: the option (as now)
+
+### 3.2 How: a way as well as an option
 
 | Way | Comment | Skills it uses | In the story |
 |---|---|---|---|
@@ -56,109 +65,133 @@ Every ask offers three **ways**, the same three all season so they become famili
 | **SLY** | `A sly` | stealth, sleight of hand, deception | quiet, tricky |
 | **WISE** | `A wise` | perception, arcana, persuasion | careful, clever |
 
-The winning option says *what* the hero does; the winning way says *how*. The server picks the check's
-skill from the way (with this hero's real odds), so the comments decide which skill gets rolled.
-If nobody names a way, the node's default skill is used.
+The winning way sets the check's skill (from this hero's real odds) and the story's tone. If nobody
+names a way, the node's own skill is used.
 
-### 3.2 How well: turnout matters (Rally)
+### 3.3 How well: Rally
 
-The number of people who voted adds to tomorrow's roll: **+1 at 10 voters, +2 at 25, +3 at 50**.
-It's shown on the die card ("+2 RALLY · 31 VOICES"), and the odds on screen include it. More
-comments make the hero more likely to succeed, so every comment helps, and it gives a reason to bring a
-friend. The thresholds go up as the channel grows, so it stays a goal rather than a given.
+Turnout adds to the roll: **+1 at 10 voters, +2 at 25, +3 at 50**, shown on the die card
+("+2 RALLY · 31 VOICES"), and the odds on screen include it. The thresholds go up as the channel grows.
 
-### 3.3 What turns up: shouted words
+### 3.4 What turns up: shouted words
 
-"**Shout a word to the hero**": any comment containing a word from the **Shout List**, about 300
-fantasy words for items, elements, creatures, actions and moods (torch, rope, fire, sing, run, pray, bread,
-wolf…). Each person's first list word counts once. The words with 3 or more shouters are passed to DeepSeek
-as totals, and **the top word has to appear in the next episode**: the validator checks for it. On
-screen: "**THE VOICES CRIED: TORCH** (14)". Because the list is fixed, nothing free-form or offensive can
-reach the story, and viewers can see their word land the next morning.
+A word from the **Shout List** (about 300 fantasy words: torch, rope, wolf, sing, bread…) in a comment
+counts as that person's shout, one each. Once **3 or more different people** have shouted a word, it
+goes to DeepSeek as a count, and **the top word has to appear in the next episode** (the validator
+checks). The list is fixed, so nothing free-form or offensive can reach the story, and one person
+can't steer it.
 
-### 3.4 The Voices as a character
+### 3.5 The Voices as a character
 
-The audience becomes a character in the story: the hero hears **the Voices**, a chorus that urges
-them on. The narration and text can use the totals ("Thirty voices roar *fight*", "The Voices are
-split. The hero hesitates."). A close vote (winner under 50 %) and a landslide read differently in the story, though
-only Rally touches the dice.
+The crowd is a chorus the hero hears. The text can use the totals ("Thirty voices roar *fight*",
+"The Voices are split. The hero hesitates."), so a close vote and a landslide read differently.
 
-### 3.5 Naming by vote
-
-When the plan introduces a companion, a pet, an inn or a weapon, its name is a vote between three options
-from a server-side name list ("Name the hound: A Ash, B Brindle, C Moss"). The crowd owns the name,
-and a public **Chronicle** page (`/chronicle`) lists every name, every vote total and every shouted
-word that made it into the story. It holds totals only, so no viewer is named there either.
-
-## 4. How an episode gets written
+## 4. How an episode gets made
 
 ```
 Tuesday (Claude routine, as now)          Every day, 08:00 (server)
-  writes the week's plan: beats, foe,        read yesterday's comments → TOTALS only:
-  scenes, a planned node per day             option counts, way counts, shout counts (≥3 people),
-  (the fallback)                             voters, yesterday vs the week's average
-                                           ─► DeepSeek: plan + campaign state + last 3 episodes
-                                             + totals → today's node (the JSON the renderer draws)
-                                           validate with the engine (schema, scenes, foes, DCs,
-                                             voice limit) + new checks: follows the winning option,
-                                             the top shout word appears, the skill matches the way
-                                             ✗ → problems back, at most 2 retries
-                                             ✗✗ → the planned node (the day still goes out)
-                                           server rolls (with Rally) → voice → render
-                                           Discord preview, 45 min to `hold` → 09:00 post
+  the week's plan: beats, foe, scenes,      read yesterday's comments (on the server only):
+  a planned node per day (the fallback)       votes, ways, shouts, joins, leaves, who voted
+                                            party: joins/leaves → places → server draws class/look/name
+                                            credits chosen on the server (rolled by, first to shout)
+                                          ─► DeepSeek gets STORY DATA ONLY (§5) → today's node
+                                            validate with the engine (+ follows the winning option,
+                                              top shout word appears, skill matches the way,
+                                              the chosen companion gets its moment) → ✗ retry ×2 → planned node
+                                            server rolls (with Rally) → server adds @handles to the spec
+                                            voice (no names) → render → Discord preview, 45 min to `hold`
+                                            09:00 post
 ```
 
-- **The dice stay honest**: the server sets the skill (from the way), the Rally bonus and the roll;
-  DeepSeek only sets the DC within the validator's limits and writes the words.
-- **Cost**: each call is about 10 k tokens in and 1-2 k out, under 1p a day at DeepSeek's flash-model
-  prices. Voice cost is unchanged: narration stays under the current 280-character daily cap.
-- **Prompt** kept in the repo (`docs/VOICES_WRITER_PROMPT.md`), like the routine's.
+The dice stay honest: the server sets the skill, the Rally bonus and the roll; DeepSeek only sets
+the DC within the validator's limits and writes the words. Each call costs under 1p a day.
 
-## 5. On screen
+## 5. The DeepSeek boundary
+
+**What DeepSeek receives**, all of it story data or totals:
+
+- the season bible, this week's plan, the campaign state and the last 3 episodes (our own text);
+- the party as **story characters only**: `slot 2: "Ash", dwarf rogue, wounded`. The server drew those,
+  so nothing in them comes from a person;
+- which slot gets today's moment (picked at random on the server);
+- totals: votes per option, per way, shouted words with 3 or more shouters, the number of voters.
+
+**What it never receives:** usernames, account ids, comment text, who voted or shouted what,
+who's in which slot, credits, or anything a single viewer wrote or did. The server adds the
+`@handle` tags to the spec *after* DeepSeek has answered, at render time.
+
+**How it's enforced in code:** the DeepSeek prompt is built from a fixed set of fields
+(`writer.prompt_input()`), with a test that fails if any username, account id or comment text from
+the day's tally appears in it. The request is also logged (the input without the key), so it can
+be checked.
+
+So DeepSeek handles no personal data: there's nothing to list in the privacy policy, and its
+storing data in China doesn't involve viewers.
+
+## 6. On screen
 
 Within the current look (the episode stays about the same length; the hook already shows today's choice):
 
-- **Hook**: "TODAY YOU DECIDE" with the options, plus "how? BOLD · SLY · WISE · shout a word".
-- **Recap card** (exists): "Yesterday the Voices chose **A**, **sly**, 23 to 9", then
-  "**THE VOICES CRIED: TORCH**".
-- **Die card** (exists): skill from the way, "+2 RALLY · 31 VOICES", and odds that include the bonus.
-- **Ask**: "Comment A, B or C + bold, sly or wise + a word to shout. Example: `A sly torch`".
+- **Hook**: "TODAY YOU DECIDE" with the options, plus "how? BOLD · SLY · WISE · shout a word · `join` the party".
+- **Party**: up to 5 companions behind the hero, each with a parchment `@handle` tag.
+- **Recap card**: "The Voices chose **A**, **sly**, 23 to 9", then "@mira, @sam, @lee and 11 others cried: **TORCH**".
+- **Die card**: the way's skill, "+2 RALLY · 31 VOICES", "ROLLED BY @tom", and odds including Rally.
+- **Ask**: "Comment A, B or C + bold, sly or wise + a word to shout. `join` to join the party."
 
-## 6. Safety
+## 7. Privacy policy update (ships with phase 1)
 
-- Only list words and counts reach DeepSeek, so there's nothing for a comment to inject.
-- The output is schema-checked and rendered from the engine's fixed scenes and creatures, and each
-  episode is previewed on Discord 45 minutes before posting with `hold`, which swaps in the planned node.
-- Tone stays teen and up, as the season is now; the prompt sets it and the validator and preview catch the rest.
+Stories become like the quiz: names can appear in videos, on the same lawful basis (legitimate
+interests) and with the same opt-out. Changes to `app/legal/privacy.html`:
 
-## 7. What changes in the code
+1. **In short**: "on story videos, to count your vote, way and shouted word (only the totals are
+   kept), and if you comment *join*, to put your username on a companion in the story".
+2. **Section 2 (what we collect)**: add party members (account id, username, place, when you joined,
+   when you last commented) and story credits (username, episode).
+3. **Section 3 (purposes)**:
+   - *Story videos: votes*: votes, ways and shouted words counted, one per account. Only totals are kept,
+     except that a random voter may be credited with the roll ("rolled by @you") and the first 3 people
+     to shout the word that's used may be named in the next episode.
+   - *Story videos: the party (new)*: comment *join* to be given a companion with your username in each
+     episode while you're in the party. You leave after 3 episodes without a comment, by commenting
+     *leave*, or by opting out. Party members and credits are listed on `/chronicle`.
+   - The balancing test also covers story videos (you chose to comment and to join, it's limited to
+     the story, and you can leave or opt out at any time).
+4. **Section 4 (who else)**: Discord "can name quiz shout-out winners and story party members and credits";
+   ElevenLabs is unchanged (story narrators never say names). Add one sentence, without naming
+   a processor (it isn't one): "Story episodes are drafted with the help of an AI writing tool that
+   is given only the story and vote totals: never usernames, comments or anything about you."
+5. **Section 5 (retention)**: party members while in the party, then the username is removed **$days days**
+   after leaving (the companion stays in the story under its story name); credits for **$days days** after
+   the episode, like shout-outs; names in published videos stay until removed on request (as now).
+6. **Erasure and opt-out** (`app/privacy.py`): `#optout` and the request form also remove party membership
+   and credits, and the companion leaves the party in the next episode.
+7. **The story explainer video** (`render_explainer_adventure.py`) gets a scene for joining and
+   credits, so the policy's videos stay accurate.
+
+## 8. What changes in the code
 
 | Area | Change |
 |---|---|
-| `app/adventure/votes.py` | tally ways (bold/sly/wise) and shout words (fixed list, first per person, ≥3 people) alongside options; still one vote per account |
-| `app/adventure/shouts.py` (new) | the Shout List and name lists |
-| `app/adventure/writer.py` (new) | DeepSeek client (OpenAI-compatible: `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`), prompt from plan + state + totals, validate/retry, fallback, cost log |
-| `app/adventure/campaign.py` | Rally, skill from the way, named things in the campaign state |
-| `app/adventure/jobs.py` | 08:00: tally → writer → dice → voice → render; `hold` |
-| `adventure/packages/shared` | node/spec fields: `voices` (way, totals, shout), `rally`; validator checks |
-| `adventure/packages/engine/story.ts` | hook and ask lines, recap card with the way and shout, die card with Rally |
-| `app/legal` | `/chronicle` (totals only); optional policy line (decision 2) |
-| metrics | tags `writer: deepseek / fallback`; extras: way votes, shouts counted, rally, voters |
+| `app/adventure/votes.py` | tally ways, shouts (fixed list, first per person, ≥3 people), joins and leaves; keep voter names only in memory for the day's credits |
+| `app/adventure/party.py` (new) | places, queue, weekly random place, 3-episode rule, server-drawn companions, credits, retention, opt-out and erasure hooks |
+| `app/adventure/shouts.py` (new) | the Shout List, companion name/class/look lists |
+| `app/adventure/writer.py` (new) | DeepSeek client (OpenAI-compatible: `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`), `prompt_input()` (story data + totals only), validate/retry, fallback, cost log; the boundary test |
+| `app/adventure/campaign.py`, `jobs.py` | Rally, skill from the way; 08:00 tally → party → writer → dice → handles → voice → render; `hold` |
+| `adventure/packages/shared`, `engine/story.ts` | spec fields `party`, `voices`, `rally`, `credits`; party bar, tags, recap/die-card lines, ask |
+| `app/legal`, `app/privacy.py`, explainer | §7; `/chronicle` |
+| metrics | tags `writer: deepseek / fallback`; extras: joins, party size, way votes, shouts counted, rally, voters |
 
-## 8. Phases
+## 9. Phases
 
 | Phase | What | AI | Success looks like |
 |---|---|---|---|
-| **P1 Ways + Rally** | tally ways and turnout; the way picks the skill, Rally adds to the roll; hook/recap/die card/ask | none | comments per 1,000 views above 24; voters per post rising |
-| **P2 Writer** | DeepSeek adapts each planned node: the way's tone, the Voices, the top shout word; falls back safely | DeepSeek | ≥ 90 % of days pass validation first or second time; no holds needed |
-| **P3 Free plan** | the weekly routine writes beats instead of every branch, and DeepSeek writes the node; naming votes; the Chronicle | DeepSeek | shouts per post rising; watch time holding |
+| **P1 Party + ways + Rally** | joining, companions with `@handle`, rolled by, the 3-episode rule, ways, Rally, the policy update (§7), `/chronicle` | none (the planned nodes as now; companions appear and walk, without lines) | comments per 1,000 views above 24; voters and returning commenters rising |
+| **P2 Writer** | DeepSeek adapts each planned node: the way's tone, the Voices, the top shout, a companion's moment; safe fallback | DeepSeek (no personal data) | ≥ 90 % of days pass validation first or second time; no holds needed |
+| **P3 Free plan** | the weekly routine writes beats, and DeepSeek writes the node; naming votes; companions' fates | DeepSeek | shouts and joins per post rising; watch time holding |
 
-Each phase is tagged in the metrics, so before and after can be compared on the dashboard.
+## 10. Decisions needed
 
-## 9. Decisions needed
-
-1. **Where**: upgrade @dungeoncrawlergram (recommended: it's the story audience that comments) or a new account?
-2. **Policy line**: add "the AI writing story episodes (DeepSeek) also sees only totals, including
-   shouted words" to the processors list (recommended, for transparency), or leave the policy as it is?
-3. **Start with**: P1 (ways + Rally, no AI, quick to ship, recommended) or go straight to P2?
-4. **Moderation**: Discord preview with `hold` (recommended), or your approval before each episode posts?
+1. **Where**: upgrade @dungeoncrawlergram (recommended) or a new account?
+2. **Party size and rules**: 5 places, leave after 3 episodes without a comment, one random place a week (recommended)?
+3. **Start with P1** (party, ways, Rally, policy; no AI) (recommended)?
+4. **Moderation**: Discord preview with `hold` (recommended), or your approval before each post?
