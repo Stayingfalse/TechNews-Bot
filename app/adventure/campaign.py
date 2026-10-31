@@ -221,8 +221,9 @@ def dice(ep: int, node_id: str) -> tuple[list[int], str]:
     return out, proof
 
 
-def build_story(prev_job: dict, pick: int, counts: list[int]) -> dict:
-    """The spec (and everything to remember) for today's story episode."""
+def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0) -> dict:
+    """The spec (and everything to remember) for today's story episode. `way` (bold/sly/wise, the
+    comments' winning way) picks the check's skill; `rally` (from turnout) adds to the roll."""
     opts = prev_job["script"]["options"]
     prev_node = {"arc": prev_job.get("arc"), "node": prev_job.get("node")}
     arc, node, choice = next_node(prev_job["spec"], prev_node, pick, opts[pick])
@@ -234,7 +235,8 @@ def build_story(prev_job: dict, pick: int, counts: list[int]) -> dict:
     ep = s["ep"] + 1
     rolled, proof = dice(ep, node["id"])
     ctx = {"ep": ep, "hero": s["hero"], "hearts": s["hearts"], "dice": rolled,
-           "recap": {"pick": pick, "votes": counts, "label": opts[pick], "line": choice["recap"]}}
+           "recap": {"pick": pick, "votes": counts, "label": opts[pick], "line": choice["recap"]},
+           "way": way, "rally": rally}
     spec = _run_node("resolve", payload={"node": node, "ctx": ctx})
     broken = choice.get("breaks")
     return {"spec": spec, "arc": arc["id"], "node": node["id"], "dice": {"rolled": rolled, "proof": proof},

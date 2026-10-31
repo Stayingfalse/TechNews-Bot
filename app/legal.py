@@ -28,10 +28,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from string import Template
 
-from . import notify, privacy, store
+from . import channels, notify, privacy, store
 from .config import settings
 
-UPDATED = "28 October 2026"
+UPDATED = "1 November 2026"
 REQUEST_LOG_DAYS = 365  # deletion/opt-out records kept to show we honoured them (Art. 5(2) accountability)
 OPTOUT_WORDS = re.compile(r"(?i)(#\s*opt\s*-?\s*out\b|\bopt\s*-?\s*out\b|#\s*nodata\b)")
 TEMPLATES = Path(__file__).with_name("legal")
@@ -283,7 +283,7 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 
 # What each kind of channel does with comments, as the policy's account list describes it
 FORMATS = {"quiz": "Quiz videos: answers in comments, shout-outs, viewer-picked themes",
-           "adventure": "Story videos: A/B/C votes in comments decide what happens next",
+           "adventure": "Story videos: votes in comments decide what happens next; comment join to be in the story",
            "racing": "Race videos: play-money bets in comments, balances and a league table"}
 PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
 
@@ -389,6 +389,34 @@ def home_page() -> str:
                      f'{html.escape(", ".join(PLATFORM_NAMES.get(p, p.title()) for p in ch.platforms))}</p>'
                      f'<p>{profiles}</p>{listing}</section>')
     return _page("home", title="Videos you play in the comments", channels="".join(parts))
+
+
+CLASS_NAMES = {"fighter": "Fighter", "rogue": "Rogue", "wizard": "Wizard"}
+LEFT = {"left": "left", "inactive": "headed home", "opted out": "left", "removed": "left"}
+
+
+def chronicle_page() -> str:
+    """The story's party, past companions and credits: usernames only for people still within
+    the retention period (party.chronicle() leaves out the rest)."""
+    from .adventure import party
+
+    c = party.chronicle()
+    at = lambda h: f"@{html.escape(h)}" if h else "a former traveller"  # noqa: E731
+
+    def table(rows: list[str], head: str, empty: str) -> str:
+        return f'<div class="wrap"><table><tr>{head}</tr>{"".join(rows)}</table></div>' if rows else f"<p>{empty}</p>"
+
+    members = table([f"<tr><td><strong>{html.escape(m['name'])}</strong>, {CLASS_NAMES.get(m['cls'], m['cls'])}</td>"
+                     f"<td>{at(m['handle'])}</td><td>since episode {m['joined_ep']}</td></tr>" for m in c["members"]],
+                    "<th>Companion</th><th>Played by</th><th>Joined</th>", "Nobody yet: comment <strong>join</strong> to be first.")
+    credits = table([f"<tr><td>Episode {r['ep']}</td><td>{at(r['handle'])}</td></tr>" for r in c["credits"] if r["kind"] == "rolled_by"],
+                    "<th>Episode</th><th>Rolled by</th>", "No rolls credited yet.")
+    past = table([f"<tr><td><strong>{html.escape(p['name'])}</strong>, {CLASS_NAMES.get(p['cls'], p['cls'])}</td><td>{at(p['handle'])}</td>"
+                  f"<td>episodes {p.get('joined_ep') or '?'} to {p.get('left_ep') or '?'}, {LEFT.get(p.get('reason'), 'left')}</td></tr>"
+                  for p in c["past"]], "<th>Companion</th><th>Played by</th><th>Travelled</th>", "Nobody has left the party yet.")
+    story = channels.get(channels.ADVENTURE)
+    return _page("chronicle", title="The chronicle", members=members, credits=credits, past=past, places=str(c["places"]),
+                 waiting=str(c["waiting"]), story_account=html.escape(_at(story.brand_handle) or "our story account"))
 
 
 def privacy_page() -> str:

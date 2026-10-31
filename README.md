@@ -183,6 +183,24 @@ installed into the image by the Dockerfile). For now the server can render its E
 Discord previews (`POST /adventure/episode0`). Settings: `ADVENTURE_VOICE_ID` (default Obsidian),
 `ADVENTURE_VOICE_MODEL` (`eleven_v3`), `ADVENTURE_VOICE_BUDGET` (characters a month, default 7200).
 
+### The party and the Voices (story episodes)
+
+Comments do more than vote ([docs/VOICES_STORY_PLAN.md](docs/VOICES_STORY_PLAN.md)); one comment can do all of it, e.g. `A sly join`:
+
+- **Ways**: `bold`, `sly` or `wise` next to the vote. The winning way swaps the check's skill for the hero's best one for it.
+- **Rally**: turnout adds to the roll (+1 at 10 voters, +2 at 25, +3 at 50), shown on the die card with the odds.
+- **The party**: `join` gives the viewer a companion (name, class and look drawn by the server) that walks behind
+  the hero with their `@handle`. Places follow turnout (one per 4 voters, 2 to 6); open places go in order, plus one
+  random draw a week; 3 episodes without a comment (or `leave`, or `#optout`) and the companion heads home.
+- **Rolled by**: a random voter is credited with the day's roll.
+- **Moderation**: every name not approved before is listed on the dashboard (Dungeon crawl → "Names in the next story
+  episode") and in the Discord preview. Approve it, or "Remove and remake": the episode is rendered again without it and
+  the name is kept out for good. `GET /adventure/moderation`, `POST /adventure/moderation/{job}/{approve|remove}?key=`.
+- **`/chronicle`** (public): the party now, past companions and credits. Usernames leave the party records
+  `RETENTION_DAYS` after someone leaves or after a credit, and at once on erasure or opt-out (privacy policy §3, §5).
+- Only totals are kept with an episode. Anything a future AI writer is given comes from `party.story_party()`
+  (companion name, class, slot): never usernames or comments.
+
 ## Racing channel (Sixel Speedway)
 
 A third channel: a daily ~40 s car race that viewers bet on with play money in the comments. A

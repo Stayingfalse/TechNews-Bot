@@ -130,9 +130,17 @@ def _adventure_posts() -> list[dict]:
         }
         if job.get("votes"):
             tags["followed_vote"] = job["votes"].get("how", "")
+            tags["way"] = job["votes"].get("way") or "none"
+        if "party" in spec:
+            tags["party"] = "yes" if spec["party"] else "empty"
+            tags["rally"] = str((spec.get("check") or {}).get("rally", 0))
         v = votes.get(job["id"])
         extra = ({"votes": sum(v["counts"]), "voters": v.get("voters", 0), "comments_read": v.get("comments", 0)}
                  if v else {})
+        if v and "joins" in v:  # the party and the Voices: totals counted on this post
+            extra.update(joins=v["joins"], way_votes=sum(v.get("ways") or []))
+        if "party" in spec:
+            extra["party_size"] = len(spec["party"])
         out.append({"id": job["id"], "channel": channels.ADVENTURE, "published_at": job["published_at"],
                     "slot": when.strftime("%Y-%m-%d"), "title": adv._title(job).replace(" part", ", part"),
                     "duration": r.get("duration") or 0, "results": job["results"], "tags": tags, "extra": extra})

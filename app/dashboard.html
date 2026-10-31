@@ -231,6 +231,14 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     </section>
   </div>
 
+  <section id="moderation" class="notice" hidden aria-labelledby="moderation-h">
+    <strong id="moderation-h">Names in the next story episode</strong>
+    <div class="tags" style="color:inherit">Viewers' usernames shown on their companions and as "rolled by". New names are shown unless you
+      remove them before the episode posts. Removing one makes the episode again without it (a couple of minutes) and keeps that name out of the story for good.</div>
+    <div id="moderation-msg" role="status"></div>
+    <div id="moderation-list"></div>
+  </section>
+
   <section id="failed" class="notice" hidden aria-labelledby="failed-h">
     <strong id="failed-h">Didn't post everywhere</strong>
     <div id="failed-msg" role="status"></div>
@@ -648,6 +656,49 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     return btn;
   }
 
+  // ------------------------------------------------------------ story moderation (adventure)
+  let modPoll;
+  async function loadModeration(msg) {
+    const box = $("moderation"), list = $("moderation-list");
+    clearTimeout(modPoll);
+    if (KIND[currentChannel()] !== "adventure") { box.hidden = true; return; }
+    const r = await fetch("/adventure/moderation", auth);
+    if (!r.ok) { box.hidden = true; return; }
+    const eps = await r.json();
+    $("moderation-msg").textContent = msg || "";
+    list.replaceChildren();
+    const WHAT = { party: i => `companion ${i.companion}`, rolled_by: () => "credited with the roll" };
+    const STATE = { pending: "Not checked", approved: "Approved", removed: "Removed" };
+    for (const ep of eps) {
+      const row = el("div", { class: "failed-post" });
+      const head = el("div", {}, `${ep.title} · posts ${when(ep.publish_at)}${ep.status === "rendering" ? " · being made again…" : ""}`);
+      if (ep.video_url && ep.status === "scheduled") { head.append(document.createTextNode(" · ")); head.append(el("a", { href: ep.video_url, target: "_blank", rel: "noopener" }, "Watch preview")); }
+      row.append(head);
+      const act = async (key, action) => {
+        const res = await fetch(`/adventure/moderation/${encodeURIComponent(ep.job)}/${action}?key=${encodeURIComponent(key)}`,
+                                { method: "POST", headers: { ...(auth.headers || {}), "X-Quizbot": "1" } });
+        loadModeration(res.ok ? (action === "remove" ? "Removed: the episode is being made again without it." : "Approved.")
+                              : `Couldn't do that: ${(await res.json().catch(() => ({}))).detail || res.status}`);
+      };
+      for (const i of ep.items) {
+        const line = el("div", { class: "acts", style: "align-items:center;gap:8px;flex-wrap:wrap" });
+        line.append(el("span", {}, `@${i.handle} · ${(WHAT[i.kind] || (() => i.kind))(i)}`), el("span", { class: "pill" }, STATE[i.status] || i.status));
+        if (ep.status === "scheduled" && i.status !== "removed") {
+          if (i.status === "pending") { const b = el("button", { type: "button" }, "Approve"); b.addEventListener("click", () => act(i.key, "approve")); line.append(b); }
+          const b = el("button", { type: "button" }, "Remove and remake"); b.addEventListener("click", () => act(i.key, "remove")); line.append(b);
+        }
+        row.append(line);
+      }
+      if (ep.status === "scheduled" && ep.items.some(i => i.status === "pending")) {
+        const all = el("button", { type: "button" }, "Approve all"); all.addEventListener("click", () => act("*", "approve"));
+        const a = el("div", { class: "acts" }); a.append(all); row.append(a);
+      }
+      list.append(row);
+    }
+    box.hidden = !eps.length && !msg;
+    if (eps.some(e => e.status !== "scheduled")) modPoll = setTimeout(() => loadModeration(), 15000);
+  }
+
   async function loadFailed(msg, started) {
     const r = await fetch("/jobs/failed", auth);
     if (!r.ok) return;
@@ -895,6 +946,7 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     if (postsChannel !== id) { posts = []; insight = null; }
     showTab(location.hash === "#schedule" ? "schedule" : "performance", true);
     if (postsChannel !== id) load();
+    loadModeration();
   }
 
   const JOB_STATUS = { booked: "Booked", preparing: "Getting ready", voicing: "Recording voice", rendering: "Making video",
