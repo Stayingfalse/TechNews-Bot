@@ -526,20 +526,37 @@ def comments_check(posts: int = Query(default=4, ge=1, le=10)):
 
 # ------------------------------------------------------------------ performance
 
+def _channel_param(channel: str) -> str | None:
+    if channel == "all":
+        return None
+    if channel not in channels.registry():
+        raise HTTPException(422, f"unknown channel {channel!r}: one of {', '.join(channels.registry())} or all")
+    return channel
+
+
 @app.get("/metrics", dependencies=[Depends(require_token)])
-def get_metrics():
-    """Every posted quiz with its tags and per-platform numbers (latest + 1h/24h/7d snapshots)."""
-    return metrics.report()
+def get_metrics(channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+    """A channel's posts (default the quiz; `all` for every channel), newest first, each with its
+    `channel`, `tags`, `extra` (the adventure's votes, racing's bets) and per-platform numbers
+    (latest + 1h/24h/7d snapshots)."""
+    return metrics.report(_channel_param(channel))
+
+
+@app.get("/metrics/summary", dependencies=[Depends(require_token)])
+def metrics_summary():
+    """Every channel at a glance: posts, and per platform the median views and averages at 24 hours."""
+    return metrics.summary()
 
 
 @app.post("/metrics/refresh", dependencies=[Depends(require_token)])
 def refresh_metrics():
-    """Fetch fresh numbers for every tracked post now, instead of waiting for the next round."""
+    """Fetch fresh numbers for every tracked post on every channel now, instead of waiting for the next round."""
     return {"updated": metrics.collect(force=True)}
 
 
 class Insight(BaseModel):
     week_of: dt.date = Field(description="Monday of the week the findings cover")
+    channel: str = Field(default=channels.MAIN, description="The channel reviewed: main (the quiz), adventure or racing")
     summary: str = Field(max_length=6000, description="What worked and what didn't, in plain words (markdown)")
     recommendations: list[str] = Field(default_factory=list, max_length=12,
                                        description="Concrete instructions for next week's batch")
@@ -547,23 +564,29 @@ class Insight(BaseModel):
                                    description="What to test next week, one change each, with the tag to set")
 
 
+def _insights(channel: str | None) -> list[dict]:
+    rows = store._read("insights.json", [])
+    return [r for r in rows if channel is None or r.get("channel", channels.MAIN) == channel]
+
+
 @app.post("/insights", status_code=201, dependencies=[Depends(require_token)])
 def post_insight(ins: Insight):
-    """The weekly review stores its findings here; the Monday batch reads the latest."""
+    """The weekly reviews store their findings here; the Monday batch reads the latest for its channel."""
+    _channel_param(ins.channel)
     rows = store._read("insights.json", [])
     rows.append({"at": store.now_iso(), **ins.model_dump(mode="json")})
-    store._write("insights.json", rows[-52:])
-    return {"stored": len(rows[-52:])}
+    store._write("insights.json", rows[-156:])  # a year of weekly reviews for three channels
+    return {"stored": len(_insights(ins.channel))}
 
 
 @app.get("/insights", dependencies=[Depends(require_token)])
-def get_insights(limit: int = 8):
-    return store._read("insights.json", [])[-limit:][::-1]
+def get_insights(limit: int = 8, channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+    return _insights(_channel_param(channel))[-limit:][::-1]
 
 
 @app.get("/insights/latest", dependencies=[Depends(require_token)])
-def latest_insight():
-    rows = store._read("insights.json", [])
+def latest_insight(channel: str = Query(default=channels.MAIN, description="main, adventure or racing")):
+    rows = _insights(_channel_param(channel))
     if not rows:
         raise HTTPException(404, "no review yet")
     return rows[-1]

@@ -560,40 +560,22 @@ def recover(stale: timedelta = STALE) -> None:
                         f"@{settings.racing_handle} before retrying.")
 
 
-METRIC_AGES = {"24h": 24, "7d": 168}
-
-
-def refresh_metrics(t: datetime | None = None) -> None:
-    """Each post's numbers at 24 hours and 7 days, for comparing themes (GET /racing/metrics)."""
-    t = t or now()
-    for job in recent(200):
-        ig = (job.get("results") or {}).get("instagram") or {}
-        if not ig.get("ok") or not job.get("published_at"):
-            continue
-        age = (t - datetime.fromisoformat(job["published_at"])).total_seconds() / 3600
-        for name, hours in METRIC_AGES.items():
-            if age >= hours and name not in job.get("metrics", {}):
-                try:
-                    with channels.use(channels.RACING):
-                        job.setdefault("metrics", {})[name] = instagram.metrics(ig["media_id"])
-                    save(job)
-                except Exception:
-                    log.exception("racing metrics for %s failed", job["id"])
-
-
 def metrics_by_theme() -> dict:
-    """Average numbers per theme, with how many bets each video's card drew."""
+    """Average numbers per theme (each post's 7-day Instagram snapshot, else its 24-hour one, from the
+    shared collector in app/metrics.py), with how many bets each video's card drew."""
+    from .. import metrics
+
     out: dict[str, dict] = {}
-    for job in recent(500):
-        m = (job.get("metrics") or {}).get("7d") or (job.get("metrics") or {}).get("24h")
+    for post in metrics.report(channels.RACING):
+        snaps = (post["platforms"].get("instagram") or {}).get("snapshots") or {}
+        m = snaps.get("7d") or snaps.get("24h")
         if not m:
             continue
-        card = races.get(job["card"]) or {}
-        g = out.setdefault(job["theme"], {"posts": 0, "views": 0, "comments": 0, "likes": 0, "bets": 0})
+        g = out.setdefault(post["tags"]["theme"], {"posts": 0, "views": 0, "comments": 0, "likes": 0, "bets": 0})
         g["posts"] += 1
         for k in ("views", "comments", "likes"):
             g[k] += m.get(k) or 0
-        g["bets"] += len([b for b in card.get("bets", []) if not b.get("refused")])
+        g["bets"] += post["extra"].get("bets", 0)
     for g in out.values():
         for k in ("views", "comments", "likes", "bets"):
             g[f"avg_{k}"] = round(g[k] / g["posts"], 1)
@@ -612,7 +594,6 @@ def _loop() -> None:
                 if time.time() - last_poll > settings.racing_poll_minutes * 60:
                     last_poll = time.time()
                     poll()
-                    refresh_metrics()
                 with channels.use(channels.RACING):
                     replies.send_due()
         except Exception:

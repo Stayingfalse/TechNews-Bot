@@ -343,7 +343,7 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
                  : Number.isInteger(v) ? v.toLocaleString("en-GB") : v.toFixed(1);
   const when = iso => new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
 
-  let posts = [], insight = null;
+  let posts = [], insight = null, postsChannel = null;
 
   function filtered() {
     const days = Number($("f-days").value), platform = $("f-platform").value, tests = $("f-tests").checked;
@@ -353,7 +353,7 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
       .filter(p => Date.parse(p.published_at) >= since)
       .map(p => ({ ...p, rows: Object.entries(p.platforms)
         .filter(([k]) => platform === "all" || k === platform)
-        .map(([k, v]) => ({ platform: k, url: v.url, ...v.latest })) }))
+        .map(([k, v]) => ({ ...(p.extra || {}), platform: k, url: v.url, ...v.latest })) }))
       .filter(p => p.rows.length);
   }
 
@@ -493,7 +493,7 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
   function table(list) {
     const t = $("posts"); t.replaceChildren();
     const head = el("tr");
-    for (const [h, n] of [["Posted", 0], ["Quiz", 0], ["Platform", 0], ["Views", 1], ["Likes", 1], ["Comments", 1], ["Shares", 1], ["Saves", 1], ["Watched", 1], ["Per 1k", 1]])
+    for (const [h, n] of [["Posted", 0], ["Post", 0], ["Platform", 0], ["Views", 1], ["Likes", 1], ["Comments", 1], ["Shares", 1], ["Saves", 1], ["Watched", 1], ["Per 1k", 1]])
       head.append(el("th", n ? { class: "n" } : {}, h));
     t.append(head);
     if (!list.length) { const r = el("tr"); r.append(el("td", { colspan: 10, class: "empty" }, "No posts in this range yet.")); t.append(r); return; }
@@ -503,7 +503,8 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
         if (i === 0) {
           tr.append(el("td", { rowspan: p.rows.length }, when(p.published_at)));
           const q = el("td", { rowspan: p.rows.length, class: "quiz" }); q.append(el("div", {}, p.title));
-          const tags = Object.entries(p.tags).filter(([k]) => !["palette", "music", "test"].includes(k)).map(([k, v]) => `${k}: ${v}`).join(" · ");
+          const tags = [...Object.entries(p.extra || {}).map(([k, v]) => `${EXTRA[k] || k}: ${fmt(v)}`),
+                        ...Object.entries(p.tags).filter(([k]) => !["palette", "music", "test"].includes(k)).map(([k, v]) => `${k}: ${v}`)].join(" · ");
           q.append(el("div", { class: "tags" }, tags)); tr.append(q);
         }
         const pc = el("td", { class: "platform" }); const dot = el("span", { class: "pf" }); dot.style.setProperty("--c", pf(r.platform).color);
@@ -685,6 +686,19 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     }
   }
 
+  // The channel's own counts (adventure votes, racing bets), offered as measures beside the platform numbers
+  const EXTRA = { votes: "Votes", voters: "Voters", comments_read: "Comments read", bets: "Bets", bettors: "Bettors",
+                  staked: "Staked (§)", new_players: "New players" };
+  const BASE_MEASURES = [["views", "Views"], ["engagement_per_1k", "Interactions per 1,000 views"],
+                         ["comments_per_1k", "Comments per 1,000 views"], ["watched_pct", "Average % watched"]];
+  function measureOptions() {
+    const sel = $("c-measure"), cur = sel.value || "views";
+    const extras = [...new Set(posts.flatMap(p => Object.keys(p.extra || {})))].map(k => [k, EXTRA[k] || k]);
+    const opts = [...BASE_MEASURES, ...extras];
+    sel.replaceChildren(...opts.map(([v, l]) => el("option", { value: v }, l)));
+    sel.value = opts.some(([v]) => v === cur) ? cur : "views";
+  }
+
   function tagOptions() {
     const sel = $("c-tag"), cur = sel.value || "theme";
     const keys = [...new Set(posts.flatMap(p => Object.keys(p.tags)))].filter(k => k !== "test").sort();
@@ -698,15 +712,20 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
   }
 
   async function load() {
+    const ch = currentChannel();
     document.querySelector("main").style.opacity = posts.length ? 0.6 : 1;
-    const r = await fetch("/metrics", auth);
+    const r = await fetch(`/metrics?channel=${encodeURIComponent(ch)}`, auth);
     if (r.status === 401) { location.href = "/login?next=/dashboard"; return; }
-    posts = await r.json();
-    const ins = await fetch("/insights/latest", auth);
-    insight = ins.ok ? await ins.json() : null;
+    const got = r.ok ? await r.json() : [];
+    const ins = await fetch(`/insights/latest?channel=${encodeURIComponent(ch)}`, auth);
+    const gotInsight = ins.ok ? await ins.json() : null;
+    if (currentChannel() !== ch) return;  // switched again while loading
+    posts = got; postsChannel = ch; insight = gotInsight;
     const stamps = posts.flatMap(p => Object.values(p.platforms).map(v => v.latest.at)).filter(Boolean).sort();
     $("updated").textContent = stamps.length ? `Numbers as of ${when(stamps.at(-1))}` : "No numbers collected yet";
-    tagOptions(); render(); renderInsight(); loadFailed();
+    if (!insight) { $("insight-when").textContent = ""; const b = $("insight-body"); b.className = "empty"; b.replaceChildren(document.createTextNode("No weekly review for this channel yet.")); }
+    tagOptions(); measureOptions(); render(); renderInsight();
+    if ((KIND[ch] || "quiz") === "quiz") loadFailed(); else $("failed").hidden = true;
     document.querySelector("main").style.opacity = 1;
   }
 
@@ -871,18 +890,11 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
     const c = channelList.find(c => c.id === id);
     $("title").textContent = c ? c.name : "Daily quiz";
     document.title = `${c ? c.name : "Daily quiz"} · Dashboard`;
-    $("quiz-tabs").hidden = !quiz;
-    $("updated").hidden = !quiz;
-    if (quiz) {
-      $("view-channel").hidden = true;
-      showTab(location.hash === "#schedule" ? "schedule" : "performance", true);
-      if (!posts.length) load();
-    } else {
-      for (const t of ["performance", "schedule"]) $(`view-${t}`).hidden = true;
-      $("failed").hidden = true;
-      $("view-channel").hidden = false;
-      loadChannel(id);
-    }
+    // every channel has its numbers; the second tab is the quiz's schedule or the other channels' own view
+    $("tab-schedule").textContent = quiz ? "Schedule" : "Posts";
+    if (postsChannel !== id) { posts = []; insight = null; }
+    showTab(location.hash === "#schedule" ? "schedule" : "performance", true);
+    if (postsChannel !== id) load();
   }
 
   const JOB_STATUS = { booked: "Booked", preparing: "Getting ready", voicing: "Recording voice", rendering: "Making video",
@@ -1142,11 +1154,13 @@ a.button.primary { background: var(--ig); border-color: var(--ig); color: #fff; 
 
   // ------------------------------------------------------------ tabs
   function showTab(name, keepHash) {
+    const quiz = (KIND[currentChannel()] || "quiz") === "quiz";
     for (const t of ["performance", "schedule"]) {
       $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
-      $(`view-${t}`).hidden = t !== name;
+      $(`view-${t}`).hidden = t !== name || (t === "schedule" && !quiz);
     }
-    if (name === "schedule") loadSchedule();
+    $("view-channel").hidden = quiz || name !== "schedule";
+    if (name === "schedule") { if (quiz) loadSchedule(); else loadChannel(currentChannel()); }
     if (!keepHash || location.hash !== "#accounts") history.replaceState(null, "", location.pathname + location.search + `#${name}`);
     if (name === "performance" && posts.length) render();  // charts size to their now-visible column
   }
