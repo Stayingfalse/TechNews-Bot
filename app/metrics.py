@@ -123,6 +123,7 @@ def _adventure_posts() -> list[dict]:
             "episode": f"Episode {spec.get('ep')}" if story else f"Episode 0 part {spec.get('part')}",
             "slot": when.strftime("%H:%M"), "weekday": when.strftime("%a"), "length": _length(r.get("duration") or 0),
             "voice": "yes" if vc.get("chars") else "no",
+            "hook": job.get("hook_style") or ("title" if story else "episode0"),
             "check": "yes" if spec.get("check") else "no",
             "hero_dies": "yes" if spec.get("dead") else "no",
             "test": "no",
@@ -151,6 +152,7 @@ def _racing_posts() -> list[dict]:
         ran = races.get(job["run"]) if job.get("run") else None
         tags = {
             "kind": job.get("kind", ""), "theme": job.get("theme", ""),
+            "intro": job.get("intro") or "classic",
             "race_format": (ran or {}).get("format") or "none", "card_format": card.get("format") or "",
             "slot": when.strftime("%H:%M"), "weekday": when.strftime("%a"), "length": _length(r.get("duration") or 0),
             "league_table": "yes" if job.get("bonus") else "no", "test": "no",

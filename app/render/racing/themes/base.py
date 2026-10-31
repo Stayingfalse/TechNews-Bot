@@ -18,7 +18,7 @@ W, H, FPS = 1080, 1920, 30
 # Text must stay inside this box: the Reels/Shorts header is above it, the caption and buttons
 # below it, the like/comment buttons to its right.
 SAFE = (48, 240, 936, 1440)
-SCENES = ("boot", "hook", "rules", "grid", "race", "finish", "result", "table", "schedule", "card", "outro")
+SCENES = ("boot", "hook", "rules", "grid", "pick", "lights", "tease", "race", "finish", "result", "table", "schedule", "card", "outro")
 FONTS = Path(__file__).resolve().parents[4] / "assets" / "fonts" / "racing"
 
 
@@ -66,6 +66,7 @@ def point_at(track: np.ndarray, frac: float, closed: bool = True) -> tuple[float
 class Theme:
     name = "base"
     sound: dict = {}  # overrides for app/render/racing/sound.py, e.g. {"bed": "pulse"}
+    opening: tuple[str, float] = ("boot", 0.6)  # the first scene, set by the engine: the outro fades back to it
 
     def __init__(self, spec: dict, record: bool = False):
         self.spec = spec

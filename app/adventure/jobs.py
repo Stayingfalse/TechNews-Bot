@@ -112,6 +112,11 @@ def _spawn(target, job: dict, name: str) -> None:
     threading.Thread(target=run, args=(), daemon=True, name=name).start()
 
 
+# The story episode's opening: "title" (the hook words alone, to 31 Oct 2026), then "question" (the
+# hook words with today's question and options, complete in the first frame). Bump it when the opening changes.
+HOOK_STYLE = "question"
+
+
 def _new_id() -> str:
     return f"adv-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
 
@@ -249,6 +254,8 @@ def _render(job: dict) -> None:
         summary = _node(fh.name, "--out", str(out), "--workers", workers, *audio)
     finally:
         os.unlink(fh.name)
+    # which opening the renderer drew, for comparing in GET /metrics?channel=adventure (tag `hook`)
+    job["hook_style"] = HOOK_STYLE if spec.get("kind") == "story" else "episode0"
     job.update(video=out.name, video_url=f"{settings.public_base_url}/media/{out.name}", render=summary)
     save(job)
 

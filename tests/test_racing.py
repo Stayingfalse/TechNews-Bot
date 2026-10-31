@@ -284,8 +284,9 @@ def test_hooks_never_need_bets_and_use_them_when_there_are_some():
     assert 2 <= len(lines) <= 3 and all(len(line.replace("*", "")) <= 20 for line in lines)
 
 
-@pytest.mark.parametrize("fmt", ["gp", "endurance", "drag"])
-def test_every_scene_keeps_its_text_inside_the_safe_area(fmt):
+@pytest.mark.parametrize("fmt,intro", [("gp", "classic"), ("endurance", "cold"), ("drag", "pick"), ("gp", "lights"),
+                                       ("endurance", "tease"), ("drag", "tease"), ("drag", "cold")])
+def test_every_scene_keeps_its_text_inside_the_safe_area(fmt, intro):
     race = races.draft(1, STATS, "2026-10-27T18:00:00+00:00", "2026-10-28T17:00:00+00:00", fmt)
     race["result"], race["status"] = races.run(race), "run"
     out = ledger.settle(race, [comment("c1", "averyveryverylonghandle_99", "4 all", 1), comment("c2", "bob", "2 300", 2)],
@@ -293,7 +294,7 @@ def test_every_scene_keeps_its_text_inside_the_safe_area(fmt):
     nxt = races.draft(2, STATS, "2026-10-28T18:00:00+00:00", "2026-10-29T17:00:00+00:00", fmt)
     tb = ledger.table(since="2000-01-01")
     tb["week"] = "WEEK 44"
-    spec = json.loads(json.dumps(video.spec("pitwall", nxt, race, out, tb, tb["bust"])))
+    spec = json.loads(json.dumps(video.spec("pitwall", nxt, race, out, tb, tb["bust"], intro)))
     for sp in (spec, json.loads(json.dumps(video.spec("pitwall", nxt)))):
         v = Video(sp, record=True)
         for name, dur in timeline(sp):
@@ -305,12 +306,25 @@ def test_every_scene_keeps_its_text_inside_the_safe_area(fmt):
         assert not bad
 
 
-def test_the_video_loops_back_to_its_first_frame():
+@pytest.mark.parametrize("intro", ["classic", "cold", "pick", "lights", "tease"])
+def test_the_video_loops_back_to_its_first_frame(intro):
     race, out = _ran()
-    spec = json.loads(json.dumps(video.spec("pitwall", _race(2), race, out)))
+    spec = json.loads(json.dumps(video.spec("pitwall", _race(2), race, out, intro=intro)))
     v = Video(spec)
     first, last = v.frame(0), v.frame(v.n_frames - 1)
     assert list(first.getdata()) == list(last.getdata())
+    if intro != "classic":  # cars on screen from the first frame, not a bare boot screen
+        assert len(set(first.convert("RGB").getdata())) > 50
+        assert timeline(spec)[0][0] != "boot"
+
+
+def test_openings_take_turns_and_are_tagged(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "racing_intros", ["cold", "pick", "nope", "lights", "tease"])
+    assert [jobs.intro_for(n) for n in range(4, 9)] == ["cold", "pick", "lights", "tease", "cold"]
+    monkeypatch.setattr(settings, "racing_intros", [])
+    assert jobs.intro_for(3) == "classic"
 
 
 # ------------------------------------------------------------------ the daily cycle

@@ -63,9 +63,10 @@ def schedule_part(card_race: dict, days: int = 5) -> list[dict]:
 
 
 def spec(theme: str, card_race: dict, ran: dict | None = None, settled: dict | None = None,
-         table: dict | None = None, bust: int = 0) -> dict:
-    """A race video (ran = the race just run), or the launch video (ran None: rules then the card)."""
-    out = {"theme": theme, "cars": sim.CARS, "domain": settings.racing_domain, "card": card_part(card_race),
+         table: dict | None = None, bust: int = 0, intro: str = "classic") -> dict:
+    """A race video (ran = the race just run), or the launch video (ran None: rules then the card).
+    `intro` picks the race video's opening (app/render/racing/engine.py INTROS)."""
+    out = {"theme": theme, "intro": intro, "cars": sim.CARS, "domain": settings.racing_domain, "card": card_part(card_race),
            "schedule": schedule_part(card_race), "seed": int(card_race["seal"][:8], 16)}
     if ran is None:
         out.update(launch=True, hook=hooks.LAUNCH)

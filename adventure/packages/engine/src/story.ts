@@ -184,6 +184,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
       const alive = i < s.hearts.after || (i < s.hearts.before && broke < 1);
       heart(F, 140 + i * 24, ASK_Y + 13, 8, i >= s.hearts.after && i < s.hearts.before ? broke : alive ? 0 : 1);
     }
+    voteTag(F, s);
   }
 
   // story, with yesterday's vote on a card first
@@ -206,22 +207,44 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   c.fillRect(0, H - 4, (W * T) / P.dur, 4);
 }
 
+// The opening: complete in its first frame (the one that decides whether people stay), and it puts
+// today's choice up front, as the call to action only comes at the end and most viewers leave sooner.
 function hook(F: Frame, s: StorySpec, hero: Creature, foe: Creature | undefined, HE: number) {
   const { c, T } = F;
   const a = T < HE - 0.4 ? 1 : (HE + 0.1 - T) / 0.5;
-  c.fillStyle = `rgba(14,9,18,${0.86 * a})`;
+  c.fillStyle = `rgba(14,9,18,${0.72 * a})`;
   c.fillRect(-20, -20, W + 40, H + 40);
-  const hv = c.createRadialGradient(180, 300, 20, 180, 300, 260);
-  hv.addColorStop(0, `rgba(255,170,80,${0.22 * a})`);
+  const hv = c.createRadialGradient(170, 220, 20, 170, 220, 240);
+  hv.addColorStop(0, `rgba(255,170,80,${0.24 * a})`);
   hv.addColorStop(1, "rgba(255,170,80,0)");
   c.fillStyle = hv;
   c.fillRect(0, 0, W, H);
   c.globalAlpha = a;
-  standee(F, foe || hero, 170, 300, 3.1, 1, T, 0, foe ? RED : GOLD);
   dtxt(F, `EPISODE ${s.ep} · YOU DECIDE THE STORY`, W / 2 - 10, 96, 12, GOLD);
-  big(F, s.hook[0].toUpperCase(), 170, 386, 44, CREAM, 0.1, 0.4);
-  big(F, s.hook[1].toUpperCase(), 170, 440, 48, GOLD, 0.5, 0.8);
+  standee(F, foe || hero, 170, 226, 2.5, 1, T, 0, foe ? RED : GOLD);
+  big(F, s.hook[0].toUpperCase(), 170, 312, 40, CREAM, -1, -0.5);  // already settled at frame 0
+  big(F, s.hook[1].toUpperCase(), 170, 360, 44, GOLD, -1, -0.5);
+  if (!s.dead && s.choices.length) {
+    dtxt(F, "TODAY YOU DECIDE", 170, 394, 11, GOLD);
+    fit(F, s.ask, 170, 416, 18, W - 100, CREAM, "center", 700);
+    s.choices.forEach((o, i) => {
+      const y = 442 + i * 25;
+      c.fillStyle = "rgba(20,12,16,.78)";
+      c.beginPath();
+      c.roundRect(30, y - 11, W - 100, 22, 5);
+      c.fill();
+      seal(F, 44, y, 9, "ABC"[i]);
+      fit(F, o.label, 60, y + 5, 13, W - 140, CREAM, "left", 600);
+    });
+  }
   c.globalAlpha = 1;
+}
+
+/** During the story: a small reminder that viewers pick what happens next. */
+function voteTag(F: Frame, s: StorySpec) {
+  if (s.dead || !s.choices.length) return;
+  parch(F, 204, ASK_Y, 122, 26);
+  fit(F, `YOU PICK NEXT: ${"ABC".slice(0, s.choices.length).split("").join(" · ")}`, 265, ASK_Y + 17, 10, 110, INK, "center", 700);
 }
 
 function recapCard(F: Frame, s: StorySpec, [a0, a1]: [number, number]) {
