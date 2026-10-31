@@ -111,9 +111,10 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `GET /jobs/failed?days=14`, `POST /jobs/{id}/retry` | Recent posts that missed a platform, with each error; retry posts again to just those platforms (the video is made again if it was deleted). The dashboard shows them with a Retry button. |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
 | `GET /login`, `GET /logout` | Sign in with the Instagram or YouTube account the bot posts to (30-day cookie; read-only plus the dashboard's refresh) |
-| `GET /dashboard` | Performance dashboard: totals, views per post, compare posts by any label, the latest weekly review (signed in, or `?token=…`) |
-| `GET /metrics`, `POST /metrics/refresh` | Every posted quiz with its labels and per-platform numbers (latest + 1h/24h/7d snapshots); refresh fetches now |
-| `POST /insights`, `GET /insights/latest` | The weekly review's findings; the Monday batch reads the latest |
+| `GET /dashboard` | Performance dashboard for every channel (pick it at the top): totals, views per post, compare posts by any label or by the channel's own counts (votes, bets), that channel's latest weekly review (signed in, or `?token=…`) |
+| `GET /metrics?channel=`, `POST /metrics/refresh` | A channel's posts (`main`, the default, `adventure`, `racing` or `all`) with their labels (`tags`), the channel's own counts (`extra`: an adventure part's votes, the bets under a race video) and per-platform numbers (latest + 1h/24h/7d snapshots). Every channel's posts are collected, each with its own account; refresh fetches them all now |
+| `GET /metrics/summary` | Every channel at a glance: posts, and per platform the median views and average % watched, watch time and comments per 1,000 views at 24 hours |
+| `POST /insights`, `GET /insights/latest?channel=` | A weekly review's findings, per channel (`channel` in the body, default `main`); the Monday batch reads the quiz's latest |
 | `GET /schema` | Spec JSON schema |
 | `POST /instagram/story/{job_id}` | Post the "new quiz out now" story for a quiz already on Instagram |
 | `POST /instagram/carousel?job_id=&dry_run=true` | Make the swipe-to-play carousel slides (default: the week's most viewed); `dry_run=false` posts it |
@@ -204,7 +205,7 @@ every 15 min   read new comments on the open race's post → reply to each bet (
   the race card, league table, a page per player and per race with the seal check. That domain
   serves nothing else, and the racing pages exist on no other domain.
 - **Themes** (`app/render/racing/themes/`): each is one look for the whole video. `RACING_THEMES=pitwall,other`
-  makes videos take turns (an A/B test); `GET /racing/metrics` compares them. `POST /racing/preview?theme=&format=`
+  makes videos take turns (an A/B test); `GET /racing/metrics` compares them (from the shared numbers, `GET /metrics?channel=racing`). `POST /racing/preview?theme=&format=`
   sends a sample video (with a throwaway seed) to Discord.
 - **Endpoints** (token): `POST /racing/start`, `GET /racing/state`, `GET /racing/races/{n}`,
   `GET /racing/jobs[/{id}]`, `POST /racing/jobs/{id}/retry`, `GET /racing/players?q=`,
