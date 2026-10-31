@@ -99,6 +99,8 @@ class Settings:
         self.racing_domain = os.environ.get("RACING_DOMAIN", "race.onlydan.uk").strip().lower()
         # Looks to use, comma-separated; with more than one, videos take turns (an A/B test, by race number)
         self.racing_themes = [t.strip() for t in os.environ.get("RACING_THEMES", "pitwall").split(",") if t.strip()]
+        # Race video openings that take turns (an A/B test, tag `intro`): classic, cold, pick, lights, tease
+        self.racing_intros = [t.strip() for t in os.environ.get("RACING_INTROS", "cold,pick,lights,tease").split(",") if t.strip()]
         # Bet replies: checked every RACING_POLL_MINUTES, sent RACING_REPLY_GAP seconds apart, at most
         # RACING_REPLY_PER_HOUR an hour (start low on a new account and raise it slowly)
         self.racing_poll_minutes = int(os.environ.get("RACING_POLL_MINUTES", "15"))

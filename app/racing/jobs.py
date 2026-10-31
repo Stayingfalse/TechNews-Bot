@@ -107,6 +107,15 @@ def theme_for(race_no: int) -> str:
     return themes[race_no % len(themes)]
 
 
+def intro_for(race_no: int) -> str:
+    """Race videos take turns through RACING_INTROS, the openings being A/B tested (tag `intro` in
+    GET /metrics?channel=racing). Turns run on the race number, so they rotate whatever the theme."""
+    from ..render.racing.engine import INTROS
+
+    intros = [i for i in settings.racing_intros if i in INTROS] or ["classic"]
+    return intros[race_no % len(intros)]
+
+
 def can_publish() -> str | None:
     if not settings.publish_enabled:
         return "PUBLISH_ENABLED is off"
@@ -193,6 +202,7 @@ def _wipe() -> None:
 
 def _book(kind: str, card: int, run: int | None, slot: datetime, publish: bool = True) -> dict:
     job = {"id": _new_id(kind), "kind": kind, "card": card, "run": run, "theme": theme_for(card),
+           "intro": intro_for(card) if kind == "race" else "classic",
            "channel": channels.RACING, "publish": publish, "publish_at": slot.isoformat(),
            "status": "booked", "created_at": store.now_iso(), "results": {}}
     save(job)
@@ -329,7 +339,8 @@ def build(job: dict) -> dict:
     nxt = _open_next(job, ran, slot)
     job["card"] = nxt["no"]
     bust = ledger.table()["bust"]
-    return video.spec(job["theme"], nxt, ran, {"bets": ran["bets"]}, table, bust)
+    job.setdefault("intro", intro_for(job["run"]))  # booked before openings were tested
+    return video.spec(job["theme"], nxt, ran, {"bets": ran["bets"]}, table, bust, job["intro"])
 
 
 def _render(job: dict, spec: dict) -> None:
@@ -350,8 +361,8 @@ def caption(job: dict) -> str:
     card = races.get(job["card"])
     fmt = sim.FORMATS[card["format"]]
     lines = [f"🏁 Race {card['no']} is open: {fmt['name']}, {fmt['laps']} lap{'s' if fmt['laps'] > 1 else ''} of "
-             f"{card['track']['name']}. Comment a car and a stake, like 4 250 "
-             f"(= §250 on 4 BLUE STREAK). Each comment is a bet. New here? You start with §1,000.",
+             f"{card['track']['name']}. To bet, comment a colour, like blue "
+             f"(= §100 on 4 BLUE STREAK), or add a stake: blue 250. Each comment is a bet. New here? You start with §1,000.",
              f"Bets close {_local(card['closes_at'])}. The race runs in the next video."]
     if job["kind"] == "race":
         ran = races.get(job["run"])
@@ -364,7 +375,7 @@ def caption(job: dict) -> str:
     return "\n\n".join(lines)
 
 
-FIRST_COMMENT = "Bet like this 👉 4 250 = §250 on 4 BLUE STREAK. One comment, one bet. Odds and form are on the race card."
+FIRST_COMMENT = "Pick a colour and comment it 👉 blue = §100 on 4 BLUE STREAK. Add a stake to bet more: blue 250. One comment, one bet."
 
 
 def _publish(job: dict) -> None:
@@ -464,16 +475,20 @@ def retry(job: dict) -> dict:
     return job
 
 
-def preview(theme: str, fmt: str = "") -> dict:
+def preview(theme: str, fmt: str = "", intro: str = "") -> dict:
     """A sample video in any theme, sent to Discord: the open race (or a new one in `fmt`) run with
     a throwaway seed (never its real one, so the preview can't give the result away) and the bets
     so far, nothing saved."""
     from ..render.racing.themes import get as get_theme
 
-    get_theme(theme)  # unknown themes and formats fail before the thread starts
+    from ..render.racing.engine import INTROS
+
+    get_theme(theme)  # unknown themes, formats and openings fail before the thread starts
+    if intro and intro not in INTROS:
+        raise ValueError(f"unknown intro {intro!r}; intros: {list(INTROS)}")
     if fmt and fmt not in sim.FORMATS:
         raise ValueError(f"unknown format {fmt!r}; formats: {sorted(sim.FORMATS)}")
-    job = {"id": f"race-preview-{time.strftime('%Y%m%d-%H%M%S')}", "kind": "preview", "theme": theme, "format": fmt,
+    job = {"id": f"race-preview-{time.strftime('%Y%m%d-%H%M%S')}", "kind": "preview", "theme": theme, "intro": intro, "format": fmt,
            "status": "rendering", "results": {}, "publish_at": now().isoformat()}
 
     def run() -> None:
@@ -496,10 +511,11 @@ def preview(theme: str, fmt: str = "") -> dict:
                          if r["bet"]["car"] == fake["result"]["order"][0] else 0} for r in rows]
                 tb = ledger.table(since=(now() - timedelta(days=7)).isoformat())
                 tb["week"] = "PREVIEW"
-                spec = video.spec(theme, card, fake, {"bets": bets}, tb, tb["bust"])
+                spec = video.spec(theme, card, fake, {"bets": bets}, tb, tb["bust"], intro or intro_for(card["no"]))
                 _render(job, spec)
                 job["status"] = "done"
-                notify.send(f":test_tube: **Sixel Speedway preview** ({theme}, {sim.FORMATS[card['format']]['name']}): "
+                notify.send(f":test_tube: **Sixel Speedway preview** ({theme}, {spec['intro']} opening, "
+                            f"{sim.FORMATS[card['format']]['name']}): "
                             f"not a real result, the race uses a "
                             f"throwaway seed. {job['render']['duration']:.1f}s, rendered in {job['render']['seconds']:.0f}s\n"
                             f"{job['video_url']}", attach=settings.videos_dir / job["video"])

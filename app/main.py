@@ -917,12 +917,13 @@ def racing_metrics():
 
 
 @app.post("/racing/preview", status_code=202, dependencies=[Depends(require_token)])
-def racing_preview(theme: str = "pitwall", format: str = ""):
+def racing_preview(theme: str = "pitwall", format: str = "", intro: str = ""):
     """Render a sample video in a theme and send it to Discord: the open race, or a new one in
-    `format` (oval, gp, rally, figure8, endurance, drag). The race uses a throwaway seed, so it
+    `format` (oval, gp, rally, figure8, endurance, drag), with the opening `intro` (classic, cold,
+    pick, lights, tease; default: the one next in turn). The race uses a throwaway seed, so it
     shows nothing about the real result."""
     try:
-        return racing_jobs.preview(theme, format)
+        return racing_jobs.preview(theme, format, intro)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

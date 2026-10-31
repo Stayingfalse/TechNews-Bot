@@ -21,6 +21,7 @@ COLOURS = {"red": (232, 52, 52), "green": (40, 200, 110), "yellow": (250, 205, 4
            "magenta": (240, 80, 190), "cyan": (30, 210, 230)}
 DARK_TEXT = {"green", "yellow", "cyan"}  # colours that need dark type on them
 X0, X1 = SAFE[0] + 12, SAFE[2] - 6  # text column
+CX = (X0 + X1) // 2  # centred text centres on the safe area, not the frame (the buttons are on the right)
 MAP_BOX = (110, 400, 970, 1000)  # where the track map goes
 TOWER_Y, ROW = 1150, 48
 LANES_Y = (980, 430)  # drag strip: start line, finish line
@@ -153,7 +154,113 @@ class PitWall(Theme):
 
     def _outro(self, t: float, dur: float) -> Image.Image:
         last = self._card(99, 99)
-        return Image.blend(last, self.bg, ease(t / max(dur - 2 / FPS, 1e-3)))
+        if not hasattr(self, "_first"):  # the video's first frame, so a replay loops without a jump
+            self._first = self.draw(self.opening[0], 0.0, self.opening[1]).convert("RGB")
+        return Image.blend(last, self._first, ease(t / max(dur - 2 / FPS, 1e-3)))
+
+    # ---------------------------------------------------------------- openings (A/B tested, see engine.py)
+    def chips(self, d, y: int, size: int = 132, appear: float = 99.0) -> None:
+        """The six cars as big colour chips in a row: what viewers pick from."""
+        gap = (X1 - X0 - 6 * size) / 5
+        for i, car in enumerate(self.cars):
+            a = ease((appear - i * 0.07) / 0.25)
+            if a <= 0:
+                continue
+            no, x = car["no"], X0 + i * (size + gap)
+            r = size / 2 * (0.6 + 0.4 * a)
+            cx, cy = x + size / 2, y + size / 2
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=self.colour(no), outline=WHITE, width=5)
+            self.text(d, (cx, cy + 2), str(no), font("black", int(size * 0.5)), self.ink_on(no), anchor="mm", record=False)
+
+    def _pick(self, t: float, dur: float) -> Image.Image:
+        """Six big cars, one per row, "pick a colour", then 3-2-1 into the race."""
+        im = Image.blend(self.bg, self.map, 0.18)
+        d = ImageDraw.Draw(im)
+        r = self.race
+        self.header(d, f"RACE {r['no']} · {r['format']['name'].upper()}")
+        self.accent_line(d, 300, "PICK A *COLOUR*", 120)
+        for i, car in enumerate(self.cars):  # all there in frame 0: it's the frame that decides if people stay
+            no, y = car["no"], 470 + i * 118
+            pulse = 1 if int(t * 6) % 6 == i else 0  # a highlight running down the list
+            x0 = X0 - 12 - 6 * pulse
+            d.rounded_rectangle([x0, y, X1 + 6, y + 104], 20, fill=self.colour(no))
+            ink = self.ink_on(no)
+            self.text(d, (x0 + 34, y + 52), str(no), font("black", 70), ink, anchor="lm")
+            self.text(d, (x0 + 120, y + 52), car["name"], self.fit(car["name"], "black", 58, X1 - x0 - 160), ink, anchor="lm")
+        left = dur - t
+        if left < 1.5:
+            n = str(int(left / 0.5) + 1)
+            self.text(d, (CX, 1330), n, font("black", 150), YELLOW, anchor="mm")
+        else:
+            self.text(d, (CX, 1330), "then watch it race", font("bold", 50), MUTED, anchor="mm")
+        return im
+
+    def _lights(self, t: float, dur: float) -> Image.Image:
+        """Five big start lights fill the screen; they go out as the race starts."""
+        im = Image.blend(self.bg, self.map, 0.18)
+        d = ImageDraw.Draw(im)
+        r = self.race
+        self.header(d, f"RACE {r['no']} · {r['format']['name'].upper()}")
+        self.text(d, (X0, 300), "PICK A COLOUR", self.fit("PICK A COLOUR", "black", 120, X1 - X0), WHITE)
+        self.accent_line(d, 440, "before the *lights go out*", 64)
+        size, gap = 150, 30
+        x = CX - (5 * size + 4 * gap) / 2
+        for i in range(5):
+            lit = t >= i * 0.32
+            cx = x + i * (size + gap)
+            d.rounded_rectangle([cx - 12, 600, cx + size + 12, 820], 26, fill=(20, 24, 44))
+            col = RED if lit else (50, 30, 44)
+            d.ellipse([cx, 630, cx + size, 630 + size], fill=col, outline=(90, 80, 110), width=4)
+            if lit:  # glow
+                d.ellipse([cx + 30, 650, cx + 70, 690], fill=(255, 140, 140))
+        self.chips(d, 960)
+        names = " · ".join(c["name"].split()[-1] for c in self.cars)
+        self.text(d, (CX, 1140), names, self.fit(names, "semi", 34, X1 - X0), MUTED, anchor="ma")
+        return im
+
+    def tease_at(self) -> float:
+        """The race moment the tease opens on: its biggest incident, else a change of leader, never in
+        the last third (which would give the result away)."""
+        end = self.race["race_end"]
+        lo, hi = min(1.0, end * 0.2), end * 0.65
+        rank = {"blowup": 0, "tangle": 1, "spin": 2, "puncture": 3, "jumpstart": 4}
+        evs = sorted((e for e in self.race["events"] if e["kind"] in rank and lo <= e["t"] <= hi),
+                     key=lambda e: (rank[e["kind"]], e["t"]))
+        if evs:
+            return float(evs[0]["t"])
+        lead = [int(np.argmax(row)) for row in self.dist]
+        changes = [k / FPS for k in range(1, len(lead)) if lead[k] != lead[k - 1] and lo <= k / FPS <= hi]
+        return changes[-1] if changes else end * 0.45
+
+    def _tease(self, t: float, dur: float) -> Image.Image:
+        """The race's most dramatic moment, playing, with "watch for this"; then a rewind to the start."""
+        at = self.tease_at()
+        start = max(0.0, min(at - 0.8, self.race["race_end"] * 0.7 - dur))
+        im = self._race(max(0.0, start + t), dur)
+        d = ImageDraw.Draw(im)
+        d.rounded_rectangle([X0 - 12, 420, X1 + 6, 590], 24, fill=YELLOW)
+        self.text(d, (X0 + 24, 438), "WATCH FOR THIS", font("black", 76), NAVY)
+        self.text(d, (X0 + 26, 530), "pick a colour first: who wins?", font("bold", 40), NAVY)
+        if t > dur - 0.35:
+            self.text(d, (CX, 760), "<< REWIND", font("black", 96), WHITE, anchor="mm")
+        return im
+
+    def cold_banner(self, d, t: float) -> None:
+        """The cold open's hook, over the race's first seconds."""
+        from ..engine import COLD_BANNER
+
+        a = 1.0 if t < COLD_BANNER - 0.4 else max(0.0, (COLD_BANNER - t) / 0.4)  # there in frame 0
+        if a <= 0:
+            return
+        y = 420 - int(30 * (1 - a))
+        lines = self.spec.get("hook") or []
+        h = 60 + 96 * len(lines) + 70
+        d.rounded_rectangle([X0 - 12, y, X1 + 6, y + h], 26, fill=PANEL)
+        yy = y + 30
+        for line in lines:
+            self.accent_line(d, yy, line, 84)
+            yy += 96
+        self.text(d, (X0 + 4, yy + 8), "PICK A COLOUR · WHO WINS?", font("bold", 40), YELLOW)
 
     def _hook(self, t: float, dur: float) -> Image.Image:
         im = Image.blend(self.bg, self.map, 0.25) if self.race else self.bg.copy()
@@ -258,6 +365,8 @@ class PitWall(Theme):
         self._dots(d, t)
         self._commentary(d, t)
         self._tower(d, t)
+        if self.spec.get("intro") == "cold":
+            self.cold_banner(d, t)
         return im
 
     def _commentary(self, d, t: float) -> None:
@@ -427,7 +536,8 @@ class PitWall(Theme):
             if res.get("bust"):
                 tiles.append((f"Bust: {res['bust']} punters", RED))
         else:
-            tiles += [("Nobody backed it.", WHITE), (f"Be the first: comment {win} 100", YELLOW)]
+            word = self.car(win)["colour"].replace("magenta", "pink")
+            tiles += [("Nobody backed it.", WHITE), (f"Next time: comment {word}", YELLOW)]
         for i, (line, col) in enumerate(tiles):
             if t < 0.6 + i * 0.35:
                 break
@@ -497,10 +607,10 @@ class PitWall(Theme):
                 self.text(d, (x + 17, y + 44), ch, font("bold", 26), WHITE, anchor="mm", record=False)
         y = 1140
         d.rounded_rectangle([X0 - 12, y, X1 + 6, y + 200], 24, fill=YELLOW)
-        self.text(d, (X0 + 24, y + 22), "COMMENT CAR + STAKE", font("bold", 36), NAVY)
-        self.text(d, (X0 + 24, y + 70), "4 250", font("black", 104), NAVY)
-        self.text(d, (X0 + 380, y + 92), "= §250 on", font("bold", 36), NAVY)
-        self.text(d, (X0 + 380, y + 136), "4 BLUE STREAK", font("bold", 36), NAVY)
+        self.text(d, (X0 + 24, y + 22), "TO BET, COMMENT A COLOUR", font("bold", 36), NAVY)
+        self.text(d, (X0 + 24, y + 70), "blue", font("black", 104), NAVY)
+        self.text(d, (X0 + 380, y + 92), "= §100 on 4 BLUE STREAK", self.fit("= §100 on 4 BLUE STREAK", "bold", 36, X1 - X0 - 400), NAVY)
+        self.text(d, (X0 + 380, y + 136), "or a stake: blue 250", self.fit("or a stake: blue 250", "bold", 36, X1 - X0 - 400), NAVY)
         self.text(d, (X0, 1362), f"SEAL {c['seal'][:12]}…", font("mono", 28), DIM)
         self.text(d, (X1 - 8, 1362), self.spec.get("domain", ""), font("semi", 28), MUTED, anchor="ra")
         self.text(d, (X0, 1402), "Play money · no prizes · new players start with §1,000", font("semi", 28), MUTED)

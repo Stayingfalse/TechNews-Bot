@@ -204,6 +204,12 @@ every 15 min   read new comments on the open race's post → reply to each bet (
 - **Bets pages** on `RACING_DOMAIN` (default `race.onlydan.uk`, pointed at this app in Easypanel):
   the race card, league table, a page per player and per race with the seal check. That domain
   serves nothing else, and the racing pages exist on no other domain.
+- **Openings** (A/B test): race videos take turns through `RACING_INTROS` (default `cold,pick,lights,tease`; `classic`
+  is the original boot → hook → start lights, 6 s before anything moves). `cold` opens with the race already running and
+  the hook as a banner; `pick` with the six cars big and a 3-2-1; `lights` with five big start lights over "pick a
+  colour before the lights go out"; `tease` with the race's biggest moment (never its last third), then a rewind.
+  Each post is tagged `intro` in `GET /metrics?channel=racing`, so the dashboard compares them.
+  `POST /racing/preview?intro=` sends a sample of one to Discord. Viewers are told to bet by commenting a colour.
 - **Themes** (`app/render/racing/themes/`): each is one look for the whole video. `RACING_THEMES=pitwall,other`
   makes videos take turns (an A/B test); `GET /racing/metrics` compares them (from the shared numbers, `GET /metrics?channel=racing`). `POST /racing/preview?theme=&format=`
   sends a sample video (with a throwaway seed) to Discord.
@@ -211,7 +217,7 @@ every 15 min   read new comments on the open race's post → reply to each bet (
   `GET /racing/jobs[/{id}]`, `POST /racing/jobs/{id}/retry`, `GET /racing/players?q=`,
   `GET /racing/metrics`, `POST /racing/preview`.
 - **Settings**: `RACING_HANDLE`, `RACING_POST_TIME` (19:00), `RACING_CLOSE_MINUTES` (60),
-  `RACING_PLATFORMS` (instagram), `RACING_DOMAIN`, `RACING_THEMES` (pitwall), `RACING_POLL_MINUTES` (15),
+  `RACING_PLATFORMS` (instagram), `RACING_DOMAIN`, `RACING_THEMES` (pitwall), `RACING_INTROS` (cold,pick,lights,tease), `RACING_POLL_MINUTES` (15),
   `RACING_REPLY_GAP` (20 s), `RACING_REPLY_PER_HOUR` (60), `RACING_REPLIES` (on), `RACING_LAUNCH_WEEKS` (4),
   `RACING_CALENDAR` (`mon=oval,tue=rally,wed=gp,thu=figure8,fri=drag,sat=endurance|oval,sun=gp`).
 

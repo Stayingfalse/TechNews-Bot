@@ -1,9 +1,17 @@
 """The race video: scenes in order, glitch moments, sound, and the ffmpeg encode. Theme-agnostic:
 the spec names its theme, and the theme draws each scene.
 
-Scenes: boot → hook → grid → race → finish → result → [table on Sundays] → schedule → card → outro.
+Scenes: <opening> → race → finish → result → [table on Sundays] → schedule → card → outro.
 A launch video ("launch": true) is boot → hook → rules → schedule → card → outro. The outro fades back to
-the boot screen's first frame, so an autoplay replay loops without a jump.
+the video's first frame, so an autoplay replay loops without a jump.
+
+Openings (`spec["intro"]`, an A/B test: see INTROS). People decide within a second or two whether
+to stay, so all but "classic" have cars on screen in the first frame:
+  classic  boot screen → hook text → grid and start lights (6.2 s before anything moves)
+  cold     the race is already running in frame 0, the hook as a banner over its first seconds
+  pick     the six cars, big, "pick a colour", a 3-2-1 countdown, then the race
+  lights   five big start lights fill the screen over "pick a colour before the lights go out"
+  tease    the race's most dramatic moment first ("watch for this"), then a rewind to the start
 """
 from __future__ import annotations
 
@@ -29,11 +37,20 @@ LOUDNESS = float(os.environ.get("LOUDNESS_LUFS", "-14"))
 GLITCH_FRAMES = 3
 
 
+INTROS = ("classic", "cold", "pick", "lights", "tease")
+OPENINGS = {"classic": [("boot", 0.6), ("hook", 2.6), ("grid", 3.0)], "cold": [], "pick": [("pick", 2.4)],
+            "lights": [("lights", 2.0)], "tease": [("tease", 2.2)]}
+COLD_BANNER = 3.2  # seconds the cold open's hook banner stays over the race
+
+
+def intro(spec: dict) -> str:
+    return spec.get("intro") if spec.get("intro") in INTROS else "classic"
+
+
 def timeline(spec: dict) -> list[tuple[str, float]]:
     if spec.get("launch"):
         return [("boot", 0.6), ("hook", 2.8), ("rules", 9.0), ("schedule", 3.5), ("card", 8.0), ("outro", 0.6)]
-    scenes = [("boot", 0.6), ("hook", 2.6), ("grid", 3.0), ("race", spec["race"]["race_end"]),
-              ("finish", 2.2), ("result", 5.0)]
+    scenes = OPENINGS[intro(spec)] + [("race", spec["race"]["race_end"]), ("finish", 2.2), ("result", 5.0)]
     if spec.get("table"):
         scenes.append(("table", 5.0))
     return scenes + [("schedule", 3.5), ("card", 7.5), ("outro", 0.6)]
@@ -52,7 +69,12 @@ def glitches(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, f
     at random (seeded, so a re-render matches)."""
     at = starts(scenes)
     total = sum(d for _, d in scenes)
-    out = [(at["hook"] + 0.05, 1.0)]
+    if "hook" in at:
+        out = [(at["hook"] + 0.05, 1.0)]
+    elif "tease" in at:  # the rewind from the teased moment back to the start
+        out = [(at["race"] - 0.12, 1.0), (at["race"] + 0.02, 0.7)]
+    else:
+        out = []
     if "race" in at:
         big = [e for e in spec["race"]["events"] if e["kind"] != "pit"][:6]  # a long race has dozens of moments
         out += [(at["race"] + e["t"], 0.6) for e in big]
@@ -64,8 +86,18 @@ def glitches(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, f
 
 def sfx(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, str]]:
     at = starts(scenes)
-    ev = [(0.0, "boot")]
-    ev += [(at["hook"] + 0.1 + i * 0.18, "blip") for i in range(len(spec.get("hook", [])))]
+    ev = [(0.0, "boot")] if "boot" in at else []
+    if "hook" in at:
+        ev += [(at["hook"] + 0.1 + i * 0.18, "blip") for i in range(len(spec.get("hook", [])))]
+    if "pick" in at:
+        ev += [(at["pick"] + 0.1 + i * 0.08, "blip") for i in range(6)]
+        ev += [(at["race"] - 1.5 + i * 0.5, "light") for i in range(3)] + [(at["race"], "go")]
+    if "lights" in at:
+        ev += [(at["lights"] + 0.15 + i * 0.28, "light") for i in range(5)] + [(at["race"], "go")]
+    if "tease" in at:
+        ev += [(at["tease"] + 0.05, "whoosh"), (at["race"] - 0.15, "turbo"), (at["race"], "go")]
+    if not any(k in at for k in ("grid", "pick", "lights", "tease")) and "race" in at:  # cold: lights out as it opens
+        ev.append((0.0, "go"))
     if "rules" in at:
         ev += [(at["rules"] + 0.3 + i * 0.5, "blip") for i in range(4)]
     if "grid" in at:
@@ -76,6 +108,8 @@ def sfx(spec: dict, scenes: list[tuple[str, float]]) -> list[tuple[float, str]]:
         else:
             ev += [(g + 0.6 + i * 0.32, "light") for i in range(5)]
         ev.append((g + gd - 0.35, "go"))
+    if "race" in at:
+        race = spec["race"]
         ev += [(at["race"] + e["t"], e["kind"]) for e in race["events"]]
         last, prev = -1.0, None
         dist = np.array(race["dist"])
@@ -104,6 +138,7 @@ class Video:
         self.spec = spec
         self.theme = get_theme(spec["theme"])(spec, record=record)
         self.scenes = timeline(spec)
+        self.theme.opening = self.scenes[0]  # the outro fades back to this scene's first frame
         self.at = starts(self.scenes)
         self.duration = sum(d for _, d in self.scenes)
         self.n_frames = int(round(self.duration * FPS))
