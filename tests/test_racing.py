@@ -340,9 +340,12 @@ def cycle(monkeypatch, platforms):
     return platforms
 
 
-def test_launch_then_a_day_of_betting_then_the_race(cycle, discord):
+def test_launch_then_a_day_of_betting_then_the_race(cycle, discord, monkeypatch):
     slot = datetime(2026, 11, 1, 19, 0, tzinfo=timezone.utc)  # a Sunday (UTC = London in November)
+    real_now = jobs.now
+    monkeypatch.setattr(jobs, "now", lambda: slot - timedelta(days=2))  # booking needs a launch still to come
     job = jobs.start(slot - timedelta(days=1))
+    monkeypatch.setattr(jobs, "now", real_now)
     assert job["kind"] == "launch" and races.get(1)["status"] == "open"
     jobs.tick(slot - timedelta(days=1, minutes=20))
     assert jobs.get(job["id"])["status"] == "scheduled" and cycle["renders"][0]["launch"]

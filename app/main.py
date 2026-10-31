@@ -998,6 +998,13 @@ def adventure_state():
     return o
 
 
+@app.get("/adventure/story", dependencies=[Depends(require_token)])
+def adventure_story():
+    """The story map for the dashboard: every Episode 0 part and story scene, past and to come, how
+    they connect, and the path the votes have taken."""
+    return adventure_campaign.story_map()
+
+
 @app.post("/adventure/arc", status_code=201, dependencies=[Depends(require_token)])
 def adventure_arc(arc: dict, replace: bool = False, dry_run: bool = False):
     """Submit the next weekly arc. Every problem comes back at once (422; 409 if an arc already

@@ -559,3 +559,29 @@ def test_the_first_arc_keeps_the_checks_episode0_promised(story):
     next(n for n in arc["nodes"] if n["id"] == "gate-lock")["check"]["dc"] = 13
     r = campaign.accept(arc)
     assert not r["ok"] and r["problems"] == ['gate-lock: Episode 0 promised sleight_of_hand DC 12 for "Pick the old lock"; its check must be exactly that']
+
+
+def test_story_map_shows_the_path_taken_and_what_can_still_happen(client, story):
+    campaign.accept(ARC)
+    slot = datetime(2030, 3, 7, 9, 0, tzinfo=settings.tz).astimezone(timezone.utc)
+    first = jobs._book_next(_posted_part4(slot))
+    jobs.tick(datetime.fromisoformat(first["publish_at"]) - timedelta(minutes=60))  # votes: B → gate-lock
+    m = client.get("/adventure/story", headers=AUTH).json()
+    nodes = {n["id"]: n for n in m["nodes"]}
+    assert nodes["gate-lock"]["status"] == "ready" and m["at"] == "gate-lock"
+    assert {nodes[i]["status"] for i in ("gate-force", "gate-search")} == {"missed"}
+    chosen = [e for e in m["edges"] if e["status"] == "chosen"]
+    assert chosen == [{**chosen[0], "from": "episode0-4", "to": "gate-lock", "letter": "B"}] and chosen[0]["votes"]["counts"] == [0, 2, 0]
+
+    jobs.tick(datetime.fromisoformat(first["publish_at"]))  # posted
+    m = client.get("/adventure/story", headers=AUTH).json()
+    nodes = {n["id"]: n for n in m["nodes"]}
+    assert nodes["gate-lock"]["status"] == "played" and nodes["gate-lock"]["ep"] == 1
+    assert [e["to"] for e in m["edges"] if e["status"] == "taken"] == ["gate-lock"]
+    gate_lock = next(n for n in ARC["nodes"] if n["id"] == "gate-lock")
+    tomorrow = {c["next"] for c in gate_lock["choices"]}
+    assert {i for i, n in nodes.items() if n.get("voting")} == tomorrow
+    assert all(nodes[i]["status"] == "possible" for i in tomorrow) and nodes["the-whisper"]["status"] == "possible"
+    unwritten = [n for n in m["nodes"] if n["kind"] == "unwritten"]
+    assert len(unwritten) == 1 and unwritten[0]["date"] == "2026-11-04" and unwritten[0]["status"] == "possible"
+    assert [n["status"] for n in m["nodes"] if n["kind"] == "episode0"] == ["upcoming"] * 4  # this test has no part 1 booking
