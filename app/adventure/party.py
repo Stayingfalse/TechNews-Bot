@@ -179,11 +179,12 @@ def pick_roller(ep: int, voters: list[dict]) -> str | None:
     return names[_h("roller", ep) % len(names)] if names else None
 
 
-def credit(ep: int, job_id: str, kind: str, user: str) -> None:
+def credit(ep: int, job_id: str, kind: str, user: str, word: str | None = None) -> None:
     with _lock:
         s = load()
-        s["credits"] = [c for c in s["credits"] if not (c["ep"] == ep and c["kind"] == kind)]
-        s["credits"].append({"ep": ep, "job": job_id, "kind": kind, "user": user, "key": user.lower(), "at": _now()})
+        s["credits"] = [c for c in s["credits"] if not (c["ep"] == ep and c["kind"] == kind and c["key"] == user.lower())]
+        s["credits"].append({"ep": ep, "job": job_id, "kind": kind, "user": user, "key": user.lower(), "at": _now(),
+                             **({"word": word} if word else {})})
         save(s)
 
 
@@ -196,6 +197,12 @@ def spec_party(ep: int | None = None) -> list[dict]:
         handle = shown_name(m["user"]) if m["key"] not in blocked else None
         out.append({**m["companion"], "handle": handle, "key": m["key"]})
     return out
+
+
+def moment_slot(ep: int, size: int) -> int | None:
+    """Which companion (slot, from 1) gets a moment in today's story: a random draw on the server,
+    never based on what anyone wrote."""
+    return _h("moment", ep) % size + 1 if size else None
 
 
 def story_party(party: list[dict]) -> list[dict]:
@@ -290,6 +297,7 @@ def chronicle() -> dict:
         "waiting": len(s["queue"]),
         "past": [{**p["companion"], "handle": show(p.get("user"), p.get("key")), "joined_ep": p.get("joined_ep"),
                   "left_ep": p.get("left_ep"), "reason": p.get("reason")} for p in s["past"][-40:]][::-1],
-        "credits": [{"ep": c["ep"], "kind": c["kind"], "handle": show(c["user"], c["key"])} for c in s["credits"][-60:]][::-1],
+        "credits": [{"ep": c["ep"], "kind": c["kind"], "handle": show(c["user"], c["key"]), "word": c.get("word")}
+                    for c in s["credits"][-90:]][::-1],
         "places": places_for([t["voters"] for t in s["turnout"]]),
     }

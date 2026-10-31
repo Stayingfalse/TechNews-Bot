@@ -36,9 +36,10 @@ export type StorySpec = {
   /** The party: companions the server drew, each with the viewer's handle to show (or none). */
   party?: Companion[];
   /** Credits shown on screen: the viewer the roll is credited to. */
-  credits?: { rolledBy?: string | null };
-  /** What the comments added up to: votes per way, the winner, how many voted. */
-  voices?: { ways: number[]; way?: Way | null; voters: number };
+  credits?: { rolledBy?: string | null; shouters?: string[] };
+  /** What the comments added up to: votes per way, the winner, how many voted, the word the Voices
+   *  shouted (only when the story uses it). */
+  voices?: { ways: number[]; way?: Way | null; voters: number; shout?: { word: string; n: number } };
 };
 
 export type Way = "bold" | "sly" | "wise";
@@ -133,7 +134,8 @@ export function captionStory(s: StorySpec): string {
 
 export function commentStory(s: StorySpec): string {
   if (s.dead) return "Rest well, hero. A new hero rises next.";
-  return `${s.choices.map((o, i) => `${"ABC"[i]}) ${o.label}`).join(" · ")}\nComment your letter by 8am. No votes? We go with ${"ABC"[s.default]}.`;
+  return `${s.choices.map((o, i) => `${"ABC"[i]}) ${o.label}`).join(" · ")}\nComment your letter by 8am. No votes? We go with ${"ABC"[s.default]}.`
+    + `\nAdd how: bold, sly or wise. Shout a word to the hero (torch, rope, wolf…). Comment "join" to join the party.`;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -228,6 +230,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   // story, with yesterday's vote on a card first
   narr(F, s.story, P.story[0] + 0.1, P.story[1], 112);
   if (s.recap) recapCard(F, s, [P.story[0], Math.min(P.story[0] + 3.6, P.story[1])]);
+  if (s.voices?.shout) shoutCard(F, s, [P.story[0] + 0.5, Math.min(P.story[0] + 4.2, P.story[1])]);
   narr(F, s.after, P.after[0] + 0.1, P.after[1], 112);
 
   if (s.check && P.check) checkBeat(F, s, P, sx(hp[0]), sy(hp[1]));
@@ -275,7 +278,7 @@ function hook(F: Frame, s: StorySpec, hero: Creature, foe: Creature | undefined,
       fit(F, o.label, 60, y + 5, 13, W - 140, CREAM, "left", 600);
     });
     const crew = (s.party || []).length;
-    fit(F, `+ HOW? BOLD · SLY · WISE   ·   JOIN THE PARTY${crew ? ` (${crew} IN IT)` : ""}`, 170, 442 + s.choices.length * 25 + 4, 10, W - 100, GOLD, "center", 700);
+    fit(F, `+ BOLD · SLY · WISE  ·  SHOUT A WORD  ·  JOIN THE PARTY${crew ? ` (${crew})` : ""}`, 170, 442 + s.choices.length * 25 + 4, 10, W - 100, GOLD, "center", 700);
   }
   c.globalAlpha = 1;
 }
@@ -285,6 +288,22 @@ function voteTag(F: Frame, s: StorySpec) {
   if (s.dead || !s.choices.length) return;
   parch(F, 204, ASK_Y, 122, 26);
   fit(F, `YOU PICK NEXT: ${"ABC".slice(0, s.choices.length).split("").join(" · ")}`, 265, ASK_Y + 17, 10, 110, INK, "center", 700);
+}
+
+/** "@a, @b, @c and 11 others cried: TORCH": the word the Voices shouted, which today's story uses. */
+function shoutCard(F: Frame, s: StorySpec, [a0, a1]: [number, number]) {
+  const { c, T } = F;
+  const a = fade(T, a0, a1), sh = s.voices!.shout!;
+  if (a <= 0) return;
+  const names = (s.credits?.shouters || []).map((h) => `@${h}`), others = Math.max(0, sh.n - names.length);
+  const who = names.length ? `${names.join(", ")}${others ? ` and ${others} other${others === 1 ? "" : "s"}` : ""}` : `${sh.n} voices`;
+  const y = 392;
+  c.save();
+  c.globalAlpha = a;
+  parch(F, 16, y, W - 76, 62);
+  fit(F, `${who} cried:`, 158, y + 22, 12, W - 100, INK, "center", 600);
+  fit(F, sh.word.toUpperCase(), 158, y + 49, 22, W - 100, RED, "center", 900);
+  c.restore();
 }
 
 function recapCard(F: Frame, s: StorySpec, [a0, a1]: [number, number]) {
@@ -367,7 +386,7 @@ function cta(F: Frame, s: StorySpec, P: StoryPlan) {
     c.roundRect(16, CARD_Y - 36, W - 76, 31, 6);
     c.fill();
     fit(F, `COMMENT ${letters(s.choices.length).toUpperCase()} BY 8AM · NEXT EPISODE AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
-    fit(F, `+ BOLD, SLY or WISE · comment JOIN to join the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
+    fit(F, `+ BOLD, SLY or WISE + a word to shout · JOIN the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
     c.restore();
   }
   s.choices.forEach((o, i) => {

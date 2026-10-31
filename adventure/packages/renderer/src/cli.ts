@@ -2,6 +2,7 @@
 // render <spec.json> --png dir --at 1,6.5,20     stills at those times, for checking a layout
 // render script <spec.json>                      the voice-over script as JSON (what to send to ElevenLabs)
 // render validate-arc <{arc,context}.json>       every problem with a weekly arc
+// render validate-node <{node,hero,recap}.json>  every problem with one node (the AI writer's)
 // render resolve <{node,ctx}.json>               a story node + the day's dice → the episode's spec
 // render vocab <{hero}.json>                     scenes, foes, skills (with the hero's odds) and limits, for the routine
 // story voice: --daily clip.mp3 --align a.json [--check c.mp3 --roll r.mp3] --tail t.mp3
@@ -18,7 +19,7 @@ import {
   dailyText, music0, plan0, planStory, resolveNode, script0, scriptChars, scriptStory, scriptText, sfx0, storyMusic, storySfx,
 } from "../../engine/src/index.ts";
 import { CLASSES, type ClassKey, SKILLS, modifier, odds } from "../../engine/src/sheet.ts";
-import { type AnySpec, DAILY_CHARS, DCS, FOES, SCENES, parseSpec, validateArc } from "../../shared/src/index.ts";
+import { type AnySpec, DAILY_CHARS, DCS, FOES, SCENES, parseSpec, validateArc, validateNode } from "../../shared/src/index.ts";
 import { assembleStory } from "./assemble.ts";
 import { AUDIO, OUT_H, OUT_W, mapFor, prepare, type Job } from "./canvas.ts";
 
@@ -88,6 +89,11 @@ async function main() {
     const { arc, context } = JSON.parse(readFileSync(positionals[1], "utf8"));
     const r = validateArc(arc, context);
     return out({ ok: r.problems.length === 0, problems: r.problems, arc: r.problems.length ? undefined : r.arc });
+  }
+  if (positionals[0] === "validate-node") {
+    const { node, hero, recap } = JSON.parse(readFileSync(positionals[1], "utf8"));
+    const r = validateNode(node, hero, recap || "");
+    return out({ ok: r.problems.length === 0, problems: r.problems });
   }
   if (positionals[0] === "resolve") {
     const { node, ctx } = JSON.parse(readFileSync(positionals[1], "utf8"));

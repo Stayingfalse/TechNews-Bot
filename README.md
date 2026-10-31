@@ -198,8 +198,19 @@ Comments do more than vote ([docs/VOICES_STORY_PLAN.md](docs/VOICES_STORY_PLAN.m
   the name is kept out for good. `GET /adventure/moderation`, `POST /adventure/moderation/{job}/{approve|remove}?key=`.
 - **`/chronicle`** (public): the party now, past companions and credits. Usernames leave the party records
   `RETENTION_DAYS` after someone leaves or after a credit, and at once on erasure or opt-out (privacy policy §3, §5).
-- Only totals are kept with an episode. Anything a future AI writer is given comes from `party.story_party()`
-  (companion name, class, slot): never usernames or comments.
+- **Shouted words**: a word from the Shout List (`app/adventure/shouts.py`, ~300 words, shown on `/chronicle`) in a comment
+  is that person's shout. A word counts once 3+ people shout it; when the AI writer uses the top one, the episode shows
+  "@a, @b, @c and N others cried: TORCH".
+- **The AI writer** (`app/adventure/writer.py`, DeepSeek): at 08:00 it rewrites the planned node's words (hook, story,
+  outcomes) for the winning way, the Voices, the top shouted word and one companion's moment; scene, check, question and
+  choices stay as planned. Every answer goes through the engine's `validate-node` (the arc's limits) plus its own checks,
+  is sent back with its problems at most twice, and otherwise the plan plays as written. It's only ever given
+  `writer.prompt_input()`: the plan, the hero, recent episodes' text, the arc's notes, the party as story characters and
+  totals. Never usernames, comments or anything about a viewer (tests/test_writer.py). Settings: `DEEPSEEK_API_KEY` (off
+  without it), `DEEPSEEK_MODEL` (`deepseek-flash`), `DEEPSEEK_BASE_URL`, `ADVENTURE_WRITER=off` to switch it off.
+- **Moderation** also covers the first shouters, the shouted word ("Remake without this word": the writer writes the day
+  again without it) and the writer's text ("Use the planned text"). Changing the text means new narration, so it costs voice credits.
+- Only totals are kept with an episode.
 
 ## Racing channel (Sixel Speedway)
 

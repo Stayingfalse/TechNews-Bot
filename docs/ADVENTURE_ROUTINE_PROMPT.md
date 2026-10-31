@@ -73,7 +73,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `skill` (from `vocab.skills`), `dc` (from `vocab.dcs`), optional `mode` (`advantage`/`disadvantage`), optional `harm: true` (a failure costs a heart)
      - `success` and `fail`: up to 20 words each
      - The hero's odds (`success_pct_by_dc`) must be between 25% and 90%.
-     - Viewers also vote a **way** (bold, sly or wise). When one wins, the server swaps the check's skill for the hero's best skill for that way (bold: athletics/intimidation; sly: stealth/sleight of hand/deception; wise: perception/arcana/persuasion), and turnout can add up to +3 (Rally). So write `story`, `success` and `fail` so they read right whichever way the hero tries it: say what happens, not how ("The gate gives." rather than "Your shoulder breaks the gate.").
+     - Viewers also vote a **way** (bold, sly or wise). When one wins, the server swaps the check's skill for the hero's best skill for that way (bold: athletics/intimidation; sly: stealth/sleight of hand/deception; wise: perception/arcana/persuasion), and turnout can add up to +3 (Rally). So write `story`, `success` and `fail` so they read right whichever way the hero tries it: say what happens, not how ("The gate gives." rather than "Your shoulder breaks the gate."). Pick DCs where each way's best skill for this hero (from `vocab` odds) still has a fair chance, so choosing a way is a real trade-off and none is hopeless.
    - Without a check, `after`: up to 20 words, what happens next. A rest node has no check and has `after`.
    - `ask`: the question, up to 5 words, e.g. "Which way down?", "Answer it?".
    - `choices`: 2-3 options.
@@ -89,6 +89,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - short sentences, concrete images
      - no names viewers haven't met
      - no gore, no swearing, nothing sexual
+     - viewers can join the party: their companions walk behind the hero in the video, named and drawn by the server. Don't write companions or viewers into the text; the video adds them
      - teen and up: scary is fine, cruel isn't
    - Arc fields:
      - `id`: e.g. `s1-w2-merlins-cave`

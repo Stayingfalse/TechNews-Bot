@@ -409,13 +409,16 @@ def chronicle_page() -> str:
     members = table([f"<tr><td><strong>{html.escape(m['name'])}</strong>, {CLASS_NAMES.get(m['cls'], m['cls'])}</td>"
                      f"<td>{at(m['handle'])}</td><td>since episode {m['joined_ep']}</td></tr>" for m in c["members"]],
                     "<th>Companion</th><th>Played by</th><th>Joined</th>", "Nobody yet: comment <strong>join</strong> to be first.")
-    credits = table([f"<tr><td>Episode {r['ep']}</td><td>{at(r['handle'])}</td></tr>" for r in c["credits"] if r["kind"] == "rolled_by"],
-                    "<th>Episode</th><th>Rolled by</th>", "No rolls credited yet.")
+    what = lambda r: "rolled the dice" if r["kind"] == "rolled_by" else f"first to shout <strong>{html.escape((r.get('word') or '').upper())}</strong>"  # noqa: E731
+    credits = table([f"<tr><td>Episode {r['ep']}</td><td>{at(r['handle'])}</td><td>{what(r)}</td></tr>" for r in c["credits"]],
+                    "<th>Episode</th><th>Who</th><th>Credit</th>", "No credits yet.")
+    from .adventure.shouts import WORDS
+    words = ", ".join(WORDS)
     past = table([f"<tr><td><strong>{html.escape(p['name'])}</strong>, {CLASS_NAMES.get(p['cls'], p['cls'])}</td><td>{at(p['handle'])}</td>"
                   f"<td>episodes {p.get('joined_ep') or '?'} to {p.get('left_ep') or '?'}, {LEFT.get(p.get('reason'), 'left')}</td></tr>"
                   for p in c["past"]], "<th>Companion</th><th>Played by</th><th>Travelled</th>", "Nobody has left the party yet.")
     story = channels.get(channels.ADVENTURE)
-    return _page("chronicle", title="The chronicle", members=members, credits=credits, past=past, places=str(c["places"]),
+    return _page("chronicle", title="The chronicle", members=members, credits=credits, past=past, places=str(c["places"]), words=words,
                  waiting=str(c["waiting"]), story_account=html.escape(_at(story.brand_handle) or "our story account"))
 
 

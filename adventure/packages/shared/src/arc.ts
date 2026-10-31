@@ -65,6 +65,27 @@ export type ArcContext = {
   known_ids?: string[]; // ids used by earlier arcs (must not be reused)
 };
 
+/** Every problem with one node on its own, as the AI writer's adapted node is checked before it
+ *  plays: the same limits as in an arc (schema, words, teen-friendly, odds, narration length).
+ *  `recap` is the line actually said before it. */
+export function validateNode(raw: unknown, hero: { cls: ClassKey } | null, recap: string): { problems: string[]; node?: ArcNode } {
+  const parsed = Node.safeParse(raw);
+  if (!parsed.success) return { problems: parsed.error.issues.map((i) => `${i.path.join(".") || "node"}: ${i.message}`) };
+  const n = parsed.data, p: string[] = [];
+  if (!n.check && !n.after) p.push(`needs "after" (or a check with success/fail)`);
+  if (n.check && n.after) p.push(`"after" is only for nodes without a check`);
+  const text = [n.hook.join(" "), n.story, n.after, n.check?.success, n.check?.fail, n.ask, ...n.choices.flatMap((c) => [c.label, c.recap])].join(" ");
+  if (BANNED.test(text)) p.push("keep it teen-friendly (no swearing or gore)");
+  if (n.check && hero) {
+    const pr = odds(modifier(hero.cls, n.check.skill), n.check.dc, n.check.mode || "normal");
+    if (pr < 0.25 || pr > 0.9) p.push(`${Math.round(pr * 100)}% to succeed; keep checks between 25% and 90%`);
+  }
+  const longest = n.check ? (n.check.fail.length > n.check.success.length ? n.check.fail : n.check.success) : n.after || "";
+  const chars = dailyText([line("hook", "[whispers] " + recap), line("story", "[tense] " + n.story), line("after", "[relieved] " + longest), line("ask", "[urgent] " + n.ask)]).length;
+  if (chars > DAILY_CHARS) p.push(`about ${chars} characters of narration; keep it under ${DAILY_CHARS} (shorter story/outcomes)`);
+  return { problems: p, node: p.length ? undefined : n };
+}
+
 /** Every problem with an arc, as readable lines; empty when it's good to book. */
 export function validateArc(raw: unknown, ctx: ArcContext): { problems: string[]; arc?: ArcT } {
   const parsed = Arc.safeParse(raw);

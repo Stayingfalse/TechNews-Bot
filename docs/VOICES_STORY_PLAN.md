@@ -1,6 +1,6 @@
 # The Voices and the party: a story the commenters steer and join
 
-**Status: phase 1 built (party, ways, Rally, credits, moderation, policy, `/chronicle`); no shouted words yet; P2/P3 to come.** Decisions taken: upgrade @dungeoncrawlergram; party places adapt to turnout; moderation from the dashboard. An upgrade to the dungeon crawl
+**Status: phases 1 and 2 built (party, ways, Rally, credits, shouted words, the DeepSeek writer adapting planned nodes, moderation, policy, `/chronicle`); P3 to come.** Decisions taken: upgrade @dungeoncrawlergram; party places adapt to turnout; moderation from the dashboard. An upgrade to the dungeon crawl
 ([ADVENTURE_PLAN.md](ADVENTURE_PLAN.md)), the channel that has done best so far (§1):
 
 - **The party**: viewers can join the story. Their username goes on a companion who travels with
