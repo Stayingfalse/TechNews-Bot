@@ -196,3 +196,25 @@ def test_trying_the_writer_saves_nothing(day, client):
     assert {j["id"]: j["status"] for j in jobs.recent(20)} == before and not rendered and not party.load()["credits"]
     assert client.post("/adventure/writer/try", json={"shouts": ["bananas"]}, headers=AUTH).status_code == 422
     assert client.post("/adventure/writer/try", json={}).status_code == 401
+
+
+def test_the_request_turns_thinking_off_and_says_why_a_reply_was_blank(monkeypatch):
+    seen = []
+
+    class R:
+        status_code = 200
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            return self.body
+
+    replies = [{"choices": [{"message": {"content": " "}, "finish_reason": "length"}]}] * 2
+    monkeypatch.setattr(writer.httpx, "post", lambda url, **kw: seen.append(kw["json"]) or R(replies[len(seen) - 1]))
+    with pytest.raises(writer.WriterError, match="finish_reason 'length'"):
+        writer._ask([{"role": "user", "content": "json"}])
+    assert seen[0]["thinking"] == {"type": "disabled"} and seen[0]["response_format"] == {"type": "json_object"}
+    monkeypatch.setattr(writer.httpx, "post", lambda url, **kw: R({"choices": [{"message": {"content": '{"story": "x"}'}}],
+                                                                   "usage": {"prompt_tokens": 5}}))
+    assert writer._ask([]) == ({"story": "x"}, {"prompt_tokens": 5})
