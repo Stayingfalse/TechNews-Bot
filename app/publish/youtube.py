@@ -149,17 +149,28 @@ def metrics(video_id: str, published: str) -> dict:
     st = items[0]["statistics"]
     out = {"views": int(st.get("viewCount", 0)), "likes": int(st.get("likeCount", 0)),
            "comments": int(st.get("commentCount", 0))}
-    end = time.strftime("%Y-%m-%d", time.gmtime())
-    a = httpx.get("https://youtubeanalytics.googleapis.com/v2/reports", headers=h, timeout=30, params={
-        "ids": "channel==MINE", "startDate": published[:10], "endDate": end,
+    try:
+        out.update(watch_time(video_id, published[:10], time.strftime("%Y-%m-%d", time.gmtime()), token) or {})
+    except RuntimeError as e:
+        out["note"] = str(e)
+    return out
+
+
+def watch_time(video_id: str, start: str, end: str, token: str | None = None) -> dict | None:
+    """Watch time for one video over whole days (YYYY-MM-DD, inclusive) from YouTube Analytics
+    (yt-analytics.readonly). None while YouTube hasn't reported those days yet (it lags 1-2 days)."""
+    a = httpx.get("https://youtubeanalytics.googleapis.com/v2/reports", timeout=30,
+                  headers={"Authorization": f"Bearer {token or access_token()}"}, params={
+        "ids": "channel==MINE", "startDate": start, "endDate": end,
         "metrics": "averageViewDuration,averageViewPercentage,shares,subscribersGained",
         "filters": f"video=={video_id}"})
-    if a.status_code < 400 and a.json().get("rows"):
-        avd, avp, shares, subs = a.json()["rows"][0]
-        out.update(avg_watch_s=avd, avg_view_pct=avp, shares=shares, followers_gained=subs)
-    elif a.status_code >= 400:
-        out["note"] = f"watch time unavailable: {a.text[:120]}"
-    return out
+    if a.status_code >= 400:
+        raise RuntimeError(f"watch time unavailable: {a.text[:120]}")
+    rows = a.json().get("rows")
+    if not rows:
+        return None
+    avd, avp, shares, subs = rows[0]
+    return {"avg_watch_s": avd, "avg_view_pct": avp, "shares": shares, "followers_gained": subs}
 
 
 def _channel_id(token: str) -> str:

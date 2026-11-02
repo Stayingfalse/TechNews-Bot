@@ -95,13 +95,23 @@ def _posted(job: dict) -> bool:
 
 
 def _quiz_posts() -> list[dict]:
+    from .cliffhanger import outcome
+
     out = []
     for job in posted_jobs():
         spec = QuizSpec.model_validate(job["spec"])
+        extra = {}
+        cliff = outcome(job)
+        if cliff and cliff.get("revealed_in"):  # the cliffhanger's comments, on both the post and its reveal
+            pre = "cliff_" if cliff["role"] == "cliffhanger" else "revealed_"
+            names = cliff.get("shoutouts")
+            extra = {pre + "comments_read": cliff.get("comments_read") or 0,
+                     pre + "correct": len(names) if names is not None else None,
+                     pre + "replies_sent": cliff["replies_sent"]}
         out.append({"id": job["id"], "channel": channels.MAIN, "published_at": job["published_at"],
                     "slot": job.get("slot"), "title": spec.title.replace("*", ""),
                     "duration": job.get("render", {}).get("duration") or 0, "results": job["results"],
-                    "tags": tags_for(job), "extra": {},
+                    "tags": tags_for(job), "extra": extra,
                     "rounds": [{"type": r.type, "answer": r.answer_text()} for r in spec.rounds]})
     return out
 
@@ -207,6 +217,39 @@ def _fetch(platform: str, job: dict) -> dict:
     return {"error": "metrics not supported yet"}
 
 
+WATCH_FIELDS = ("avg_watch_s", "avg_view_pct")
+WATCH_DAYS = {"24h": 1, "7d": 7}  # snapshot -> whole days of YouTube Analytics after the posting day
+
+
+def _backfill_watch(post: dict, rec: dict) -> None:
+    """YouTube Analytics reports watch time a day or two late, so the 24h (and often the 7d) snapshot
+    is taken before there is any. Fill it in once YouTube has it: the watch time over the posting day
+    and the next day (24h) or the next 7 days (7d), whole days being all Analytics gives. The 1h
+    snapshot has no such number and stays without."""
+    from datetime import timedelta
+
+    from .publish import youtube
+
+    posted = datetime.fromisoformat(post["published_at"]).astimezone(timezone.utc).date()
+    for name, days in WATCH_DAYS.items():
+        snap = rec["snapshots"].get(name)
+        if not snap or snap.get("avg_watch_s") is not None or snap.get("error"):
+            continue
+        end = posted + timedelta(days=days)
+        if end >= datetime.now(timezone.utc).date():  # that day isn't over yet
+            continue
+        try:
+            with channels.use(post["channel"]):
+                w = youtube.watch_time(post["results"]["youtube"]["video_id"], posted.isoformat(), end.isoformat())
+        except Exception as e:
+            log.warning("youtube watch time %s %s: %s", post["id"], name, e)
+            snap["note"] = str(e)[:160]
+            continue
+        if w:
+            snap.update({k: w[k] for k in WATCH_FIELDS}, watch_through=end.isoformat())
+            snap.pop("note", None)
+
+
 def collect(force: bool = False) -> int:
     """Take the snapshots that are due. Returns how many platform posts were updated."""
     data = store._read("metrics.json", {})
@@ -241,7 +284,9 @@ def collect(force: bool = False) -> int:
             m["age_h"] = round(age, 1)
             rec["latest"] = m
             for name in due:
-                rec["snapshots"][name] = m
+                rec["snapshots"][name] = dict(m)
+            if platform == "youtube":
+                _backfill_watch(post, rec)
             updated += 1
     if updated:
         with _lock:

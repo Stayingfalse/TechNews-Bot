@@ -70,7 +70,7 @@ Engagement options:
   them gets a reply under their comment pointing at it (a link on YouTube; Instagram comments can't
   carry clickable links). Needs the comments permissions (reconnect from the dashboard).
 - **Viewer-picked themes:** `ask_theme` makes the outro ask viewers to comment a theme for next week;
-  `GET /themes/suggestions` groups and ranks what they suggested. Monday's batch picks one and sets
+  `GET /themes/suggestions` groups and ranks what they suggested, including themes named inside a longer comment ("4/5, we need an anime theme next"). Monday's batch picks one and sets
   `picked_by` on that quiz: the video shows their comment as a comment card ("@name picked this theme")
   and the viewer gets a reply under
   their suggestion once it posts.
@@ -107,13 +107,13 @@ Schedule tab, and retry a failed post; booking a batch and posting new quizzes s
 | `PATCH /schedule/job/{job_id}` | Move a booked quiz (`date`, `time`) and/or replace its content (`spec`), with the same checks as booking; a content change re-renders it |
 | `DELETE /schedule/{date}?time=HH:MM` | Cancel a booked quiz (`time` needed when the day has more than one) |
 | `POST /jobs?dry_run=&force=&only=` | Render and post one quiz now (`only=youtube` etc. limits it to some platforms). 409 if any answer was used in the last `REPEAT_DAYS` or is booked (unless `force`). |
-| `GET /jobs/{id}` | Job status, video URL, publish results |
+| `GET /jobs/{id}` | Job status, video URL, publish results; on a cliffhanger post or the post that revealed it, `cliffhanger_outcome` (comments read, shout-outs, replies sent) |
 | `GET /jobs/failed?days=14`, `POST /jobs/{id}/retry` | Recent posts that missed a platform, with each error; retry posts again to just those platforms (the video is made again if it was deleted). The dashboard shows them with a Retry button. |
 | `GET /history` | Posted quizzes (theme, palette, round types, answers, platforms) |
 | `GET /login`, `GET /logout` | Sign in with the Instagram or YouTube account the bot posts to (30-day cookie; read-only plus the dashboard's refresh) |
 | `GET /dashboard` | Performance dashboard for every channel (pick it at the top): totals, views per post, compare posts by any label or by the channel's own counts (votes, bets), that channel's latest weekly review (signed in, or `?token=…`) |
 | `GET /metrics?channel=`, `POST /metrics/refresh` | A channel's posts (`main`, the default, `adventure`, `racing` or `all`) with their labels (`tags`), the channel's own counts (`extra`: an adventure part's votes, the bets under a race video) and per-platform numbers (latest + 1h/24h/7d snapshots). Every channel's posts are collected, each with its own account; refresh fetches them all now |
-| `GET /metrics/summary` | Every channel at a glance: posts, and per platform the median views and average % watched, watch time and comments per 1,000 views at 24 hours |
+| `GET /metrics/summary` | Every channel at a glance: posts, and per platform the median views and average % watched, watch time and comments per 1,000 views at 24 hours. YouTube reports watch time 1-2 days late, so its 24h/7d snapshots get it filled in once it arrives (over whole days) |
 | `POST /insights`, `GET /insights/latest?channel=` | A weekly review's findings, per channel (`channel` in the body, default `main`); the Monday batch reads the quiz's latest |
 | `GET /schema` | Spec JSON schema |
 | `POST /instagram/story/{job_id}` | Post the "new quiz out now" story for a quiz already on Instagram |

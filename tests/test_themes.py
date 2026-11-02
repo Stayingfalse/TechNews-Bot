@@ -20,6 +20,13 @@ from tests.helpers import comment, posted
     ("I would never have guessed shining.", None), ("can't decide if I prefer the videos without a voice or not", None),
     ("Also had no clue for Round 4", None), ("this was so hard", None), ("you got me", None),
     ("my favourite was the last one honestly it was great", None),
+    # real comments: a score and a theme in one sentence, as the outro asks for both
+    ("4 this time, I think we need a Halloween theme for the end of the month", "Halloween"),
+    ("3 I didn't get the Taj Mahal, we should have an anime theme next", "anime"),
+    ("Anime would be a great theme.", "Anime"),
+    ("5/5! next theme should be Pixar", "Pixar"),
+    ("a Disney villains theme please", "Disney villains"),
+    ("loved this theme", None), ("great theme!", None), ("the theme was too hard", None),
 ])
 def test_theme_text(text, theme):
     assert themes._theme_text(text) == theme

@@ -31,8 +31,59 @@ SENTENCE = re.compile(r"(?i)\b(i|i'?m|i'?ve|i'?d|my|me|we|our|you|your|it'?s|thi
 MAX_WORDS = 5
 
 
+# Words that end a theme named inside a sentence, read backwards from "theme": "we need a *Halloween* theme"
+_BEFORE_THEME = {"a", "an", "the", "some", "any", "another", "more", "next", "new", "different", "great", "good",
+                 "fun", "cool", "nice", "proper", "full", "whole", "for", "of", "to", "with", "like", "and", "or",
+                 "need", "needs", "want", "wants", "have", "do", "try", "should", "could", "would", "please", "pls",
+                 "plz", "what", "how", "about", "maybe", "then", "also", "but", "so", "on", "in", "be"}
+MAX_THEME_WORDS = 4
+
+
+def _clean_words(words: list[str]) -> str | None:
+    t = " ".join(w.strip("'\".,!?:;()") for w in words).strip()
+    return t if t and not SENTENCE.search(t) else None
+
+
+def _theme_in_sentence(text: str) -> str | None:
+    """A theme named inside a longer comment, as viewers answer "How many did you get? Comment a
+    theme": "4 this time, I think we need a Halloween theme", "we should have an anime theme next",
+    "Anime would be a great theme", "next theme should be Pixar"."""
+    t = re.sub(r"@\w[\w.]*", " ", text)
+    for clause in re.split(r"[.!?;\n]+|,\s*(?=\D)", t):
+        # "theme should be Pixar", "theme idea: Pixar"
+        m = re.search(r"(?i)\bthemes?\b\s*(?:idea|suggestion|request)?\s*(?:should be|could be|would be|is|=|:|-)\s*(.+)$", clause)
+        if m:
+            words = [w for w in m.group(1).split() if w.lower() not in ("a", "an", "the", "next", "please", "pls", "plz")]
+            if found := _clean_words(words[:MAX_THEME_WORDS]):
+                return found
+        # "Anime would be a great theme", "Pixar is a good theme"
+        m = re.match(r"(?i)^\s*(.+?)\s+(?:would|could|will|'d|might)?\s*(?:be|is|makes?)\s+(?:a|an)?\s*"
+                     r"(?:\w+\s+)?themes?\b", clause)
+        if m and len(m.group(1).split()) <= MAX_THEME_WORDS:
+            if found := _clean_words(m.group(1).split()):
+                return found
+        # "we need a Halloween theme", "an anime theme next": the words just before "theme"
+        m = re.search(r"(?i)^(.*?)\bthemes?\b", clause)
+        if m:
+            words = m.group(1).split()
+            picked: list[str] = []
+            for w in reversed(words):
+                bare = w.strip("'\".,!?:;()").lower()
+                if not bare or bare in _BEFORE_THEME or SENTENCE.fullmatch(bare) or bare.isdigit():
+                    break
+                picked.insert(0, w)
+                if len(picked) == MAX_THEME_WORDS:
+                    break
+            if picked and (found := _clean_words(picked)):
+                return found
+    return None
+
+
 def _theme_text(text: str) -> str | None:
     """The theme a comment suggests, or None if it reads as a reaction, an answer or a sentence."""
+    inner = _theme_in_sentence(text)
+    if inner and inner.lower() != text.strip().lower():
+        return _theme_text(inner)  # the same checks as a bare suggestion (length, reactions, rude words)
     t = re.sub(r"@\w[\w.]*", " ", text)  # drop tags of friends
     t = re.sub(r"(?i)\b(theme|next week|please|pls|plz|do|can you|could you|how about|maybe|what about)\b[:!,.?]*", " ", t)
     t = " ".join(t.split()).strip(" -:,.!?")

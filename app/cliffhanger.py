@@ -197,6 +197,34 @@ def after_publish(job: dict) -> None:
     store.save_job(job)
 
 
+def outcome(job: dict) -> dict | None:
+    """How a cliffhanger played out, readable from either end: on the cliffhanger post (its comments
+    were judged when the next quiz was made) and on the post that revealed it. The judging is stored
+    once, as the revealing job's `reveal`; this joins the two so neither job id comes back empty.
+    None for a post that is neither."""
+    rv, role = job.get("reveal"), "reveal"
+    if not rv and job.get("cliff_revealed_by"):
+        rv, role = (store.get_job(job["cliff_revealed_by"]) or {}).get("reveal"), "cliffhanger"
+    if not rv:
+        if QuizSpec.model_validate(job["spec"]).rounds[-1].cliffhanger and job.get("status") == "done":
+            return {"role": "cliffhanger", "revealed_in": None, "comments_read": None, "shoutouts": None,
+                    "replies": [], "replies_sent": 0, "note": "not revealed yet"}
+        return None
+    replies = rv.get("replies") or []
+    return {
+        "role": role,
+        "cliffhanger_job": rv.get("from_job"),
+        "revealed_in": job["id"] if role == "reveal" else job.get("cliff_revealed_by"),
+        "answer": rv.get("answer"),
+        "comments_read": rv.get("comments_read"),
+        "shoutouts": rv.get("shoutouts"),  # None: no platform's comments could be read
+        "replies": replies,
+        "replies_sent": sum(1 for r in replies if r.get("ok")),
+        "errors": rv.get("errors") or [],
+        "collected_at": rv.get("collected_at"),
+    }
+
+
 NEXT_LINK = {
     "youtube": {"cliff": "🔓 Answer revealed, with shout-outs to everyone who got it, in today's quiz: {url}",
                 "next": "▶️ Next quiz is up: {url}"},

@@ -34,6 +34,7 @@ def fetched(monkeypatch):
 
     monkeypatch.setattr(instagram, "metrics", ig)
     monkeypatch.setattr(youtube, "metrics", yt)
+    monkeypatch.setattr(youtube, "watch_time", lambda *a, **k: None)  # YouTube Analytics hasn't reported yet
     return calls
 
 
@@ -102,6 +103,35 @@ def test_every_channel_is_collected_as_itself(fetched, quiz):
                                                    "avg_views": 321.0, "avg_comments": 6.0, "avg_likes": 9.0, "avg_bets": 3.0}
     fetched.clear()
     assert metrics.collect() == 0 and not fetched  # nothing due again yet
+
+
+def test_youtube_watch_time_fills_in_late(fetched, quiz, monkeypatch):
+    """YouTube Analytics lags a day or two, so the 24h snapshot is taken without watch time; it is
+    filled in from Analytics once those days are reported, and the summary then has YouTube's too."""
+    from app.publish import youtube
+
+    posted("q-1", quiz, hours_ago=80, render={"duration": 40})
+    metrics.collect()
+    snap = store._read("metrics.json", {})["q-1"]["youtube"]["snapshots"]["24h"]
+    assert snap.get("avg_watch_s") is None  # nothing reported yet
+
+    asked = []
+
+    def wt(video_id, start, end, token=None):
+        asked.append((video_id, start, end))
+        return {"avg_watch_s": 20, "avg_view_pct": 50.0, "shares": 0, "followers_gained": 0}
+
+    monkeypatch.setattr(youtube, "watch_time", wt)
+    metrics.collect(force=True)
+    snaps = store._read("metrics.json", {})["q-1"]["youtube"]["snapshots"]
+    assert snaps["24h"]["avg_watch_s"] == 20 and snaps["24h"]["watch_through"]
+    assert snaps["1h"].get("avg_watch_s") is None  # Analytics has whole days only
+    assert asked and asked[0][0] == "V-q-1"
+    yt = metrics.summary()["main"]["platforms"]["youtube"]
+    assert yt["avg_watch_s_24h"] == 20 and yt["avg_watched_pct_24h"] == 50.0  # 20 s of 40 s
+    asked.clear()
+    metrics.collect(force=True)
+    assert asked == []  # filled once, not asked again
 
 
 def test_one_broken_channel_does_not_hide_the_rest(fetched, quiz, monkeypatch):
