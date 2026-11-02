@@ -32,7 +32,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `fear`: the foe the viewers chose to fear
      - `rules_broken`: what they broke, where, and on which episode
      - `dead`: if true, stop and report "the hero has fallen; a new Episode 0 is needed".
-   - `recent`: the last episodes as played (node, votes, whether the roll succeeded).
+   - `recent`: the last episodes as played (node, votes, whether the roll succeeded). `story` is what was actually told: each morning an AI writer adapts the planned words to the comments, so it can differ from the arc (`planned_story`). Write on from what was told.
    - `arcs`: the arcs so far.
    - `season_bible`: the season's story, cast, tone, week-by-week plan and dice guidance. **Follow it.** Find this week in its table by `start_date`.
    - `example_arc`: a complete, valid arc. Copy its shape.
@@ -57,7 +57,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - a discovery or reveal near the end
      - one rest node (`"rest": true`) somewhere, more if hearts are low
    - Follow the bible's rules on the two rules (`breaks`), the chosen foe, and the cast.
-   - Respect what happened. If a rule was broken, let the world notice. If hearts are low, give a chance to recover. If the last rolls failed, the hero is in a worse spot.
+   - Respect what happened, as it was told in `recent`. Day 0 must follow on from it: don't repeat what the hero already did or found, and don't contradict it. If a rule was broken, let the world notice. If hearts are low, give a chance to recover. If the last rolls failed, the hero is in a worse spot.
 
 3. Write each node. Hard limits apply; the server checks every one.
    - `id`: lowercase-with-dashes, unique, not in `known_ids`.
@@ -73,8 +73,9 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `skill` (from `vocab.skills`), `dc` (from `vocab.dcs`), optional `mode` (`advantage`/`disadvantage`), optional `harm: true` (a failure costs a heart)
      - `success` and `fail`: up to 20 words each
      - The hero's odds (`success_pct_by_dc`) must be between 25% and 90%.
-     - Viewers also vote a **way** (bold, sly or wise). When one wins, the server swaps the check's skill for the hero's best skill for that way (bold: athletics/intimidation; sly: stealth/sleight of hand/deception; wise: perception/arcana/persuasion), and turnout can add up to +3 (Rally). So write `story`, `success` and `fail` so they read right whichever way the hero tries it: say what happens, not how ("The gate gives." rather than "Your shoulder breaks the gate."). Pick DCs where each way's best skill for this hero (from `vocab` odds) still has a fair chance, so choosing a way is a real trade-off and none is hopeless.
+     - The check rolls the skill you pick. A big turnout adds up to +3 to the roll (Rally); the odds rule above is checked without it.
    - Without a check, `after`: up to 20 words, what happens next. A rest node has no check and has `after`.
+   - **Stop before the choices.** `story`, `success`, `fail` and `after` end where the question starts: the hero never does, starts or decides any of the node's `choices` in them. If a choice is "Pocket the ribbon", the ribbon is still lying there at the end of the day. Each choice should be a real fork: two choices that end the same way aren't worth a vote.
    - `ask`: the question, up to 5 words, e.g. "Which way down?", "Answer it?".
    - `choices`: 2-3 options.
      - `label`: up to 32 characters, shown on screen and voted on, starting with a verb, e.g. "Follow the dripping water".
@@ -97,6 +98,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `start_date`, `days`: copied from `next_arc`
      - `links`: `{ "<links_from id>": ["<day-0 node for A>", "<for B>", "<for C>"] }`, one entry per `links_from`, as many targets as it has choices
      - `notes`: up to 2000 characters, for next week's you: what's set up, open threads, what each ending means.
+     - `previously`: up to 25 words (160 characters), starting "Last week,": the story so far as told in `recent`, for anyone just arriving, e.g. "Last week, you broke into the crypt, found Ellen's ribbon, and stayed silent when a voice called your name." It's said before the recap on the week's first episode and heads the "Story so far" in every caption this week. Leave it out of the very first arc (the one that links from `episode0`).
 
 4. Check your work before sending: POST APP_URL/adventure/arc?dry_run=true with the arc.
    - A 422 response lists **every** problem in `detail.problems`, plus what was expected. Fix them all and check again.

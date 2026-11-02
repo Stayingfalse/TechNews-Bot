@@ -111,7 +111,7 @@ def test_the_writer_gets_story_data_and_totals_only_and_its_words_play(day, monk
     for name in NAMES + ["Ann Smith", "my real name", "please"]:
         assert name.lower() not in body.lower(), name  # nothing a viewer is or wrote reaches the AI
     inp = job["writer"]["input"]
-    assert inp["voices"]["shouted"] == [{"word": "torch", "times": 3}] and inp["voices"]["way"] == "sly"
+    assert inp["voices"]["shouted"] == [{"word": "torch", "times": 3}] and "way" not in inp["voices"]
     assert set(inp["party"][0]) == {"slot", "name", "cls"} and inp["companion_moment"]["slot"] == 1
     assert job["writer"]["status"] == "written" and job["spec"]["story"].startswith("You kneel by the lock, torch high.")
     assert job["spec"]["hook"] == ["THE LOCK", "GIVES"] and job["plan_node"]["story"] != job["spec"]["story"]
@@ -188,7 +188,7 @@ def test_trying_the_writer_saves_nothing(day, client):
     make, answers, sent, rendered, _ = day
     answers.append(good())
     before = {j["id"]: j["status"] for j in jobs.recent(20)}
-    r = client.post("/adventure/writer/try", json={"pick": 1, "way": "sly", "shouts": ["torch"], "voters": 30}, headers=AUTH)
+    r = client.post("/adventure/writer/try", json={"pick": 1, "shouts": ["torch"], "voters": 30}, headers=AUTH)
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["status"] == "written" and out["written"]["story"] == good()["story"] and out["node"] == "gate-lock"
@@ -218,3 +218,70 @@ def test_the_request_turns_thinking_off_and_says_why_a_reply_was_blank(monkeypat
     monkeypatch.setattr(writer.httpx, "post", lambda url, **kw: R({"choices": [{"message": {"content": '{"story": "x"}'}}],
                                                                    "usage": {"prompt_tokens": 5}}))
     assert writer._ask([]) == ({"story": "x"}, {"prompt_tokens": 5})
+
+
+# ------------------------------------------------------------------ continuity
+
+
+RIBBON = next(n for n in ARC["nodes"] if n["id"] == "ribbon-hall")
+NO_VOICES = {"voices": {"shouted": []}, "companion_moment": None}
+
+
+def test_the_hero_must_not_do_todays_choices_before_the_vote():
+    # what actually aired on 2 Nov: the writer had the hero pocket the ribbon, then asked whether to pocket it
+    aired = writer._apply(RIBBON, {"story": "A red ribbon on the tomb, still warm. Ellen's.",
+                                   "after": "You pocket it, march three bold laps, jaw shut. The dark stays silent."})
+    assert writer.jumps_ahead(aired, RIBBON) == ["Pocket the ribbon"]
+    assert any("Pocket the ribbon" in p for p in writer.own_problems(aired, NO_VOICES, RIBBON))
+    for said in ("You quickly grab it and pocketed it.", "You are pocketing it."):
+        assert writer.jumps_ahead(writer._apply(RIBBON, {"after": said}), RIBBON) == ["Pocket the ribbon"]
+    # the plan as written, or words that leave the choice open, are fine
+    assert writer.jumps_ahead(RIBBON, RIBBON) == [] and writer.own_problems(RIBBON, NO_VOICES, RIBBON) == []
+    open_ = writer._apply(RIBBON, {"after": "Scratched beside it, in Ellen's hand: do not answer. Your hand hovers."})
+    assert writer.own_problems(open_, NO_VOICES, RIBBON) == []
+
+
+def test_the_plans_names_stay_in():
+    assert writer.plan_names(RIBBON) == {"Ellen"}
+    lost = writer._apply(RIBBON, {"story": "On a tomb lid lies a red ribbon. Still warm."})
+    assert any('keep "Ellen"' in p for p in writer.own_problems(lost, NO_VOICES, RIBBON))
+
+
+def test_the_writer_gets_the_premise_and_the_story_so_far(day):
+    make, answers, sent, _, _ = day
+    answers += [good(success="A soft click. You take the bone stair, torch high."),  # jumps ahead to choice A
+                good()]
+    job = make()
+    w = job["writer"]
+    assert w["status"] == "written" and "Take the bone stair" in w["attempts"][0]["problems"][0]
+    assert "Ellen" in w["input"]["premise"] and "viewer" not in w["input"]["premise"].lower()
+    assert w["input"]["story_so_far"] == [] and "story_so_far" in sent[0][0]["content"]
+    # once it has played, the next day's writer sees it, with the choice that led there
+    s = campaign.state()
+    s["history"].append({"ep": 1, "arc": ARC["id"], "node": "gate-lock", "story": "You kneel.", "outcome": "A click.",
+                         "recap": "You chose to pick the old lock."})
+    so_far = campaign.story_so_far(s)
+    assert so_far == [{"ep": 1, "choice": "You chose to pick the old lock.", "story": "You kneel.", "outcome": "A click."}]
+
+
+def test_a_weeks_first_day_says_last_week_and_every_caption_has_the_story_so_far():
+    s = campaign.state()
+    s["history"] = [{"ep": i, "arc": ARC["id"], "node": "x", "story": "s", "outcome": f"Outcome {i}.", "recap": f"You did {i}."}
+                    for i in range(1, 6)]
+    week2 = {"id": "s1-w2", "links": {"the-whisper": ["a", "b"]}, "previously": "Last week, you found Ellen's ribbon."}
+    bits = campaign.recap_bits(week2, {"day": 0}, s)
+    assert bits["previously"] == "Last week, you found Ellen's ribbon."
+    assert bits["soFar"] == ["Last week, you found Ellen's ribbon.", "Ep 3: You did 3. Outcome 3.", "Ep 4: You did 4. Outcome 4.",
+                             "Ep 5: You did 5. Outcome 5."]
+    assert "previously" not in campaign.recap_bits(week2, {"day": 1}, s)  # only the week's first day says it
+    first = {**week2, "links": {"episode0": ["a", "b", "c"]}}
+    assert "previously" not in campaign.recap_bits(first, {"day": 0}, s)  # nothing came before the first week
+    assert campaign.recap_bits({"links": {}}, {"day": 2}, {**s, "history": []}) == {}
+
+
+def test_the_episode_carries_the_story_so_far(day):
+    make, answers, _, _, _ = day
+    answers.append(good())
+    job = make()
+    assert "previously" not in job["spec"]  # week 1 starts the story
+    assert "soFar" not in job["spec"]  # and nothing has happened yet

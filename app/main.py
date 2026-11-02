@@ -998,15 +998,12 @@ def adventure_votes(job_id: str):
         comments = [c for c in PUBLISHERS["instagram"].comments(media) if c["user"].lower() != own]
     t = adventure_votes_mod.tally(comments, job["script"]["options"])
     pick, how = adventure_votes_mod.decide(t["counts"], job["script"]["default"], job["id"])
-    way = adventure_votes_mod.top_way(t["ways"])
-    return {"counts": t["counts"], "voters": len(t["voters"]), "comments": t["comments"], "ways": t["ways"],
-            "way": adventure_votes_mod.WAYS[way] if way is not None else None, "joins": len(t["joins"]),
+    return {"counts": t["counts"], "voters": len(t["voters"]), "comments": t["comments"], "joins": len(t["joins"]),
             "leaves": len(t["leaves"]), "leading": job["script"]["options"][pick], "how": how}  # totals only
 
 
 class WriterTry(BaseModel):
     pick: int = Field(0, ge=0, le=2, description="which option of the latest episode won (0 = A)")
-    way: str | None = Field(None, pattern="^(bold|sly|wise)$")
     shouts: list[str] = Field(default_factory=list, max_length=3, description="words from the Shout List")
     voters: int = Field(12, ge=0, le=10000)
     node: str | None = Field(None, description="any node of an accepted arc, instead of the next episode's")
@@ -1022,7 +1019,7 @@ def adventure_writer_try(body: WriterTry):
     if bad:
         raise HTTPException(422, f"not on the Shout List: {', '.join(bad)}")
     try:
-        return adventure_jobs.writer_try(body.pick, body.way, [w.lower() for w in body.shouts], body.voters, body.node)
+        return adventure_jobs.writer_try(body.pick, [w.lower() for w in body.shouts], body.voters, body.node)
     except (ValueError, adventure_campaign.NoArc) as e:
         raise HTTPException(409, str(e))
 

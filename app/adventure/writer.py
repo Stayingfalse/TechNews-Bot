@@ -1,11 +1,11 @@
 """The story's AI writer (phase 2, docs/VOICES_STORY_PLAN.md §4-5): each morning it adapts the
-day's planned node (the weekly routine's) to what the comments added up to: the winning way, how
-many voted, the top shouted word and a companion's moment. It rewrites the node's words only: the
+day's planned node (the weekly routine's) to what the comments added up to: how many voted, the top shouted word and a companion's moment. It rewrites the node's words only: the
 hook, story, outcomes or aftermath. The scene, foe, check (skill, DC), question and choices stay as
 planned, so the story's branches and the dice are untouched.
 
 **What DeepSeek is given is built here and only here** (`prompt_input`): the planned node, the
-hero's class and hearts, the last episodes' text, the arc's title and notes, the party as story
+hero's class and hearts, the season's premise, the story so far as it was told (each episode's
+choice, scene and outcome), the arc's title and notes, the party as story
 characters (`party.story_party`), and totals. Never a username, account id, comment, or anything a
 single viewer wrote or did. tests/test_writer.py checks that.
 
@@ -28,8 +28,8 @@ from . import shouts
 
 log = logging.getLogger(__name__)
 ATTEMPTS = 3  # the first answer and at most 2 corrections
-WAY_HOW = {"bold": "head-on, loud and brave", "sly": "quietly and with tricks", "wise": "carefully and cleverly"}
 TEXT_FIELDS = ("hook", "story", "success", "fail", "after")
+SO_FAR = 12  # episodes of the story so far the writer is given (about two weeks)
 # the writer must never speak to or about the audience as people
 AUDIENCE = re.compile(r"@|\b(viewers?|comments?|commenters?|followers?|subscribe|instagram|youtube|username)\b", re.I)
 
@@ -44,8 +44,8 @@ def enabled() -> bool:
 
 def prompt_input(node: dict, story: dict) -> dict:
     """Everything the AI writer is given. `story` holds story data and totals only (see
-    jobs._writer_story): {"hero", "hearts", "ep", "recap", "recent", "arc", "party", "moment",
-    "voices"}. Built field by field, so nothing else can slip in."""
+    campaign.build_story): {"hero", "hearts", "ep", "recap", "so_far", "premise", "arc", "party",
+    "moment", "voices"}. Built field by field, so nothing else can slip in."""
     check = node.get("check")
     v = story.get("voices") or {}
     party_list = [{"slot": int(c["slot"]), "name": str(c["name"]), "cls": str(c["cls"])} for c in story.get("party") or []]
@@ -54,7 +54,9 @@ def prompt_input(node: dict, story: dict) -> dict:
         "episode": int(story["ep"]),
         "hero": {"class": str(story["hero"]["cls"]), "hearts": int(story["hearts"])},
         "arc": {"title": str(story["arc"].get("title", "")), "notes": str(story["arc"].get("notes", ""))[:1500]},
-        "recent_episodes": [{"story": str(e.get("story", "")), "outcome": str(e.get("outcome", ""))} for e in story.get("recent") or []][-3:],
+        "premise": str(story.get("premise") or "")[:1200],
+        "story_so_far": [{"episode": int(e.get("ep") or 0), "choice": str(e.get("choice", "")), "story": str(e.get("story", "")),
+                          "outcome": str(e.get("outcome", ""))} for e in story.get("so_far") or []][-SO_FAR:],
         "previous_choice": str(story.get("recap") or ""),
         "planned": {
             "scene": str((node.get("scene") or {}).get("name") or (node.get("scene") or {}).get("type", "")),
@@ -71,8 +73,6 @@ def prompt_input(node: dict, story: dict) -> dict:
             "votes": [int(n) for n in v.get("counts") or []],
             "chosen": str(v.get("chosen") or ""),
             "voters": int(v.get("voters") or 0),
-            "way": v.get("way"),
-            "way_means": WAY_HOW.get(v.get("way") or "", None),
             "rally": int(v.get("rally") or 0),
             "shouted": [{"word": str(s["word"]), "times": int(s["n"])} for s in (v.get("shouts") or [])][:3],
         },
@@ -88,15 +88,19 @@ asked for. Reply with json only, in exactly this shape:
 {"hook": ["LINE ONE", "LINE TWO"], "story": "...", "success": "...", "fail": "...", "after": null}
 
 Rules:
+- Today continues the story: story_so_far is every episode as it was told, oldest first, and
+  previous_choice is what the hero chose last. Follow on from them; don't repeat or contradict them.
 - Keep the plan's events, scene, foe and meaning. Don't add new places, foes or items that the
   plan's choices or next scenes would contradict.
+- Keep every fact the plan states: names, whose thing it is (e.g. "Ellen's"), what is written or said.
+- Today stops at the question. planned.choices are what the crowd votes on for tomorrow: the hero
+  must not do, start or decide any of them today (if a choice is "Pocket the ribbon", the ribbon is
+  still lying there at the end). Add no action of the hero's that the plan doesn't have.
 - "hook": two lines of at most 14 characters each, punchy, shown big on the title card.
 - "story": at most 20 words. Second person, present tense, short concrete sentences. What the hero
   sees and does now.
 - If the plan has a check, write "success" and "fail" (at most 20 words each) and set "after" to
   null. If it has no check, write "after" (at most 20 words) and set "success" and "fail" to null.
-- The way (voices.way) is how the hero acts today: tell it that way (voices.way_means). Write the
-  outcomes so they fit that way.
 - If voices.shouted has words, the first word must appear in today's text: in "story", or (with a
   check) in both "success" and "fail", or (without one) in "after". Use it naturally.
 - If companion_moment is set, that companion (by name) does one small helpful thing in "story".
@@ -155,11 +159,56 @@ def _has_word(text: str, word: str) -> bool:
     return any(shouts._STEM.get(w) == word or w == word for w in re.findall(r"[a-z]+", text.lower()))
 
 
-def own_problems(n: dict, inp: dict) -> list[str]:
+def _texts(n: dict) -> list[str]:
+    return [n["hook"][0], n["hook"][1], n["story"], n.get("after") or "",
+            *(([n["check"]["success"], n["check"]["fail"]]) if n.get("check") else [])]
+
+
+def _forms(verb: str) -> set[str]:
+    """pocket -> pocket, pockets, pocketed, pocketing; take -> takes, taking, taked (harmless)."""
+    f = {verb, verb + "s", verb + "es", verb + "ed", verb + "d", verb + "ing", verb + verb[-1] + "ed", verb + verb[-1] + "ing"}
+    if verb.endswith("e"):
+        f.add(verb[:-1] + "ing")
+    if verb.endswith("y"):
+        f |= {verb[:-1] + "ies", verb[:-1] + "ied"}
+    return f
+
+
+def _hero_does(text: str, verb: str) -> bool:
+    """Whether the hero does `verb` in `text`: "You pocket it", "You grab it and pocket it"."""
+    words = re.findall(r"[a-z']+", text.lower())
+    forms = _forms(verb)
+    return any(w == "you" and any(x in forms for x in words[i + 1:i + 6]) for i, w in enumerate(words))
+
+
+def jumps_ahead(n: dict, plan: dict) -> list[str]:
+    """Today's choices the written text already has the hero do (unless the plan's own text does)."""
+    planned = " ".join(_texts(plan)).lower()
+    said = " ".join(_texts(n))
+    out = []
+    for c in plan.get("choices") or []:
+        verb = (re.findall(r"[a-z]+", c["label"].lower()) or [""])[0]
+        if len(verb) >= 3 and _hero_does(said, verb) and not any(f in re.findall(r"[a-z]+", planned) for f in _forms(verb)):
+            out.append(c["label"])
+    return out
+
+
+# a capitalised word mid-sentence, or any possessive one: a name the plan gives ("Ellen's")
+_NAME = re.compile(r"(?<![.!?:]\s)(?<!^)\b([A-Z][a-z]{2,})\b|\b([A-Z][a-z]{2,})'s\b")
+
+
+def plan_names(plan: dict) -> set[str]:
+    names = set()
+    for t in _texts(plan)[2:]:
+        for a, b in _NAME.findall(t.strip()):
+            names.add(a or b)
+    return names
+
+
+def own_problems(n: dict, inp: dict, plan: dict | None = None) -> list[str]:
     """The checks the engine's validator doesn't know about."""
     p = []
-    texts = [n["hook"][0], n["hook"][1], n["story"], n.get("after") or "",
-             *(([n["check"]["success"], n["check"]["fail"]]) if n.get("check") else [])]
+    texts = _texts(n)
     if any(AUDIENCE.search(t) for t in texts):
         p.append("don't mention viewers, comments, usernames or social media; the Voices are a chorus in the story")
     shouted = inp["voices"]["shouted"]
@@ -173,6 +222,14 @@ def own_problems(n: dict, inp: dict) -> list[str]:
     m = inp.get("companion_moment")
     if m and m["name"].lower() not in n["story"].lower():
         p.append(f'{m["name"]} (the companion) must do one small thing in "story", by name')
+    if plan:
+        for label in jumps_ahead(n, plan):
+            p.append(f'the hero already does "{label}", one of today\'s choices; the crowd votes on that for tomorrow, '
+                     'so today must stop before it')
+        said = " ".join(texts).lower()
+        for name in sorted(plan_names(plan)):
+            if not re.search(rf"\b{name.lower()}\b", said):
+                p.append(f'keep "{name}" from the plan (who or whose it is matters to the story)')
     return p
 
 
@@ -195,7 +252,7 @@ def adapt(node: dict, story: dict, validate) -> tuple[dict, dict]:
         record["tokens"]["in"] += int(usage.get("prompt_tokens") or 0)
         record["tokens"]["out"] += int(usage.get("completion_tokens") or 0)
         n = _apply(node, out)
-        problems = validate(n) + own_problems(n, inp)
+        problems = validate(n) + own_problems(n, inp, node)
         record["attempts"].append({"output": out, "problems": problems})
         if not problems:
             record.update(status="written", seconds=round(time.time() - t0, 1), node=n)

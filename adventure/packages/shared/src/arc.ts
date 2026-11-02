@@ -55,6 +55,8 @@ export const Arc = z.object({
   links: z.record(z.string(), z.array(z.string()).min(2).max(3)),
   nodes: z.array(Node).min(1).max(24),
   notes: z.string().max(2000).optional(),
+  /** Spoken before the recap on the week's first episode, and the caption's "last week" line. */
+  previously: words(25).refine((t) => t.length <= 160, "at most 160 characters").optional(),
 });
 export type ArcT = z.infer<typeof Arc>;
 
@@ -137,5 +139,6 @@ export function validateArc(raw: unknown, ctx: ArcContext): { problems: string[]
     if (chars > DAILY_CHARS) p.push(`${at}: about ${chars} characters of narration; keep it under ${DAILY_CHARS} (shorter story/outcomes)`);
   }
   for (const n of arc.nodes) if (!reached.has(n.id)) p.push(`${n.id}: no choice or link leads here`);
+  if (arc.previously && BANNED.test(arc.previously)) p.push("previously: keep it teen-friendly (no swearing or gore)");
   return { problems: p, arc };
 }

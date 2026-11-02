@@ -59,17 +59,11 @@ def parse(text: str, options: list[str]) -> int | None:
     return found.pop() if len(found) == 1 else None
 
 
-WAYS = ("bold", "sly", "wise")  # how the hero does it: the winning way picks the check's skill
-WAY_WORDS = {"bold": 0, "boldly": 0, "sly": 1, "slyly": 1, "wise": 2, "wisely": 2}
-_WAY = re.compile(r"\b(bold|boldly|sly|slyly|wise|wisely)\b")
+# "bold", "sly" and "wise" were once a second vote (how the hero tried a check); they're no longer
+# counted, but comments that still say them ("A sly join") still vote and join
+_OLD_WAYS = ("bold", "boldly", "sly", "slyly", "wise", "wisely")
 _JOIN = re.compile(r"^(?:#?join|i(?:'ll| will)? join|join (?:the |your )?party|count me in|i'?m in)\b")
 _LEAVE = re.compile(r"^(?:#?leave|leave (?:the |your )?party|i(?:'m| am) out)\b")
-
-
-def way_of(text: str) -> int | None:
-    """The way (0 bold, 1 sly, 2 wise) a comment names, if it names exactly one."""
-    found = {WAY_WORDS[m] for m in _WAY.findall(_norm(text))}
-    return found.pop() if len(found) == 1 else None
 
 
 def party_word(text: str) -> str | None:
@@ -77,24 +71,23 @@ def party_word(text: str) -> str | None:
     t = re.sub(r"[^a-z0-9#' ]+", " ", _norm(text)).split()
     if not t or len(t) > 8:
         return None
-    for start in range(len(t)):  # after a vote and a way: "a sly join"
+    for start in range(len(t)):  # after a vote: "a join"
         rest = " ".join(t[start:])
         if _LEAVE.match(rest):
             return "leave"
         if _JOIN.match(rest):
             return "join"
-        if t[start] not in ("a", "b", "c", *WAYS, "bold", "boldly", "slyly", "wisely", "and", "+", "&"):
+        if t[start] not in ("a", "b", "c", *_OLD_WAYS, "and", "+", "&"):
             break
     return None
 
 
 def tally(comments: list[dict], options: list[str]) -> dict:
-    """Count each account's first vote and first way, and who asked to join or leave the party.
+    """Count each account's first vote, and who asked to join or leave the party.
     comments: oldest first, each {user, uid?, text, ...}. Only the totals are kept in the episode's
     record; `voters`, `joins`, `leaves` and `commenters` (names) are for the party and credits
     (app/adventure/party.py) and aren't stored with the votes."""
     counts, voters, seen = [0] * len(options), [], set()
-    ways, way_seen = [0, 0, 0], set()
     joins, leaves, commenters, asked = [], [], [], set()
     shouted: dict[str, list[str]] = {}  # word → who shouted it (first list word per person), in comment order
     shout_seen = set()
@@ -105,9 +98,6 @@ def tally(comments: list[dict], options: list[str]) -> dict:
         text = c.get("text") or ""
         if who not in {x["key"] for x in commenters}:
             commenters.append({"key": who, "user": c.get("user"), "uid": c.get("uid")})
-        if who not in way_seen and (w := way_of(text)) is not None:
-            way_seen.add(who)
-            ways[w] += 1
         if who not in shout_seen and (w := shout_of(text)):
             shout_seen.add(who)
             shouted.setdefault(w, []).append(c.get("user"))
@@ -122,14 +112,8 @@ def tally(comments: list[dict], options: list[str]) -> dict:
         seen.add(who)
         counts[pick] += 1
         voters.append({"user": c.get("user"), "pick": pick})
-    return {"counts": counts, "voters": voters, "comments": len(comments), "ways": ways,
+    return {"counts": counts, "voters": voters, "comments": len(comments),
             "joins": joins, "leaves": leaves, "commenters": commenters, "shouts": counted(shouted)}
-
-
-def top_way(ways: list[int]) -> int | None:
-    """The winning way, or None when nobody named one or it's a tie (then the node's own skill is used)."""
-    top = max(ways) if ways else 0
-    return ways.index(top) if top and ways.count(top) == 1 else None
 
 
 def decide(counts: list[int], default: int, key: str) -> tuple[int, str]:

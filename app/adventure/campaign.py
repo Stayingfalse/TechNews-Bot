@@ -221,12 +221,17 @@ def dice(ep: int, node_id: str) -> tuple[list[int], str]:
     return out, proof
 
 
-def _recent_text(s: dict, n: int = 3) -> list[dict]:
-    """The last episodes' text as they played (the writer's words when it wrote them), for the writer."""
+def story_so_far(s: dict, n: int = 12) -> list[dict]:
+    """The last `n` episodes as they were told (the writer's words when it wrote them): the choice
+    that led there, the scene and its outcome. For the writer, so each day follows on from the last."""
+    from . import jobs
     out = []
     for h in s["history"][-n:]:
+        choice = h.get("recap")
+        if choice is None and h.get("job"):
+            choice = (((jobs.get(h["job"]) or {}).get("resolve_ctx") or {}).get("recap") or {}).get("line")
         if h.get("story"):
-            out.append({"story": h["story"], "outcome": h.get("outcome") or ""})
+            out.append({"ep": h["ep"], "choice": choice or "", "story": h["story"], "outcome": h.get("outcome") or ""})
             continue
         arc = _arc(h["arc"]) if h.get("arc") else None
         try:
@@ -235,14 +240,47 @@ def _recent_text(s: dict, n: int = 3) -> list[dict]:
             node = None
         if node:
             ck = node.get("check")
-            out.append({"story": node["story"], "outcome": (ck["success"] if h.get("success") else ck["fail"]) if ck else node.get("after", "")})
+            out.append({"ep": h["ep"], "choice": choice or "", "story": node["story"],
+                        "outcome": (ck["success"] if h.get("success") else ck["fail"]) if ck else node.get("after", "")})
     return out
 
 
-def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0,
+def premise(season: int) -> str:
+    """The bible's premise section (who Ellen is, what the quest is), for the writer."""
+    text = season_bible(season)
+    start = text.find("## The premise")
+    if start < 0:
+        return ""
+    end = text.find("\n## ", start + 3)
+    body = text[start:end if end > 0 else None].split("\n", 1)[-1]
+    # the story's facts only: not the bullets about the show (viewers, state fields)
+    bullets = [" ".join(b.split()) for b in body.split("\n- ") if b.strip()]
+    keep = [b.lstrip("- ").replace("**", "").replace("*", "") for b in bullets if "viewer" not in b and "`" not in b]
+    return " ".join(keep)[:1200]
+
+
+def recap_bits(arc: dict, node: dict, s: dict, n: int = 3) -> dict:
+    """What a story episode says about what came before: `previously` (the arc's line, spoken on its
+    first day, unless the arc starts the story) and the caption's `soFar` (that line and the last
+    `n` episodes as told: the choice that led there and how it turned out)."""
+    out: dict = {}
+    prev = (arc.get("previously") or "").strip()
+    if prev and node.get("day") == 0 and "episode0" not in arc.get("links", {}):
+        out["previously"] = prev
+    lines = [prev] if prev else []
+    for e in story_so_far(s, n):
+        line = " ".join(x for x in (e["choice"], e["outcome"]) if x).strip()
+        if line:
+            lines.append(f"Ep {e['ep']}: {line}"[:300])
+    if lines:
+        out["soFar"] = lines[-(n + 1):]
+    return out
+
+
+def build_story(prev_job: dict, pick: int, counts: list[int], rally: int = 0,
                 story: dict | None = None) -> dict:
-    """The spec (and everything to remember) for today's story episode. `way` (bold/sly/wise, the
-    comments' winning way) picks the check's skill; `rally` (from turnout) adds to the roll.
+    """The spec (and everything to remember) for today's story episode. `rally` (from turnout) adds
+    to the roll.
     `story` (party as story characters, the companion with a moment, the Voices' totals) goes to
     the AI writer, which adapts the planned node's words; without it, or if the writer fails, the
     planned node plays as written."""
@@ -258,16 +296,17 @@ def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = 
     rolled, proof = dice(ep, node["id"])
     ctx = {"ep": ep, "hero": s["hero"], "hearts": s["hearts"], "dice": rolled,
            "recap": {"pick": pick, "votes": counts, "label": opts[pick], "line": choice["recap"]},
-           "way": way, "rally": rally}
+           "rally": rally}
     planned, written = node, None
     if story is not None:
         from . import writer
 
         full = {**story, "ep": ep, "hero": s["hero"], "hearts": s["hearts"], "recap": choice["recap"],
-                "recent": _recent_text(s), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")}}
+                "so_far": story_so_far(s), "premise": premise(s["season"]), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")}}
         check = lambda n: _run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": choice["recap"]})["problems"]  # noqa: E731
         node, written = writer.adapt(node, full, check)
     spec = _run_node("resolve", payload={"node": node, "ctx": ctx})
+    spec.update(recap_bits(arc, node, s))
     broken = choice.get("breaks")
     return {"spec": spec, "arc": arc["id"], "node": node["id"], "dice": {"rolled": rolled, "proof": proof},
             "writer": written, "plan_node": planned, "resolve_ctx": ctx, "writer_story": full if story is not None else None,
@@ -285,6 +324,7 @@ def commit(job: dict) -> dict:
     spec = job.get("spec") or {}
     s["history"].append({"ep": a["ep"], "arc": a["arc"], "node": a["node"], "date": datetime.now(settings.tz).date().isoformat(),
                          "story": spec.get("story"), "outcome": spec.get("after"),
+                         "recap": ((job.get("resolve_ctx") or {}).get("recap") or {}).get("line"),
                          "written": (job.get("writer") or {}).get("status") == "written",
                          "pick": (job.get("votes") or {}).get("pick"), "votes": (job.get("votes") or {}).get("counts"),
                          "success": a.get("ok"), "hearts": a["hearts"], "job": job["id"]})
@@ -310,7 +350,8 @@ def overview() -> dict:
     for h in s["history"][-14:]:
         arc = _arc(h["arc"])
         n = _node_of(arc, h["node"]) if arc else {}
-        path.append({**h, "story": n.get("story"), "hook": n.get("hook")})
+        # what was told (the writer may have adapted the plan's words), with the plan for comparison
+        path.append({**h, "story": h.get("story") or n.get("story"), "planned_story": n.get("story"), "hook": n.get("hook")})
     return {
         "state": {k: v for k, v in s.items() if k != "history"},
         "recent": path,
