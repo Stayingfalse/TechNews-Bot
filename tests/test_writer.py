@@ -285,3 +285,11 @@ def test_the_episode_carries_the_story_so_far(day):
     job = make()
     assert "previously" not in job["spec"]  # week 1 starts the story
     assert "soFar" not in job["spec"]  # and nothing has happened yet
+
+
+def test_the_writer_is_told_what_the_scene_is_about():
+    node = {**RIBBON, "focus": {"thing": "ribbon", "label": "Ellen's ribbon"}}
+    story = {"ep": 3, "hero": {"cls": "rogue"}, "hearts": 3, "arc": {}, "voices": {}}
+    assert writer.prompt_input(node, story)["planned"]["focus"] == {"thing": "ribbon", "label": "Ellen's ribbon"}
+    assert writer.prompt_input({k: v for k, v in RIBBON.items() if k != "focus"}, story)["planned"]["focus"] is None
+    assert "planned.focus" in writer.SYSTEM

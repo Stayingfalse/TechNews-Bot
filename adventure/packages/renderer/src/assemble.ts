@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Alignment, type Cues, type StorySpec, cuesFromAlignment, scriptStory } from "../../engine/src/index.ts";
+import { type Alignment, type Cues, type StorySpec, cuesFromAlignment, focusWord, scriptStory, wordTime } from "../../engine/src/index.ts";
 
 const GAP = 0.35;
 
@@ -29,6 +29,13 @@ export function assembleStory(spec: StorySpec, files: { daily: string; align: Al
     pieces.push({ file: files.daily, from: 0, marks: { hook: c.hook, story: c.story, after: c.after, cta: c.ask } });
   }
   if (files.tail) pieces.push({ file: files.tail, marks: {} });
+  // the moment the narrator says the focus object's word: the camera pushes in then
+  const fw = spec.focus && focusWord(spec.focus.thing, [{ key: "story", text: spec.story }, { key: "after", text: spec.after }]);
+  const ft = fw ? wordTime(files.align, fw.word, fw.key === "after" ? c.after : c.story) : null;
+  if (ft != null) {
+    const pc = pieces.length > 2 && ft >= cut ? pieces[3] : pieces[0];
+    pc.marks.focus = ft - (pc.from ?? 0);
+  }
 
   const cues: Cues = {};
   const inputs: string[] = [], filters: string[] = [];

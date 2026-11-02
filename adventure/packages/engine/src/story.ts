@@ -11,6 +11,9 @@ import { THROW, throwDie, BOUNCES } from "./dice.ts";
 import { CLASSES, type ClassKey, type Mode, modifier, odds, pct, signed, skillName } from "./sheet.ts";
 import { CREAM, GOLD, GRN, H, INK, RED, W, cl, ez, font, lp, seg } from "./util.ts";
 import { type Cues, type Seg, cap, line, words } from "./voice.ts";
+import { THINGS, focusWord } from "./things.ts";
+import { THING_AT, drawStage } from "./stage.ts";
+import { embers, fog, grade, grain, iris, irisR, moodOf, motes, rays } from "./fx.ts";
 
 export type Roll = { dice: number[]; kept: number; mod: number; total: number; ok: boolean; p: number; natural?: 1 | 20 };
 
@@ -45,11 +48,17 @@ export type StorySpec = {
   previously?: string;
   /** The caption's "Story so far": a line for last week and one per recent episode, oldest first. */
   soFar?: string[];
+  /** The story object the scene is about (things.ts): drawn as the landmark, pushed in on. */
+  focus?: { thing: string; label?: string };
 };
 
 export type Companion = { name: string; cls: ClassKey; look: number; handle?: string | null };
 
-export type StoryPlan = { dur: number; hook: [number, number]; story: [number, number]; check?: [number, number]; after: [number, number]; cta: number; throwAt?: number };
+export type StoryPlan = { dur: number; hook: [number, number]; story: [number, number]; check?: [number, number]; after: [number, number]; cta: number; throwAt?: number;
+  /** When the narrator says the focus object's word: the camera pushes in on it. */
+  focus?: number;
+  /** The side-on close-up (the outcome, on a paper-theatre stage). */
+  stage?: [number, number] };
 
 const ASK_Y = 76, CARD_Y = 314, CARD_H = 46, CARD_GAP = 52, LEAD = 0.25;
 const HERO_CTA: [number, number] = [W / 2 - 10, 250];
@@ -64,14 +73,35 @@ export function planStory(s: StorySpec): StoryPlan {
       p.check = [c.check - LEAD, after];
       p.throwAt = Math.max(p.check[0] + 1, c.roll - 0.35 - THROW);
     }
-    return p;
+    return withFocus(s, p, c.focus);
   }
   let t = 3.4;
   const add = (l: number): [number, number] => [t, (t += l)];
   const story = add(Math.max(4, est(s.story)) + 2), check = s.check ? add(6.5) : undefined, after = add(Math.max(3.5, est(s.after)));
   const p: StoryPlan = { dur: t + 10, hook: [0, 3.4], story, check, after, cta: t };
   if (check) p.throwAt = check[0] + 1.6;
-  return p;
+  return withFocus(s, p);
+}
+
+/** The push-in's moment: the voice's cue for the word, or where the word falls in its line. */
+function withFocus(s: StorySpec, p: StoryPlan, cue?: number): StoryPlan {
+  if (!s.focus) return p;
+  const w = focusWord(s.focus.thing, [{ key: "story", text: s.story }, { key: "after", text: s.after }]);
+  const win = w?.key === "after" ? p.after : p.story;
+  const at = cue != null ? cue - LEAD : win[0] + 0.3 + (w ? w.at : 0) * (win[1] - win[0]) * 0.8;
+  // not before yesterday's vote card has had its moment (it sits where the close-up goes)
+  const stage: [number, number] | undefined = p.cta - p.after[0] > 2 ? [p.after[0] - 0.1, p.cta - 0.4] : undefined;
+  return { ...p, focus: cl(at, p.story[0] + RECAP_S - 0.4, p.cta - 2.5), stage };
+}
+
+/** The close-up's zoom, and when it lets go: before the dice if there's a check, else before the question. */
+export const FOCUS_Z = 2.5;
+const RECAP_S = 2.6;
+function focusAmount(T: number, P: StoryPlan): number {
+  if (P.focus == null) return 0;
+  let until = P.check && P.focus < P.check[0] ? P.check[0] - 0.3 : P.cta - 1.2;
+  if (P.stage) until = Math.min(until, P.stage[0] - 0.5);
+  return ez(seg(T, P.focus - 0.2, P.focus + 1)) * (1 - ez(seg(T, until, until + 0.9)));
 }
 
 export function storyHero(defs: Defs, h: StorySpec["hero"]): Creature {
@@ -149,16 +179,40 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   const shake = T < HE ? ((HE - T) / HE) * 4 : fail && T > land && T < land + 0.4 ? (land + 0.4 - T) * 9 : 0;
   c.translate(Math.sin(T * 70) * shake, Math.cos(T * 83) * shake);
 
-  // the walk: in during the story, on during the aftermath
-  let p = lp(0.05, s.check ? 0.4 : 0.55, ez(seg(T, P.story[0], P.story[1])));
-  p = lp(p, 0.8, ez(seg(T, P.after[0], P.after[1])));
+  // the walk: in during the story, on during the aftermath; with a focus object, up to it
+  const lm = s.focus && S.map.lp && THINGS[s.focus.thing] ? S.map.lp : null;
+  const total = S.map.len[S.map.len.length - 1] || 1, near = lm ? Math.max(0.5, 1 - 62 / total) : 0;
+  let p: number;
+  if (lm && P.focus != null) p = lp(0.05, near, ez(seg(T, P.story[0], Math.max(P.story[0] + 1.5, P.focus + 0.8))));
+  else {
+    p = lp(0.05, s.check ? 0.4 : 0.55, ez(seg(T, P.story[0], P.story[1])));
+    p = lp(p, 0.8, ez(seg(T, P.after[0], P.after[1])));
+  }
   const hp = along(S.map, p), face = hp[2] >= 0 ? 1 : -1;
-  const z = lp(1.5, 1.25, ez(seg(T, P.cta - 1.5, P.cta + 0.5))), vw = W / z, vh = H / z;
-  const cx = cl(hp[0] + Math.sin(T * 0.8) * 3, vw / 2, 600 - vw / 2), cy = cl(hp[1] + Math.cos(T * 0.6) * 3, vh / 2, 600 - vh / 2);
+  const fz = lm ? focusAmount(T, P) : 0;
+  let z = lp(lp(1.5, 1.25, ez(seg(T, P.cta - 1.5, P.cta + 0.5))), FOCUS_Z, fz);
+  let tx = lp(hp[0] + Math.sin(T * 0.8) * 3, lm ? lm[0] : 0, fz), ty = lp(hp[1] + Math.cos(T * 0.6) * 3, lm ? lm[1] + 34 : 0, fz);
+  // the question: the camera pulls back to show where each choice leads, pinned on the map
+  const pins = s.dead ? null : pinSpots(s, S, lm);
+  const pv = pins ? ez(seg(T, P.cta - 0.8, P.cta + 0.4)) : 0;
+  if (pins && pv > 0) {
+    const xs = [hp[0], ...pins.map((q) => q.x)], ys = [hp[1], ...pins.map((q) => q.y)];
+    const bw = Math.max(...xs) - Math.min(...xs) + 40, bh = Math.max(...ys) - Math.min(...ys) + 60;
+    const zp = cl(Math.min(230 / bw, 220 / bh), 1.05, 1.6);
+    const bx = (Math.max(...xs) + Math.min(...xs)) / 2, by = (Math.max(...ys) + Math.min(...ys)) / 2;
+    z = lp(z, zp, pv);
+    tx = lp(tx, bx + (W / 2 - PIN_BOX[0]) / zp, pv);
+    ty = lp(ty, by + (H / 2 - PIN_BOX[1]) / zp, pv);
+  }
+  const vw = W / z, vh = H / z;
+  // for the pins the camera may look past the map's top edge (the landmark is often near it)
+  const over = 90 * Math.max(pv, lm && lm[1] < 120 ? fz : 0);
+  const cx = cl(tx, vw / 2, 600 - vw / 2), cy = cl(ty, vh / 2 - over, 600 - vh / 2);
   const vx = cx - vw / 2, vy = cy - vh / 2, sx = (m: number) => (m - vx) * z, sy = (m: number) => (m - vy) * z;
-  c.drawImage(S.map.cv as unknown as CanvasImageSource, vx * S.map.k, vy * S.map.k, vw * S.map.k, vh * S.map.k, 0, 0, W, H);
+  const onStage = !!(lm && P.stage && T >= P.stage[0] && T < P.stage[1]), mood = moodOf(s.scene.type);
+  if (!onStage) c.drawImage(S.map.cv as unknown as CanvasImageSource, vx * S.map.k, vy * S.map.k, vw * S.map.k, vh * S.map.k, 0, 0, W, H);
 
-  const out = ez(seg(T, P.cta - 0.8, P.cta + 0.2));
+  const out = pins ? 0 : ez(seg(T, P.cta - 0.8, P.cta + 0.2));
   const toks: { d: Creature; x: number; y: number; ph: number; a: number; rim: string; sc?: number; tag?: string | null }[] = [];
   if (out < 1) toks.push({ d: hero, x: hp[0], y: hp[1], ph: 0, a: 1 - out, rim: GOLD });
   // the party: viewers' companions walk behind the hero, each with its viewer's handle
@@ -175,7 +229,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
     const fp = along(S.map, Math.max(0, p - gap)), fa = seg(T, P.story[0], P.story[0] + 1) * (1 - out);
     if (fa > 0) toks.push({ d: foe, x: fp[0], y: fp[1], ph: 1.7, a: fa, rim: RED });
   }
-  toks.sort((a, b) => a.y - b.y).forEach((o) => {
+  if (!onStage) toks.sort((a, b) => a.y - b.y).forEach((o) => {
     c.globalAlpha = o.a;
     standee(F, o.d, sx(o.x), sy(o.y), z * 0.95 * (o.sc || 1), face, T, o.ph, o.rim);
     c.globalAlpha = 1;
@@ -193,14 +247,38 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
     if (X > -r && X < W + r && Y > -r && Y < H + r) lights.push({ x: X, y: Y, r, rgb: l.rgb });
   }
   lights.push({ x: lp(sx(hp[0]), HERO_CTA[0], out), y: lp(sy(hp[1]), HERO_CTA[1], out) - 18, r: 125, rgb: "255,190,110" });
-  lighting(F, lights, 0.52);
-  S.map.flames.forEach((f, i) => {
-    const X = sx(f.x), Y = sy(f.y);
-    if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) flame(F, X, Y, f.s * z * 0.95, i * 1.9);
-  });
+  if (onStage) {
+    drawStage(F, s.scene.type, s.focus!.thing, S.defs, {
+      hero, party: (s.party || []).map((m) => storyHero(S.defs, { cls: m.cls, look: m.look })), foe, fail,
+    }, seg(T, P.stage![0], P.stage![1]));
+  } else {
+    lighting(F, lights, 0.52);
+    let sparks = 0;
+    S.map.flames.forEach((f, i) => {
+      const X = sx(f.x), Y = sy(f.y);
+      if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) {
+        flame(F, X, Y, f.s * z * 0.95, i * 1.9);
+        if (sparks++ < 6) embers(F, X, Y, f.s * z * 0.95, i);
+      }
+    });
+    if (lm) focusThing(F, s, sx(lm[0]), sy(lm[1]), z, fz);
+    motes(F, mood, lights);
+    fog(F, mood, 0, H, 0.8);
+  }
+  // the grade follows what matters: the object in a close-up, else the hero
+  const gx = lm && fz > 0 ? lp(sx(hp[0]), sx(lm[0]), fz) : onStage ? THING_AT[0] : sx(hp[0]);
+  const gy = lm && fz > 0 ? lp(sy(hp[1]), sy(lm[1]), fz) : onStage ? THING_AT[1] - 90 : sy(hp[1]);
+  grade(F, mood, 1, cl(gx, 60, W - 60), cl(gy, 160, H - 200));
+  grain(F, mood);
+  // in and out of the stage: an iris closing on the object, opening on the stage (and back)
+  if (lm && P.stage) {
+    const r0 = irisR(T, P.stage[0]), r1 = irisR(T, P.stage[1]);
+    if (r0 != null) iris(F, onStage ? THING_AT[0] : sx(lm[0]), onStage ? THING_AT[1] - 40 : sy(lm[1]) - 20, r0);
+    if (r1 != null) iris(F, onStage ? THING_AT[0] : sx(hp[0]), onStage ? THING_AT[1] - 40 : sy(hp[1]) - 20, r1);
+  }
 
   // the companions' handle tags, over the lighting so they stay readable
-  toks.forEach((o) => {
+  if (!onStage) toks.forEach((o) => {
     if (!o.tag) return;
     c.globalAlpha = o.a;
     const X = sx(o.x), Y = sy(o.y) + 14;
@@ -224,10 +302,13 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   }
 
   // story, with yesterday's vote on a card first
-  narr(F, s.story, P.story[0] + 0.1, P.story[1], 112);
-  if (s.recap) recapCard(F, s, [P.story[0], Math.min(P.story[0] + 3.6, P.story[1])]);
+  // in a close-up the card drops to the bottom like a subtitle, and the object's word is in red
+  const sub = (t: number) => (lm && focusAmount(t, P) > 0.5 ? -470 : 112);
+  const hi = s.focus ? focusWord(s.focus.thing, [{ key: "story", text: s.story }, { key: "after", text: s.after }])?.word : undefined;
+  narr(F, s.story, P.story[0] + 0.1, P.story[1], sub(Math.max(T, P.story[0] + 0.5)), hi);
+  if (s.recap) recapCard(F, s, [P.story[0], Math.min(P.story[0] + (lm ? RECAP_S : 3.6), P.story[1])]);
   if (s.voices?.shout) shoutCard(F, s, [P.story[0] + 0.5, Math.min(P.story[0] + 4.2, P.story[1])]);
-  narr(F, s.after, P.after[0] + 0.1, P.after[1], 112);
+  narr(F, s.after, P.after[0] + 0.1, P.after[1], sub(T), hi);
 
   if (s.check && P.check) checkBeat(F, s, P, sx(hp[0]), sy(hp[1]));
   if (fail && T > land && T < land + 0.8) {
@@ -235,7 +316,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
     c.fillRect(-20, -20, W + 40, H + 40);
   }
 
-  cta(F, s, P);
+  cta(F, s, P, pins && { pins: pins.map((q) => ({ ...q, x: sx(q.x), y: sy(q.y) })), hero: [sx(hp[0]), sy(hp[1])], z, open: S.defs.scenes[s.scene.type]?.out === "open" });
   if (T < HE + 0.1) hook(F, s, hero, foe, HE);
   c.restore();
   c.fillStyle = "rgba(128,128,128,.4)";
@@ -282,8 +363,8 @@ function hook(F: Frame, s: StorySpec, hero: Creature, foe: Creature | undefined,
 /** During the story: a small reminder that viewers pick what happens next. */
 function voteTag(F: Frame, s: StorySpec) {
   if (s.dead || !s.choices.length) return;
-  parch(F, 204, ASK_Y, 122, 26);
-  fit(F, `YOU PICK NEXT: ${"ABC".slice(0, s.choices.length).split("").join(" · ")}`, 265, ASK_Y + 17, 10, 110, INK, "center", 700);
+  parch(F, 200, ASK_Y, 106, 26);
+  fit(F, `YOU PICK NEXT: ${"ABC".slice(0, s.choices.length).split("").join(" · ")}`, 253, ASK_Y + 17, 10, 94, INK, "center", 700);
 }
 
 /** "@a, @b, @c and 11 others cried: TORCH": the word the Voices shouted, which today's story uses. */
@@ -317,9 +398,35 @@ function recapCard(F: Frame, s: StorySpec, [a0, a1]: [number, number]) {
   c.restore();
 }
 
+/** The focus object's live part (the ribbon's tails, the old man's breath), at map scale, and its
+ *  label once the camera is in close. */
+function focusThing(F: Frame, s: StorySpec, X: number, Y: number, z: number, fz: number) {
+  const { c, T } = F, th = THINGS[s.focus!.thing], sc = z * 1.6;
+  if (X < -80 || X > W + 80 || Y < -80 || Y > H + 120) return;
+  rays(F, X + th.eye[0] * sc, Y + th.eye[1] * sc * 0.9, 34 * sc, th.glow || "255,214,150", fz * 0.9);
+  if (th.live) {
+    c.save();
+    c.translate(X, Y);
+    c.scale(sc, sc * 0.9);
+    th.live(c, T);
+    c.restore();
+  }
+  const label = s.focus!.label;
+  if (label && fz > 0.6) {
+    c.save();
+    c.globalAlpha = ez((fz - 0.6) / 0.4);
+    c.font = font(700, 10);
+    const w = Math.min(150, c.measureText(label.toUpperCase()).width + 16);
+    const lx = cl(X - w / 2, 18, 305 - w), ly = cl(Y + th.eye[1] * sc * 0.9 - 40, 112, 380);
+    parch(F, lx, ly, w, 20);
+    fit(F, label.toUpperCase(), lx + w / 2, ly + 14, 10, w - 10, RED, "center", 700);
+    c.restore();
+  }
+}
+
 function checkBeat(F: Frame, s: StorySpec, P: StoryPlan, hx: number, hy: number) {
   const { T } = F;
-  const ck = s.check!, r = ck.roll, land = P.throwAt! + THROW;
+  const ck = s.check!, r = ck.roll, land = P.throwAt! + THROW, end = s.focus && P.stage ? P.stage[0] : P.after[1];
   const mode = ck.mode === "advantage" ? " · ADV" : ck.mode === "disadvantage" ? " · DIS" : "";
   if (T > P.check![0] + 0.1 && T < land + 0.2) {
     parch(F, 30, 200, W - 86, 40);
@@ -327,12 +434,12 @@ function checkBeat(F: Frame, s: StorySpec, P: StoryPlan, hx: number, hy: number)
     fit(F, `${skillName(ck.skill).toUpperCase()} · DC ${ck.dc} · ${pct(r.p)}${mode}${rallied}`, 152, 226, 17, W - 130, RED, "center", 900);
   }
   const by = s.credits?.rolledBy, voters = s.voices?.voters || 0;
-  if ((by || ck.rally) && T > P.check![0] + 0.3 && T < P.after[1]) {
+  if ((by || ck.rally) && T > P.check![0] + 0.3 && T < end) {
     const bits = [ck.rally ? `${voters} VOICES` : "", by ? `ROLLED BY @${by}` : ""].filter(Boolean);
     parch(F, 50, 244, W - 126, 22);
     fit(F, bits.join(" · "), 152, 259, 10, W - 140, INK, "center", 700);
   }
-  if (T > land + 0.2 && T < P.after[1]) {
+  if (T > land + 0.2 && T < end) {
     parch(F, 30, 200, W - 86, 40, r.ok ? "#d3e2bf" : "#e9c0b2");
     const label = r.natural === 20 ? "NATURAL 20!" : r.natural === 1 ? "NATURAL 1" : `${r.kept} ${signed(r.mod)} = ${r.total}`;
     fit(F, `${label} · ${r.ok ? "SUCCESS" : "FAIL"}`, 152, 228, 20, W - 110, r.ok ? GRN : RED, "center", 900);
@@ -341,16 +448,75 @@ function checkBeat(F: Frame, s: StorySpec, P: StoryPlan, hx: number, hy: number)
   if (r.ok && T > land + 0.5 && T < P.after[0] + 1.5) star(F, hx, hy - 78, 16, ez(seg(T, land + 0.5, land + 1)) * (1 + 0.08 * Math.sin(T * 12)));
 }
 
-function cta(F: Frame, s: StorySpec, P: StoryPlan) {
+type Pin = { x: number; y: number; kind: "focus" | "exit" };
+/** Where the pins sit on screen: the middle of the space between the question and the bottom bar. */
+const PIN_BOX: [number, number] = [160, 290];
+
+/** Each choice's place on the map (map units): the focus object if the choice names it, else the
+ *  map's exits, left to right. Null when the map hasn't enough exits (the cards are used instead). */
+function pinSpots(s: StorySpec, S: SceneStory, lm: number[] | null): Pin[] | null {
+  const ex = [...(S.map.exits || [])].sort((a, b) => a[0] - b[0]), out: Pin[] = [];
+  const thing = s.focus && THINGS[s.focus.thing];
+  for (const ch of s.choices) {
+    if (lm && thing && !out.some((o) => o.kind === "focus") && focusWord(s.focus!.thing, [{ key: "l", text: ch.label }])) {
+      out.push({ x: lm[0], y: lm[1] - 8, kind: "focus" });
+      continue;
+    }
+    const e = ex.shift();
+    if (!e) return null;
+    out.push({ x: e[0], y: e[1], kind: "exit" });
+  }
+  return out;
+}
+
+/** An opening in the wall (or a signpost outdoors) where a choice leads. */
+function exitMark(F: Frame, x: number, y: number, z: number, open: boolean, a: number) {
+  const { c } = F, k = cl(z * 0.9, 0.9, 2);
+  c.save();
+  c.globalAlpha = a;
+  c.translate(x, y);
+  c.scale(k, k);
+  c.lineWidth = 1.4;
+  c.strokeStyle = INK;
+  if (open) {
+    c.fillStyle = "#7a5a32";
+    c.fillRect(-1.2, -16, 2.4, 16);
+    c.beginPath();
+    c.moveTo(-9, -15);
+    c.lineTo(8, -15);
+    c.lineTo(11, -12);
+    c.lineTo(8, -9);
+    c.lineTo(-9, -9);
+    c.closePath();
+    c.fillStyle = "#b08a58";
+    c.fill();
+    c.stroke();
+  } else {
+    c.beginPath();
+    c.moveTo(-7, 2);
+    c.lineTo(-7, -8);
+    c.arc(0, -8, 7, Math.PI, 0);
+    c.lineTo(7, 2);
+    c.closePath();
+    c.fillStyle = "#16121a";
+    c.fill();
+    c.stroke();
+  }
+  c.restore();
+}
+
+function cta(F: Frame, s: StorySpec, P: StoryPlan, map?: { pins: Pin[]; hero: number[]; z: number; open: boolean } | null) {
   const { c, T } = F;
   const t = T - P.cta;
   if (t <= 0) return;
   const q = ez(seg(t, 0.3, 0.8)), pu = 1 + 0.04 * Math.sin(T * 6);
+  if (map) pinned(F, s, t, map);
   c.save();
   c.translate(W / 2 - 10, ASK_Y + 28);
   c.scale(q * pu, q * pu);
   ribbon(F, 0, 0, 226, 44, s.dead ? "YOUR HERO HAS FALLEN" : s.ask.toUpperCase());
   c.restore();
+  if (map) return;
   if (s.dead) {
     if (t > 1.2) {
       parch(F, 30, CARD_Y, W - 86, 60);
@@ -397,6 +563,94 @@ function cta(F: Frame, s: StorySpec, P: StoryPlan) {
   });
 }
 
+/** The question on the map: a dashed ink path from the hero to each choice's place, a wax seal
+ *  there and its label beside it, then how to vote along the bottom. */
+function pinned(F: Frame, s: StorySpec, t: number, m: { pins: Pin[]; hero: number[]; z: number; open: boolean }) {
+  const { c, T } = F, [hx, hy] = m.hero;
+  const at = m.pins.map((p) => ({ ...p, sx: cl(p.x, 34, 290), sy: cl(p.y - 16, 150, 410) }));
+  // paths and openings first, then the labels, then the seals on top of everything
+  at.forEach((p, i) => {
+    const a = ez(seg(t, 0.5 + i * 0.3, 1.1 + i * 0.3));
+    if (a <= 0) return;
+    if (p.kind === "exit") exitMark(F, p.x, p.y, m.z, m.open, a);
+    c.save();
+    c.globalAlpha = a;
+    c.setLineDash([5, 5]);
+    c.lineDashOffset = -T * 14;
+    c.strokeStyle = "rgba(155,44,30,.9)";
+    c.lineWidth = 2.4;
+    c.lineCap = "round";
+    // the path inks itself in from the hero to the place
+    const mx = (hx + p.x) / 2 + (p.x < hx ? -20 : 20), my = Math.min(hy, p.y) - 20, prog = ez(seg(t, 0.3 + i * 0.3, 1.0 + i * 0.3));
+    const at = (u: number) => [(1 - u) * (1 - u) * hx + 2 * u * (1 - u) * mx + u * u * p.x, (1 - u) * (1 - u) * (hy - 6) + 2 * u * (1 - u) * my + u * u * (p.y - 4)];
+    c.beginPath();
+    for (let k = 0; k <= 24; k++) {
+      const [x, y] = at((k / 24) * prog);
+      if (k) c.lineTo(x, y);
+      else c.moveTo(x, y);
+    }
+    c.stroke();
+    c.restore();
+  });
+  at.forEach((p, i) => {
+    const a = ez(seg(t, 0.8 + i * 0.3, 1.3 + i * 0.3));
+    if (a <= 0) return;
+    c.save();
+    c.globalAlpha = a;
+    c.font = font(700, 12);
+    const label = s.choices[i].label, w = Math.min(150, c.measureText(label).width + 18);
+    // away from the hero, unless there's no room on that side
+    let right = Math.abs(p.x - hx) < 20 ? p.sx < 160 : p.x > hx;
+    if (right && p.sx + 18 + w > 305) right = false;
+    else if (!right && p.sx - 18 - w < 18) right = true;
+    let lx = cl(right ? p.sx + 18 : p.sx - 18 - w, 18, 305 - w), ly = cl(p.sy - 11, 140, 404);
+    if (lx < hx + 22 && lx + w > hx - 22 && ly < hy + 12 && ly + 22 > hy - 56) {
+      // it would sit on the hero: above or below the seal instead
+      lx = cl(p.sx - w / 2, 18, 305 - w);
+      ly = cl(p.sy < hy - 20 ? p.sy - 42 : p.sy + 20, 140, 404);
+    }
+    parch(F, lx, ly, w, 22, i === s.default ? "#f5e6b8" : undefined);
+    fit(F, label, lx + w / 2, ly + 15, 12, w - 10, INK, "center", 700);
+    c.restore();
+  });
+  at.forEach((p, i) => {
+    // the seal drops onto the map and stamps: a squash, a bounce and a splash of wax
+    const d = seg(t, 0.9 + i * 0.3, 1.35 + i * 0.3);
+    if (d <= 0) return;
+    const fall = 1 - d * d, land = seg(t, 1.35 + i * 0.3, 1.9 + i * 0.3);
+    const squash = land > 0 ? 1 + Math.sin(land * Math.PI * 2) * 0.22 * (1 - land) : 1;
+    const pu = 1 + 0.05 * Math.sin(T * 5 + i) * land;
+    if (land > 0 && land < 1) {
+      c.save();
+      for (let k = 0; k < 7; k++) {
+        const ang = k * 0.9 + i, r = 14 + land * 16 + (k % 3) * 4;
+        c.fillStyle = `rgba(155,44,30,${0.75 * (1 - land)})`;
+        c.beginPath();
+        c.arc(p.sx + Math.cos(ang) * r, p.sy + Math.sin(ang) * r * 0.8, 1.6 + (k % 2), 0, 7);
+        c.fill();
+      }
+      c.restore();
+    }
+    c.save();
+    c.globalAlpha = Math.min(1, d * 2);
+    c.translate(p.sx, p.sy - fall * 60);
+    c.scale(pu / squash, pu * squash);
+    seal(F, 0, 0, 14 * (1 + fall * 0.5), "ABC"[i]);
+    c.restore();
+  });
+  if (t > 1.4) {
+    c.save();
+    c.globalAlpha = ez(seg(t, 1.4, 1.8));
+    c.fillStyle = "rgba(20,12,16,.88)";
+    c.beginPath();
+    c.roundRect(16, 438, W - 76, 31, 6);
+    c.fill();
+    fit(F, `COMMENT ${letters(s.choices.length).toUpperCase()} BY 8AM · NEXT EPISODE AT 9AM`, W / 2 - 22, 452, 11, W - 92, GOLD, "center", 700);
+    fit(F, `+ a word to shout · JOIN the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, 465, 11, W - 92, CREAM, "center", 500);
+    c.restore();
+  }
+}
+
 // ---------------------------------------------------------------- resolving a node (rules in one place)
 
 export type ArcNode = {
@@ -409,6 +663,7 @@ export type ArcNode = {
   choices: { label: string; recap: string; next: string | null; breaks?: "speak" | "eat" }[];
   default: number;
   tone?: { story?: string };
+  focus?: { thing: string; label?: string };
 };
 
 /** Turn a node into a renderable spec: the roll (from the server's dice), its outcome, the hearts. */
@@ -437,6 +692,7 @@ export function resolveNode(n: ArcNode, ctx: {
     recap: ctx.recap || null, story: n.story, check, after, hearts: { before: ctx.hearts, after: Math.max(0, hearts) },
     dead: hearts <= 0, ask: n.ask, choices: n.choices.map((c) => ({ label: c.label })), default: n.default,
     tone: n.tone,
+    ...(n.focus ? { focus: n.focus } : {}),
   };
 }
 export { CLASSES };

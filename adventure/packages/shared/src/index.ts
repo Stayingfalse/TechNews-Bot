@@ -63,6 +63,7 @@ export const Story = z.object({
   voices: z.object({
     voters: z.number().int().min(0), shout: z.object({ word: z.string().max(20), n: z.number().int().min(0) }).optional() }).optional(),
   previously: z.string().max(220).optional(),
+  focus: z.object({ thing: z.string(), label: z.string().max(24).optional() }).optional(),
   soFar: z.array(z.string().max(300)).max(5).optional(),
 });
 

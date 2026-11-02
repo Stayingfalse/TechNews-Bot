@@ -16,7 +16,7 @@ import { parseArgs } from "node:util";
 import { Worker } from "node:worker_threads";
 import {
   type Alignment, type ArcNode as EngineNode, type StorySpec, caption0, captionStory, comment0, commentStory, ctaOf, cuesFromAlignment,
-  dailyText, music0, plan0, planStory, resolveNode, script0, scriptChars, scriptStory, scriptText, sfx0, storyMusic, storySfx,
+  THINGS, dailyText, music0, plan0, planStory, resolveNode, script0, scriptChars, scriptStory, scriptText, sfx0, storyMusic, storySfx,
 } from "../../engine/src/index.ts";
 import { CLASSES, type ClassKey, SKILLS, modifier, odds } from "../../engine/src/sheet.ts";
 import { type AnySpec, DAILY_CHARS, DCS, FOES, SCENES, parseSpec, validateArc, validateNode } from "../../shared/src/index.ts";
@@ -106,7 +106,8 @@ async function main() {
       const at = mod === null ? undefined : Object.fromEntries(DCS.map((dc) => [dc, Math.round(odds(mod, dc) * 100)]));
       return [k, { ability: ab, modifier: mod, success_pct_by_dc: at }];
     }));
-    return out({ scenes: SCENES, foes: FOES, dcs: DCS, daily_chars: DAILY_CHARS, skills,
+    const things = Object.fromEntries(Object.entries(THINGS).map(([k, t]) => [k, { about: t.about, say_one_of: t.words }]));
+    return out({ scenes: SCENES, foes: FOES, dcs: DCS, daily_chars: DAILY_CHARS, skills, things,
       hero: hero ? { ...hero, class: CLASSES[hero.cls].name, look_name: CLASSES[hero.cls].looks[hero.look]?.name, proficient: CLASSES[hero.cls].skills } : null });
   }
   const file = positionals[0];

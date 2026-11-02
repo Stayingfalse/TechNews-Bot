@@ -1,6 +1,7 @@
 // The procedural scene map (prototype: gen()): grid paper, carved floor with wall-relief shadow,
 // stains, folds, warm light and upright 3D props. Baked once per request into a bitmap; frames only
 // crop it. World space is 600×600; the bitmap is 600·K pixels square.
+import { THINGS } from "./things.ts";
 import { type Defs, STY } from "./defs.ts";
 import { dsl, markers } from "./dsl.ts";
 import { prng, type Rnd } from "./prng.ts";
@@ -10,11 +11,13 @@ import { type Canvas, type MakeCanvas, DISPLAY, cl, lp } from "./util.ts";
 export type MapRequest = {
   type: string; seed: number; dir?: "N" | "E" | "S" | "W"; size?: number; style?: string;
   accessories?: string[]; name?: string; stains?: number;
+  /** A story object (things.ts) standing in for the scene's own landmark. */
+  landmark?: string;
 };
 /** A light the frame lighting opens up (map coordinates); `rgb` is "r,g,b". Flames are drawn live. */
 export type MapLight = { x: number; y: number; r: number; rgb: string };
 export type MapFlame = { x: number; y: number; s: number };
-export type BakedMap = { cv: Canvas; k: number; tp: number[][]; len: number[]; lights: MapLight[]; flames: MapFlame[] };
+export type BakedMap = { cv: Canvas; k: number; tp: number[][]; len: number[]; lights: MapLight[]; flames: MapFlame[]; lp?: number[]; exits?: number[][] };
 
 type Pt = [number, number];
 
@@ -193,6 +196,23 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
   });
   const D = kc.getImageData(0, 0, 600, 600).data;
   const inF = (x: number, y: number) => x >= 0 && y >= 0 && x < 600 && y < 600 && D[((y | 0) * 600 + (x | 0)) * 4 + 3] > 40;
+  // exits: where the question's choices are pinned (floor by a wall, near the landmark, spread out);
+  // their own random stream, so the map itself doesn't change
+  const er = prng(rq.seed * 7919 + 13), cand: Pt[] = [];
+  for (let i = 0; i < 900 && cand.length < 60; i++) {
+    const x = LP[0] + (er() - 0.5) * 420, y = LP[1] + (er() - 0.5) * 420, d = Math.hypot(x - LP[0], y - LP[1]);
+    if (d < 55 || d > 210 || !inF(x, y) || Math.hypot(x - path[0][0], y - path[0][1]) < 140) continue;
+    if (inF(x + 14, y) && inF(x - 14, y) && inF(x, y + 14) && inF(x, y - 14)) continue;
+    cand.push([x, y]);
+  }
+  const exitsRaw: Pt[] = [];
+  while (exitsRaw.length < 3 && cand.length) {
+    const far = (q: Pt) => Math.min(Math.hypot(q[0] - LP[0], q[1] - LP[1]), ...exitsRaw.map((e) => Math.hypot(q[0] - e[0], q[1] - e[1])));
+    cand.sort((a, b) => far(b) - far(a));
+    const best = cand.shift()!;
+    if (far(best) < 45) break;
+    exitsRaw.push(best);
+  }
   const NB = make(600, 600), nb = NB.getContext("2d");
   nb.strokeStyle = "#000";
   nb.lineJoin = "round";
@@ -305,7 +325,9 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
       for (const [lx, ly, lr, rgb] of m.lights) lights.push({ x: mx + lx * sc, y: my + ly * sc * 0.9, r: lr * sc, rgb });
     } else put(n, x, y, sc, n === "torch" ? 0 : rnd() * 6.28);
   };
-  drop(sd.landmark[0], LP[0], LP[1], 1.6);
+  const lmName = rq.landmark && THINGS[rq.landmark] ? `thing:${rq.landmark}` : sd.landmark[0];
+  if (lmName.startsWith("thing:")) df = { ...df, props: { ...df.props, [lmName]: THINGS[rq.landmark!].prop } };
+  drop(lmName, LP[0], LP[1], 1.6);
   const extra = (rq.accessories || []).map((a): [string, number, string] => [a, 1 + ((rnd() * 2) | 0), "floor"]);
   for (const [n, c, w] of [...sd.dress, ...extra]) {
     for (let i = 0, m = Math.max(1, Math.round(c * dens)); i < m; i++) {
@@ -345,7 +367,7 @@ export function bake(rq: MapRequest, df: Defs, make: MakeCanvas, k = 4.5): Baked
 
   const tp = path.map(tr), len = [0];
   for (let i = 1; i < tp.length; i++) len.push(len[i - 1] + Math.hypot(tp[i][0] - tp[i - 1][0], tp[i][1] - tp[i - 1][1]));
-  return { cv: M, k, tp, len, lights, flames };
+  return { cv: M, k, tp, len, lights, flames, lp: tr(LP), exits: exitsRaw.map(tr) };
 }
 
 /** A point a fraction f of the way along the map's path, and the direction of travel there. */
