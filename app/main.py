@@ -1097,6 +1097,22 @@ def adventure_arc(arc: dict, replace: bool = False, dry_run: bool = False):
     return r
 
 
+class ArcTouchUp(BaseModel):
+    nodes: dict[str, dict] = Field(default_factory=dict, description='{"<node id>": {"focus": {"thing": "...", "label": "..."} | null}}')
+    previously: str | None = Field(None, description="the arc's \"Last week, …\" line; empty removes it")
+
+
+@app.patch("/adventure/arcs/{arc_id}", dependencies=[Depends(require_token)])
+def adventure_arc_touch_up(arc_id: str, body: ArcTouchUp):
+    """Add or change what an accepted arc's unplayed scenes show (focus) and its "Last week" line.
+    The story itself can't change here; scenes that have played (or are being made) are refused."""
+    r = adventure_campaign.touch_up(arc_id, body.nodes, body.previously)
+    if not r["ok"]:
+        raise HTTPException(404 if r.get("missing") else 422, {"problems": r["problems"]})
+    notify.send(f":art: **Adventure**: arc `{arc_id}` touched up: {', '.join(r['changed']) or 'nothing'}.")
+    return r
+
+
 @app.get("/adventure/arcs/{arc_id}", dependencies=[Depends(require_token)])
 def adventure_arc_get(arc_id: str):
     arc = next((a for a in adventure_campaign.arcs() if a["id"] == arc_id), None)

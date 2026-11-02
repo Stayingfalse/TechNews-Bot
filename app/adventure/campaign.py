@@ -173,6 +173,57 @@ def accept(raw: dict, replace: bool = False) -> dict:
     return {"ok": True, "id": arc["id"], "start_date": arc["start_date"], "days": arc["days"], "nodes": len(arc["nodes"])}
 
 
+def touch_up(arc_id: str, nodes: dict | None = None, previously: str | None = None) -> dict:
+    """Presentation-only changes to an accepted arc, for scenes that haven't played (or started
+    being made) yet: a node's `focus` (the story object; null removes it) and the arc's
+    `previously` line. The story itself (text, checks, choices, links) stays as booked.
+    {"ok": False, "problems": [...]} when any change can't be made; nothing is saved then."""
+    path = _arcs_dir() / f"{arc_id}.json"
+    if not path.exists():
+        return {"ok": False, "missing": True, "problems": [f"no arc {arc_id}"]}
+    stored = json.loads(path.read_text())
+    arc = json.loads(json.dumps(stored["arc"]))
+    by_id, played, problems, changed = {n["id"]: n for n in arc["nodes"]}, _played(), [], []
+    s = state()
+    for nid, change in (nodes or {}).items():
+        n = by_id.get(nid)
+        if not n:
+            problems.append(f"{nid}: not in {arc_id}")
+            continue
+        if nid in played:
+            problems.append(f"{nid}: has played (or is being made); it can't change now")
+            continue
+        if set(change) - {"focus"}:
+            problems.append(f"{nid}: only focus can change ({', '.join(sorted(set(change) - {'focus'}))} can't)")
+            continue
+        new = {**n, "focus": change["focus"]} if change.get("focus") else {k: v for k, v in n.items() if k != "focus"}
+        r = _run_node("validate-node", payload={"node": new, "hero": s["hero"], "recap": "x" * 60})
+        if r["problems"]:
+            problems += [f"{nid}: {p}" for p in r["problems"]]
+            continue
+        by_id[nid].clear()
+        by_id[nid].update(new)
+        changed.append(nid)
+    if previously is not None:
+        words = previously.split()
+        if any(n["id"] in played for n in arc["nodes"] if n["day"] == 0):
+            problems.append("previously: the arc's first day has played; it would never be said")
+        elif "episode0" in arc.get("links", {}):
+            problems.append("previously: the first arc has no last week")
+        elif previously and (len(words) > 25 or len(previously) > 160):
+            problems.append("previously: at most 25 words and 160 characters")
+        elif previously:
+            arc["previously"] = previously.strip()
+            changed.append("previously")
+        else:
+            arc.pop("previously", None)
+            changed.append("previously")
+    if problems:
+        return {"ok": False, "problems": problems}
+    _write(path, {**stored, "arc": arc, "touched_up_at": datetime.now(settings.tz).isoformat()})
+    return {"ok": True, "id": arc_id, "changed": changed}
+
+
 # ------------------------------------------------------------------ the day's node
 
 def next_node(prev_spec: dict, prev_node: dict | None, pick: int, label: str) -> tuple[dict, dict, dict]:

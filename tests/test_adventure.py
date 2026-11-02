@@ -585,3 +585,41 @@ def test_story_map_shows_the_path_taken_and_what_can_still_happen(client, story)
     unwritten = [n for n in m["nodes"] if n["kind"] == "unwritten"]
     assert len(unwritten) == 1 and unwritten[0]["date"] == "2026-11-04" and unwritten[0]["status"] == "possible"
     assert [n["status"] for n in m["nodes"] if n["kind"] == "episode0"] == ["upcoming"] * 4  # this test has no part 1 booking
+
+
+def test_an_accepted_arc_can_be_touched_up_where_nothing_has_played(client, story, monkeypatch, discord):
+    """Focus (the story object) and the "Last week" line can be added after booking; the story can't."""
+    seen = []
+    node, _ = _fake_cli()
+
+    def cli(cmd, path, timeout=60):
+        payload = json.loads(open(path).read())
+        if cmd == "validate-node":
+            seen.append(payload["node"])
+            f = payload["node"].get("focus")
+            return {"ok": True, "problems": [] if not f or f["thing"] != "teapot" else ["focus.thing: invalid"]}
+        return node(cmd, path, timeout)
+
+    monkeypatch.setattr(jobs, "_node", cli)
+    arc = {**ARC, "nodes": [{k: v for k, v in n.items() if k != "focus"} for n in ARC["nodes"]]}
+    assert campaign.accept(arc)["ok"]
+    campaign.save_state({**campaign.state(), "history": [{"node": "gate-lock"}]})  # week 1 has started
+    focus = {"thing": "irondoor", "label": "The whispering door"}
+    r = client.patch(f"/adventure/arcs/{ARC['id']}", headers=AUTH, json={"nodes": {"the-whisper": {"focus": focus}}})
+    assert r.status_code == 200, r.text
+    assert next(n for n in campaign.arcs()[0]["nodes"] if n["id"] == "the-whisper")["focus"] == focus
+    assert seen[-1]["story"] == next(n for n in ARC["nodes"] if n["id"] == "the-whisper")["story"]  # the story is untouched
+    assert any("touched up" in m for m, _ in discord)
+    bad = client.patch(f"/adventure/arcs/{ARC['id']}", headers=AUTH, json={"nodes": {
+        "gate-lock": {"focus": focus},                      # already played
+        "the-whisper": {"story": "Something else."},         # not presentation
+        "ribbon-hall": {"focus": {"thing": "teapot"}},       # not drawable
+        "nope": {"focus": focus}}, "previously": "Last week, you came."})  # and the first arc has no last week
+    p = " | ".join(bad.json()["detail"]["problems"])
+    assert bad.status_code == 422 and "has played" in p and "only focus" in p and "teapot" not in p and "invalid" in p
+    assert "not in" in p and "would never be said" in p
+    assert next(n for n in campaign.arcs()[0]["nodes"] if n["id"] == "ribbon-hall").get("focus") is None  # all or nothing
+    r = client.patch(f"/adventure/arcs/{ARC['id']}", headers=AUTH, json={"nodes": {"the-whisper": {"focus": None}}})
+    assert r.status_code == 200 and "focus" not in next(n for n in campaign.arcs()[0]["nodes"] if n["id"] == "the-whisper")
+    assert client.patch("/adventure/arcs/nope", headers=AUTH, json={}).status_code == 404
+    assert client.patch(f"/adventure/arcs/{ARC['id']}", json={}).status_code == 401
