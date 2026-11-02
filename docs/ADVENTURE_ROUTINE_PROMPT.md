@@ -98,6 +98,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `start_date`, `days`: copied from `next_arc`
      - `links`: `{ "<links_from id>": ["<day-0 node for A>", "<for B>", "<for C>"] }`, one entry per `links_from`, as many targets as it has choices
      - `notes`: up to 2000 characters, for next week's you: what's set up, open threads, what each ending means.
+     - `previously`: up to 25 words (160 characters), starting "Last week,": the story so far as told in `recent`, for anyone just arriving, e.g. "Last week, you broke into the crypt, found Ellen's ribbon, and stayed silent when a voice called your name." It's said before the recap on the week's first episode and heads the "Story so far" in every caption this week. Leave it out of the very first arc (the one that links from `episode0`).
 
 4. Check your work before sending: POST APP_URL/adventure/arc?dry_run=true with the arc.
    - A 422 response lists **every** problem in `detail.problems`, plus what was expected. Fix them all and check again.

@@ -40,6 +40,11 @@ export type StorySpec = {
   /** What the comments added up to: votes per way, the winner, how many voted, the word the Voices
    *  shouted (only when the story uses it). */
   voices?: { ways: number[]; way?: Way | null; voters: number; shout?: { word: string; n: number } };
+  /** Said before the recap line on a week's first episode: the story so far in a sentence or two
+   *  (the arc's `previously`, written by the weekly routine). */
+  previously?: string;
+  /** The caption's "Story so far": a line for last week and one per recent episode, oldest first. */
+  soFar?: string[];
 };
 
 export type Way = "bold" | "sly" | "wise";
@@ -93,6 +98,7 @@ export function scriptStory(s: StorySpec): { daily: Seg[]; check?: string; roll?
   const r = s.check?.roll, okTag = r ? (r.ok ? "[relieved]" : "[grimly]") : "[softly]";
   const afterLine = s.dead ? `${s.after} [grimly] And your hero falls.` : s.after;
   const daily = [
+    ...(s.previously ? [line("previously", `[softly] ${s.previously}`)] : []),
     line("hook", `[whispers] ${s.recap?.line || s.hook.join(" ")}`),
     line("story", `${s.tone?.story || "[tense]"} ${s.story}`),
     line("after", `${s.tone?.after || okTag} ${afterLine}`),
@@ -128,7 +134,8 @@ const MUSIC_CREDITS: Record<string, string> = {
 export function captionStory(s: StorySpec): string {
   const head = `Episode ${s.ep}: ${s.hook.join(" ").replace(/\s+/g, " ").toLowerCase().replace(/^./, (m) => m.toUpperCase())} ⚔️`;
   const ask = s.dead ? "Your hero has fallen. A new hero rises next." : `${s.ask} Comment ${letters(s.choices.length)} by 8am 👇 No votes? We go with ${"ABC"[s.default]}.`;
-  return [head, ask, "#dungeoncrawl #ttrpg #chooseyourownadventure #fantasy #tabletopgames",
+  const soFar = s.soFar?.length ? [`📜 Story so far\n${s.soFar.join("\n")}`] : [];
+  return [head, ask, ...soFar, "#dungeoncrawl #ttrpg #chooseyourownadventure #fantasy #tabletopgames",
     `Music: ${MUSIC_CREDITS[storyMusic(s)]} (CC0). Dice sounds: Kenney (CC0). Includes material from the SRD 5.2.1 by Wizards of the Coast LLC (CC BY 4.0).`].join("\n\n");
 }
 

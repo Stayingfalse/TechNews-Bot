@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type StorySpec, WAY_SKILLS, dailyText, planStory, resolveNode, scriptStory, waySkill } from "../packages/engine/src/index.ts";
+import { type StorySpec, WAY_SKILLS, captionStory, dailyText, planStory, resolveNode, scriptStory, waySkill } from "../packages/engine/src/index.ts";
 import { modifier, odds } from "../packages/engine/src/sheet.ts";
 import { type ArcContext, type ArcNode, Story, validateArc, validateNode } from "../packages/shared/src/index.ts";
 import { assembleStory } from "../packages/renderer/src/assemble.ts";
@@ -126,6 +126,27 @@ describe("resolveNode", () => {
   });
   it("says only the letters there are", () => {
     expect(scriptStory(resolveNode(node("gate-force"), ctx)).tail).toMatch(/^Comment A or B\./);
+  });
+});
+
+describe("the story so far", () => {
+  const base = resolveNode(node("gate-force"), { ep: 5, hero, hearts: 3, dice: [14], recap: { pick: 0, votes: [2, 1], label: "Take the bone stair", line: "You take the bone stair." } });
+  it("says last week first, before the recap, on a week's first day", () => {
+    const sc = scriptStory({ ...base, previously: "Last week, you found Ellen's ribbon and a voice that knew your name." });
+    expect(sc.daily.map((l) => l.key)).toEqual(["previously", "hook", "story", "after", "ask"]);
+    expect(sc.daily[0].spoken).toBe("Last week, you found Ellen's ribbon and a voice that knew your name.");
+    expect(scriptStory(base).daily[0].key).toBe("hook");
+  });
+  it("puts it in the caption, after the question and before the hashtags", () => {
+    const cap = captionStory({ ...base, soFar: ["Last week, you found Ellen's ribbon.", "Ep 4: You stay silent. It hisses."] });
+    expect(cap).toMatch(/Comment A or B by 8am[^]*📜 Story so far\nLast week, you found Ellen's ribbon\.\nEp 4: You stay silent\. It hisses\.\n\n#dungeoncrawl/);
+    expect(captionStory(base)).not.toMatch(/Story so far/);
+  });
+  it("keeps both through the spec schema, and an arc may carry its line", () => {
+    const p = Story.parse({ ...base, previously: "Last week.", soFar: ["Ep 1: x"] });
+    expect([p.previously, p.soFar]).toEqual(["Last week.", ["Ep 1: x"]]);
+    expect(validateArc({ ...copy(), previously: "Last week, you came looking for Ellen." }, CTX).problems).toEqual([]);
+    expect(validateArc({ ...copy(), previously: "Last week " + "word ".repeat(30) }, CTX).problems.join()).toMatch(/previously/);
   });
 });
 

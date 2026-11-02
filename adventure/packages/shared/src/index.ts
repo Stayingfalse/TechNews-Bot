@@ -62,6 +62,8 @@ export const Story = z.object({
   credits: z.object({ rolledBy: z.string().max(30).nullable().optional(), shouters: z.array(z.string().max(30)).max(3).optional() }).optional(),
   voices: z.object({ ways: z.array(z.number().int().min(0)).length(3), way: z.enum(["bold", "sly", "wise"]).nullable().optional(),
     voters: z.number().int().min(0), shout: z.object({ word: z.string().max(20), n: z.number().int().min(0) }).optional() }).optional(),
+  previously: z.string().max(220).optional(),
+  soFar: z.array(z.string().max(300)).max(5).optional(),
 });
 
 export type AnySpec = Episode0Spec | StorySpec;

@@ -304,7 +304,7 @@ def _redo(job: dict, node: dict, story_writer: dict | None = None) -> None:
                                                                          "recap": job["resolve_ctx"]["recap"]["line"]})["problems"]
         node, job["writer"] = writer.adapt(job["plan_node"], story_writer, check)
     spec = campaign._run_node("resolve", payload={"node": node, "ctx": job["resolve_ctx"]})
-    for k in ("party", "credits", "voices"):
+    for k in ("party", "credits", "voices", "previously", "soFar"):
         if k in old:
             spec[k] = old[k]
     job["spec"] = spec

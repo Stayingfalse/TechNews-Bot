@@ -259,6 +259,24 @@ def premise(season: int) -> str:
     return " ".join(keep)[:1200]
 
 
+def recap_bits(arc: dict, node: dict, s: dict, n: int = 3) -> dict:
+    """What a story episode says about what came before: `previously` (the arc's line, spoken on its
+    first day, unless the arc starts the story) and the caption's `soFar` (that line and the last
+    `n` episodes as told: the choice that led there and how it turned out)."""
+    out: dict = {}
+    prev = (arc.get("previously") or "").strip()
+    if prev and node.get("day") == 0 and "episode0" not in arc.get("links", {}):
+        out["previously"] = prev
+    lines = [prev] if prev else []
+    for e in story_so_far(s, n):
+        line = " ".join(x for x in (e["choice"], e["outcome"]) if x).strip()
+        if line:
+            lines.append(f"Ep {e['ep']}: {line}"[:300])
+    if lines:
+        out["soFar"] = lines[-(n + 1):]
+    return out
+
+
 def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0,
                 story: dict | None = None) -> dict:
     """The spec (and everything to remember) for today's story episode. `way` (bold/sly/wise, the
@@ -288,6 +306,7 @@ def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = 
         check = lambda n: _run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": choice["recap"]})["problems"]  # noqa: E731
         node, written = writer.adapt(node, full, check)
     spec = _run_node("resolve", payload={"node": node, "ctx": ctx})
+    spec.update(recap_bits(arc, node, s))
     broken = choice.get("breaks")
     return {"spec": spec, "arc": arc["id"], "node": node["id"], "dice": {"rolled": rolled, "proof": proof},
             "writer": written, "plan_node": planned, "resolve_ctx": ctx, "writer_story": full if story is not None else None,

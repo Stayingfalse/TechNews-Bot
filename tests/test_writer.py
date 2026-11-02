@@ -262,3 +262,26 @@ def test_the_writer_gets_the_premise_and_the_story_so_far(day):
                          "recap": "You chose to pick the old lock."})
     so_far = campaign.story_so_far(s)
     assert so_far == [{"ep": 1, "choice": "You chose to pick the old lock.", "story": "You kneel.", "outcome": "A click."}]
+
+
+def test_a_weeks_first_day_says_last_week_and_every_caption_has_the_story_so_far():
+    s = campaign.state()
+    s["history"] = [{"ep": i, "arc": ARC["id"], "node": "x", "story": "s", "outcome": f"Outcome {i}.", "recap": f"You did {i}."}
+                    for i in range(1, 6)]
+    week2 = {"id": "s1-w2", "links": {"the-whisper": ["a", "b"]}, "previously": "Last week, you found Ellen's ribbon."}
+    bits = campaign.recap_bits(week2, {"day": 0}, s)
+    assert bits["previously"] == "Last week, you found Ellen's ribbon."
+    assert bits["soFar"] == ["Last week, you found Ellen's ribbon.", "Ep 3: You did 3. Outcome 3.", "Ep 4: You did 4. Outcome 4.",
+                             "Ep 5: You did 5. Outcome 5."]
+    assert "previously" not in campaign.recap_bits(week2, {"day": 1}, s)  # only the week's first day says it
+    first = {**week2, "links": {"episode0": ["a", "b", "c"]}}
+    assert "previously" not in campaign.recap_bits(first, {"day": 0}, s)  # nothing came before the first week
+    assert campaign.recap_bits({"links": {}}, {"day": 2}, {**s, "history": []}) == {}
+
+
+def test_the_episode_carries_the_story_so_far(day):
+    make, answers, _, _, _ = day
+    answers.append(good())
+    job = make()
+    assert "previously" not in job["spec"]  # week 1 starts the story
+    assert "soFar" not in job["spec"]  # and nothing has happened yet
