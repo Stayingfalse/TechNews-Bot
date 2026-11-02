@@ -39,6 +39,16 @@ Painted paper miniatures on an old adventurer's map:
 - **UI**: torn parchment cards, wax-seal letters, a red ribbon for the question, Cinzel for titles
   and Alegreya for text.
 
+## Story objects, close-ups and pinned choices
+
+A node can name a `focus` from `engine/src/things.ts` (Ellen's ribbon, the candle-keeper, the bone
+stair, the glow pool, the iron and green doors, the feast, the lamp, the statues, the sword…). It is
+drawn as the map's landmark; the camera pushes in on it when the narrator says one of its words (the
+voice alignment gives the moment) and its live part animates. The outcome then plays side-on on a
+paper-theatre stage (`engine/src/stage.ts`: crypt, cave, wood or mountain backdrop, the object, the
+party and the foe as cut-outs). At the question each choice is a wax seal on the map: on the object
+if the choice names it, otherwise on one of the map's exits, with a dashed path from the hero.
+
 ## Layout
 
 - `packages/engine`: pure drawing code, no I/O. `map.ts` (scene generator), `draw.ts` (cards,

@@ -38,6 +38,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
    - `example_arc`: a complete, valid arc. Copy its shape.
    - `vocab`:
      - the `scenes` and `foes` the renderer can draw
+     - `things`: the story objects it can draw (what each is, and the words that name it)
      - the allowed `dcs`
      - `daily_chars`: the narration limit
      - every skill with this hero's modifier and `success_pct_by_dc` (their real odds)
@@ -67,6 +68,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - optional `dir` (N/E/S/W) and `size` (3-8)
      - `name`: up to 24 characters, shown on the map
    - `foe`: optional; one of `vocab.foes` when a creature is in the scene.
+   - `focus`: what the scene is about, from `vocab.things`, e.g. `{ "thing": "ribbon", "label": "Ellen's ribbon" }` (`label` up to 20 characters, shown beside it). Give most nodes one. It's drawn as the scene's landmark; the camera pushes in on it when the narrator says one of its `say_one_of` words (the text must say one), the outcome plays on a side-on stage with it, and a choice that names it is pinned on it at the question. If `vocab.things` isn't there, leave `focus` out.
    - `hook`: two short lines of at most 14 characters each, shown big on the title card, e.g. `["IT KNOWS", "YOUR NAME"]`.
    - `story`: up to 20 words. What the hero sees and does now.
    - `check`: when something is uncertain.

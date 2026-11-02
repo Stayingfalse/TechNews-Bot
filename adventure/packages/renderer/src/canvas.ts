@@ -26,19 +26,19 @@ export const makeCanvas: MakeCanvas = (w, h) => createCanvas(w, h) as unknown as
 export const EPISODE0_MAP = { type: "dungeon", seed: 12, size: 5, dir: "N" as const, style: "ink" };
 
 /** Bake the scene map once and cache it as a PNG keyed by everything that shapes it. */
-export type MapFile = { file: string; tp: number[][]; len: number[]; k: number; lights: MapLight[]; flames: MapFlame[] };
+export type MapFile = { file: string; tp: number[][]; len: number[]; k: number; lights: MapLight[]; flames: MapFlame[]; lp?: number[]; exits?: number[][] };
 
 export async function bakedMap(req: number | MapRequest, cacheDir = process.env.ADVENTURE_CACHE || join(ROOT, ".cache/maps")): Promise<MapFile> {
   loadFonts();
   const rq: MapRequest = typeof req === "number" ? { ...EPISODE0_MAP, seed: req } : { size: 5, dir: "N", style: "ink", ...req };
-  const key = createHash("sha256").update(JSON.stringify(rq) + "|k4.5|v5").digest("hex").slice(0, 16);
+  const key = createHash("sha256").update(JSON.stringify(rq) + "|k4.5|v7").digest("hex").slice(0, 16);
   const file = join(cacheDir, `${key}.png`), meta = join(cacheDir, `${key}.json`);
   if (existsSync(file) && existsSync(meta)) return { file, ...JSON.parse((await import("node:fs")).readFileSync(meta, "utf8")) };
   mkdirSync(cacheDir, { recursive: true });
   const m = bake(rq, merge(), makeCanvas, 4.5);
   const cv = m.cv as unknown as Canvas;
   writeFileSync(file, await cv.encode("png"));
-  const info = { tp: m.tp, len: m.len, k: m.k, lights: m.lights, flames: m.flames };
+  const info = { tp: m.tp, len: m.len, k: m.k, lights: m.lights, flames: m.flames, lp: m.lp, exits: m.exits };
   writeFileSync(meta, JSON.stringify(info));
   return { file, ...info };
 }
@@ -46,7 +46,8 @@ export async function bakedMap(req: number | MapRequest, cacheDir = process.env.
 export type Job = { spec: Episode0Spec | StorySpec; map: MapFile };
 
 /** The map a spec is drawn on. */
-export const mapFor = (spec: Episode0Spec | StorySpec) => bakedMap(spec.kind === "story" ? spec.scene : spec.seed);
+export const mapFor = (spec: Episode0Spec | StorySpec) =>
+  bakedMap(spec.kind === "story" ? (spec.focus ? { ...spec.scene, landmark: spec.focus.thing } : spec.scene) : spec.seed);
 
 /** Everything a worker needs to draw any frame of a job. */
 export async function prepare(job: Job) {

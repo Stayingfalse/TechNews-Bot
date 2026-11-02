@@ -6,6 +6,7 @@ import { z } from "zod";
 import { BI } from "../../engine/src/defs.ts";
 import { type ClassKey, SKILLS, modifier, odds } from "../../engine/src/sheet.ts";
 import { dailyText, line } from "../../engine/src/voice.ts";
+import { THINGS, THING_KEYS, focusWord } from "../../engine/src/things.ts";
 
 const words = (max: number) => z.string().trim().min(2).refine((t) => t.split(/\s+/).length <= max, `at most ${max} words`);
 const BANNED = /\b(fuck|shit|cunt|bitch|bastard|rape|nazi|gore|disembowel|decapitat|torture)\w*/i;
@@ -44,6 +45,8 @@ export const Node = z.object({
   choices: z.array(Choice).min(2).max(3),
   default: z.number().int().min(0).max(2),
   tone: z.object({ story: z.string().regex(/^\[[a-z ]{2,20}\]$/) }).optional(),
+  /** The story object the scene is about: drawn as its landmark, and the camera pushes in on it. */
+  focus: z.object({ thing: z.enum(THING_KEYS), label: z.string().trim().min(2).max(20).optional() }).optional(),
 });
 export type ArcNode = z.infer<typeof Node>;
 
@@ -67,6 +70,13 @@ export type ArcContext = {
   known_ids?: string[]; // ids used by earlier arcs (must not be reused)
 };
 
+/** A focus object must be named in the narration, so the camera knows when to push in. */
+function focusProblems(n: ArcNode, at: string): string[] {
+  if (!n.focus) return [];
+  const lines = [n.story, n.after, n.check?.success, n.check?.fail].filter(Boolean).map((t) => ({ key: "x", text: t as string }));
+  return focusWord(n.focus.thing, lines) ? [] : [`${at}focus "${n.focus.thing}": say one of ${THINGS[n.focus.thing].words.map((w) => `"${w}"`).join(", ")} in story, after or the outcomes`];
+}
+
 /** Every problem with one node on its own, as the AI writer's adapted node is checked before it
  *  plays: the same limits as in an arc (schema, words, teen-friendly, odds, narration length).
  *  `recap` is the line actually said before it. */
@@ -78,6 +88,7 @@ export function validateNode(raw: unknown, hero: { cls: ClassKey } | null, recap
   if (n.check && n.after) p.push(`"after" is only for nodes without a check`);
   const text = [n.hook.join(" "), n.story, n.after, n.check?.success, n.check?.fail, n.ask, ...n.choices.flatMap((c) => [c.label, c.recap])].join(" ");
   if (BANNED.test(text)) p.push("keep it teen-friendly (no swearing or gore)");
+  p.push(...focusProblems(n, ""));
   if (n.check && hero) {
     const pr = odds(modifier(hero.cls, n.check.skill), n.check.dc, n.check.mode || "normal");
     if (pr < 0.25 || pr > 0.9) p.push(`${Math.round(pr * 100)}% to succeed; keep checks between 25% and 90%`);
@@ -122,6 +133,7 @@ export function validateArc(raw: unknown, ctx: ArcContext): { problems: string[]
     if (n.rest && n.check) p.push(`${at}: a rest node has no check`);
     const text = [n.hook.join(" "), n.story, n.after, n.check?.success, n.check?.fail, n.ask, ...n.choices.flatMap((c) => [c.label, c.recap])].join(" ");
     if (BANNED.test(text)) p.push(`${at}: keep it teen-friendly (no swearing or gore)`);
+    p.push(...focusProblems(n, `${at}: `));
     for (const [i, c] of n.choices.entries()) {
       if (n.day === arc.days - 1) {
         if (c.next !== null) p.push(`${at}.choices[${i}]: the last day's choices end the arc: next must be null`);

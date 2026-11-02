@@ -61,6 +61,8 @@ def prompt_input(node: dict, story: dict) -> dict:
         "planned": {
             "scene": str((node.get("scene") or {}).get("name") or (node.get("scene") or {}).get("type", "")),
             "foe": node.get("foe"),
+            "focus": ({"thing": str(node["focus"]["thing"]), "label": str(node["focus"].get("label") or "")}
+                      if node.get("focus") else None),
             "hook": list(node["hook"]),
             "story": node["story"],
             "check": ({"skill": check["skill"], "dc": check["dc"], "success": check["success"], "fail": check["fail"]}
@@ -93,6 +95,8 @@ Rules:
 - Keep the plan's events, scene, foe and meaning. Don't add new places, foes or items that the
   plan's choices or next scenes would contradict.
 - Keep every fact the plan states: names, whose thing it is (e.g. "Ellen's"), what is written or said.
+- If planned.focus is set, that object is what the scene is about: keep naming it in the text
+  (the camera pushes in on the word), as the plan does.
 - Today stops at the question. planned.choices are what the crowd votes on for tomorrow: the hero
   must not do, start or decide any of them today (if a choice is "Pocket the ribbon", the ribbon is
   still lying there at the end). Add no action of the hero's that the plan doesn't have.

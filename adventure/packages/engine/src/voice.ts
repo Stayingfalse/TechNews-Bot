@@ -28,6 +28,23 @@ export type Cues = Record<string, number>;
 
 /** Where each segment starts in the clip, from the ElevenLabs alignment. Matches on letters and
  *  digits only, so punctuation, spacing and tag handling differences don't matter. */
+/** When `word` is first said at or after `from` seconds (letters and digits only, as above). */
+export function wordTime(al: Alignment, word: string, from = 0): number | null {
+  const want = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!want) return null;
+  const keep: number[] = [];
+  let flat = "";
+  al.characters.forEach((ch, i) => {
+    const l = ch.toLowerCase();
+    if (/[a-z0-9]/.test(l) && al.character_start_times_seconds[i] >= from - 0.01) {
+      flat += l;
+      keep.push(i);
+    }
+  });
+  const at = flat.indexOf(want);
+  return at < 0 ? null : Math.round(al.character_start_times_seconds[keep[at]] * 100) / 100;
+}
+
 export function cuesFromAlignment(al: Alignment, segs: Seg[]): Cues {
   const chars = al.characters.join("");
   // blank out [tags] (in case the alignment includes them), then keep letters/digits with their index

@@ -193,18 +193,34 @@ export function big(F: Frame, t: string, x: number, y: number, z: number, col: s
   c.restore();
 }
 
-/** Narration card that types itself out between a and b. */
-export function narr(F: Frame, t: string | undefined, a: number, b: number, y = 112) {
+/** Narration card that types itself out between a and b. A negative `y` anchors the card's
+ *  bottom edge at −y (a subtitle under a close-up); `hi` picks out a word in red. */
+export function narr(F: Frame, t: string | undefined, a: number, b: number, y = 112, hi?: string) {
   const { c, T } = F;
   if (!t || T < a || T > b) return;
   c.font = font(500, 16);
   const shown = t.slice(0, Math.floor(((T - a + 0.1) * t.length) / Math.max(1, (b - a) * 0.55)));
   const all = wrap(c, t, W - 108), ls = wrap(c, shown, W - 108);
-  parch(F, 16, y, W - 76, Math.max(all.length * 20 + 18, 40));
-  c.font = font(500, 16);
-  c.fillStyle = INK;
+  const h = Math.max(all.length * 20 + 18, 40), top = y < 0 ? -y - h : y;
+  parch(F, 16, top, W - 76, h);
   c.textAlign = "left";
-  ls.forEach((l, i) => c.fillText(l, 30, y + 24 + i * 20));
+  const re = hi ? new RegExp(`\\b(${hi.replace(/[-\s]/g, "[-\\s]")}\\w*)`, "i") : null;
+  ls.forEach((l, i) => {
+    const m = re && l.match(re), yy = top + 24 + i * 20;
+    c.font = font(500, 16);
+    c.fillStyle = INK;
+    if (!m || m.index == null) return c.fillText(l, 30, yy);
+    const pre = l.slice(0, m.index);
+    c.fillText(pre, 30, yy);
+    let x = 30 + c.measureText(pre).width;
+    c.font = font(700, 16);
+    c.fillStyle = RED;
+    c.fillText(m[1], x, yy);
+    x += c.measureText(m[1]).width;
+    c.font = font(500, 16);
+    c.fillStyle = INK;
+    c.fillText(l.slice(m.index + m[1].length), x, yy);
+  });
 }
 
 export function loop(F: Frame, cx: number, cy: number, rx: number, ry: number, p: number, col: string) {

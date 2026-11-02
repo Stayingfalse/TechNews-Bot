@@ -10,3 +10,4 @@ export * from "./episode0.ts";
 export * from "./tex.ts";
 export * from "./voice.ts";
 export * from "./story.ts";
+export * from "./things.ts";
