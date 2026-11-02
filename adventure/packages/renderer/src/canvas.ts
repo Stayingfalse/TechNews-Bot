@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { type Canvas, GlobalFonts, createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   type BakedMap, type Episode0Spec, type MakeCanvas, type MapFlame, type MapLight, type MapRequest, type Scene0, type StorySpec,
-  H, W, bake, drawEpisode0, drawStory, merge, paperTexture, plan0, planStory,
+  H, THINGS, W, bake, drawEpisode0, drawStory, merge, paperTexture, plan0, planStory,
 } from "../../engine/src/index.ts";
 
 export const OUT_W = 1080, OUT_H = 1920, DPR = OUT_W / W;
@@ -31,7 +31,9 @@ export type MapFile = { file: string; tp: number[][]; len: number[]; k: number; 
 export async function bakedMap(req: number | MapRequest, cacheDir = process.env.ADVENTURE_CACHE || join(ROOT, ".cache/maps")): Promise<MapFile> {
   loadFonts();
   const rq: MapRequest = typeof req === "number" ? { ...EPISODE0_MAP, seed: req } : { size: 5, dir: "N", style: "ink", ...req };
-  const key = createHash("sha256").update(JSON.stringify(rq) + "|k4.5|v7").digest("hex").slice(0, 16);
+  // the landmark's own drawing is part of the key, so redrawing a story object re-bakes its maps
+  const art = rq.landmark && THINGS[rq.landmark] ? JSON.stringify(THINGS[rq.landmark].prop) : "";
+  const key = createHash("sha256").update(JSON.stringify(rq) + "|k4.5|v7" + art).digest("hex").slice(0, 16);
   const file = join(cacheDir, `${key}.png`), meta = join(cacheDir, `${key}.json`);
   if (existsSync(file) && existsSync(meta)) return { file, ...JSON.parse((await import("node:fs")).readFileSync(meta, "utf8")) };
   mkdirSync(cacheDir, { recursive: true });

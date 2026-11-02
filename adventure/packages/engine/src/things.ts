@@ -15,6 +15,8 @@ export type Thing = {
   live?: (c: Ctx, T: number) => void;
   /** Where its live part sits, for the camera and the label (prop units). */
   eye: [number, number];
+  /** The colour of its glow in a close-up ("r,g,b"). */
+  glow?: string;
 };
 
 const wv = (T: number, k: number) => Math.sin(T * 3.1 + k) * 1.6 + Math.sin(T * 5.3 + k * 2) * 0.6;
@@ -88,6 +90,7 @@ const stone = "#8a8478", lid = "#a49d8f", wax = "#efe6d0";
 
 export const THINGS: Record<string, Thing> = {
   ribbon: {
+    glow: "255,120,100",
     about: "a red ribbon of Ellen's lying on a stone tomb with two candles",
     words: ["ribbon", "tomb"],
     eye: [0, -18],
@@ -97,6 +100,7 @@ export const THINGS: Record<string, Thing> = {
     live: (c, T) => bow(c, 2, -18, 0.5, T, 2),
   },
   keeper: {
+    glow: "255,190,110",
     about: "an old candle-keeper lying dying, a candle stub in his hand",
     words: ["candle-keeper", "keeper", "old man", "candle"],
     eye: [0, -8],
@@ -132,6 +136,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   bonestair: {
+    glow: "230,210,170",
     about: "a spiral stair of stacked bones going down into the dark, a skull watching from the top",
     words: ["stair", "steps", "bones"],
     eye: [12, -16],
@@ -145,6 +150,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   skull: {
+    glow: "235,90,70",
     about: "a skull on a stone plinth whose eyes follow you",
     words: ["skull"],
     eye: [0, -26],
@@ -161,6 +167,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   pool: {
+    glow: "120,220,240",
     about: "a still pool that glows blue; a face (Ellen's) shows in it",
     words: ["pool", "water", "face", "reflection"],
     eye: [0, 0],
@@ -186,6 +193,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   irondoor: {
+    glow: "210,200,190",
     about: "a heavy iron door, studded and locked, in a stone wall",
     words: ["iron door", "door"],
     eye: [0, -20],
@@ -201,6 +209,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   greendoor: {
+    glow: "140,240,140",
     about: "a door in the rock with green light and the smell of grass behind it: the way into Elfland",
     words: ["green door", "door", "green"],
     eye: [0, -18],
@@ -223,6 +232,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   larder: {
+    glow: "255,200,120",
     about: "a goblin larder: a rough table piled with bread, meat and apples",
     words: ["larder", "food", "table", "bread"],
     eye: [0, -16],
@@ -239,6 +249,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   feast: {
+    glow: "255,215,130",
     about: "a golden feast laid out in Elfland, warm and steaming: the food you must not eat",
     words: ["feast", "food", "table", "golden"],
     eye: [0, -16],
@@ -260,6 +271,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   lamp: {
+    glow: "255,245,200",
     about: "a great lamp hanging in a hall, shining with no flame at all",
     words: ["lamp", "light"],
     eye: [0, -40],
@@ -278,6 +290,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   statues: {
+    glow: "210,215,235",
     about: "two young men standing still as statues, grey as stone: Ellen's enchanted brothers",
     words: ["brothers", "statues", "statue"],
     eye: [0, -26],
@@ -290,6 +303,7 @@ export const THINGS: Record<string, Thing> = {
     },
   },
   sword: {
+    glow: "190,220,255",
     about: "a sword (or wand) that cuts enchantment, glowing in a cleft rock: Merlin's gift",
     words: ["sword", "blade", "wand"],
     eye: [0, -26],

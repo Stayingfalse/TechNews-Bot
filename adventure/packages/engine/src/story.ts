@@ -12,7 +12,8 @@ import { CLASSES, type ClassKey, type Mode, modifier, odds, pct, signed, skillNa
 import { CREAM, GOLD, GRN, H, INK, RED, W, cl, ez, font, lp, seg } from "./util.ts";
 import { type Cues, type Seg, cap, line, words } from "./voice.ts";
 import { THINGS, focusWord } from "./things.ts";
-import { drawStage } from "./stage.ts";
+import { THING_AT, drawStage } from "./stage.ts";
+import { embers, fog, grade, grain, iris, irisR, moodOf, motes, rays } from "./fx.ts";
 
 export type Roll = { dice: number[]; kept: number; mod: number; total: number; ok: boolean; p: number; natural?: 1 | 20 };
 
@@ -208,7 +209,7 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   const over = 90 * Math.max(pv, lm && lm[1] < 120 ? fz : 0);
   const cx = cl(tx, vw / 2, 600 - vw / 2), cy = cl(ty, vh / 2 - over, 600 - vh / 2);
   const vx = cx - vw / 2, vy = cy - vh / 2, sx = (m: number) => (m - vx) * z, sy = (m: number) => (m - vy) * z;
-  const onStage = !!(lm && P.stage && T >= P.stage[0] && T < P.stage[1]);
+  const onStage = !!(lm && P.stage && T >= P.stage[0] && T < P.stage[1]), mood = moodOf(s.scene.type);
   if (!onStage) c.drawImage(S.map.cv as unknown as CanvasImageSource, vx * S.map.k, vy * S.map.k, vw * S.map.k, vh * S.map.k, 0, 0, W, H);
 
   const out = pins ? 0 : ez(seg(T, P.cta - 0.8, P.cta + 0.2));
@@ -252,19 +253,28 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
     }, seg(T, P.stage![0], P.stage![1]));
   } else {
     lighting(F, lights, 0.52);
+    let sparks = 0;
     S.map.flames.forEach((f, i) => {
       const X = sx(f.x), Y = sy(f.y);
-      if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) flame(F, X, Y, f.s * z * 0.95, i * 1.9);
+      if (X > -20 && X < W + 20 && Y > -20 && Y < H + 20) {
+        flame(F, X, Y, f.s * z * 0.95, i * 1.9);
+        if (sparks++ < 6) embers(F, X, Y, f.s * z * 0.95, i);
+      }
     });
     if (lm) focusThing(F, s, sx(lm[0]), sy(lm[1]), z, fz);
+    motes(F, mood, lights);
+    fog(F, mood, 0, H, 0.8);
   }
-  // in and out of the stage: a quick dip to black
+  // the grade follows what matters: the object in a close-up, else the hero
+  const gx = lm && fz > 0 ? lp(sx(hp[0]), sx(lm[0]), fz) : onStage ? THING_AT[0] : sx(hp[0]);
+  const gy = lm && fz > 0 ? lp(sy(hp[1]), sy(lm[1]), fz) : onStage ? THING_AT[1] - 90 : sy(hp[1]);
+  grade(F, mood, 1, cl(gx, 60, W - 60), cl(gy, 160, H - 200));
+  grain(F, mood);
+  // in and out of the stage: an iris closing on the object, opening on the stage (and back)
   if (lm && P.stage) {
-    const dip = Math.max(0, 1 - Math.abs(T - P.stage[0]) / 0.25, 1 - Math.abs(T - P.stage[1]) / 0.25);
-    if (dip > 0) {
-      c.fillStyle = `rgba(8,5,8,${dip})`;
-      c.fillRect(-20, -20, W + 40, H + 40);
-    }
+    const r0 = irisR(T, P.stage[0]), r1 = irisR(T, P.stage[1]);
+    if (r0 != null) iris(F, onStage ? THING_AT[0] : sx(lm[0]), onStage ? THING_AT[1] - 40 : sy(lm[1]) - 20, r0);
+    if (r1 != null) iris(F, onStage ? THING_AT[0] : sx(hp[0]), onStage ? THING_AT[1] - 40 : sy(hp[1]) - 20, r1);
   }
 
   // the companions' handle tags, over the lighting so they stay readable
@@ -393,6 +403,7 @@ function recapCard(F: Frame, s: StorySpec, [a0, a1]: [number, number]) {
 function focusThing(F: Frame, s: StorySpec, X: number, Y: number, z: number, fz: number) {
   const { c, T } = F, th = THINGS[s.focus!.thing], sc = z * 1.6;
   if (X < -80 || X > W + 80 || Y < -80 || Y > H + 120) return;
+  rays(F, X + th.eye[0] * sc, Y + th.eye[1] * sc * 0.9, 34 * sc, th.glow || "255,214,150", fz * 0.9);
   if (th.live) {
     c.save();
     c.translate(X, Y);
@@ -569,10 +580,15 @@ function pinned(F: Frame, s: StorySpec, t: number, m: { pins: Pin[]; hero: numbe
     c.strokeStyle = "rgba(155,44,30,.9)";
     c.lineWidth = 2.4;
     c.lineCap = "round";
-    const mx = (hx + p.x) / 2 + (p.x < hx ? -20 : 20), my = Math.min(hy, p.y) - 20;
+    // the path inks itself in from the hero to the place
+    const mx = (hx + p.x) / 2 + (p.x < hx ? -20 : 20), my = Math.min(hy, p.y) - 20, prog = ez(seg(t, 0.3 + i * 0.3, 1.0 + i * 0.3));
+    const at = (u: number) => [(1 - u) * (1 - u) * hx + 2 * u * (1 - u) * mx + u * u * p.x, (1 - u) * (1 - u) * (hy - 6) + 2 * u * (1 - u) * my + u * u * (p.y - 4)];
     c.beginPath();
-    c.moveTo(hx, hy - 6);
-    c.quadraticCurveTo(mx, my, p.x, p.y - 4);
+    for (let k = 0; k <= 24; k++) {
+      const [x, y] = at((k / 24) * prog);
+      if (k) c.lineTo(x, y);
+      else c.moveTo(x, y);
+    }
     c.stroke();
     c.restore();
   });
@@ -598,14 +614,28 @@ function pinned(F: Frame, s: StorySpec, t: number, m: { pins: Pin[]; hero: numbe
     c.restore();
   });
   at.forEach((p, i) => {
-    const a = ez(seg(t, 0.5 + i * 0.3, 1.1 + i * 0.3));
-    if (a <= 0) return;
-    const pu = 1 + 0.06 * Math.sin(T * 5 + i);
+    // the seal drops onto the map and stamps: a squash, a bounce and a splash of wax
+    const d = seg(t, 0.9 + i * 0.3, 1.35 + i * 0.3);
+    if (d <= 0) return;
+    const fall = 1 - d * d, land = seg(t, 1.35 + i * 0.3, 1.9 + i * 0.3);
+    const squash = land > 0 ? 1 + Math.sin(land * Math.PI * 2) * 0.22 * (1 - land) : 1;
+    const pu = 1 + 0.05 * Math.sin(T * 5 + i) * land;
+    if (land > 0 && land < 1) {
+      c.save();
+      for (let k = 0; k < 7; k++) {
+        const ang = k * 0.9 + i, r = 14 + land * 16 + (k % 3) * 4;
+        c.fillStyle = `rgba(155,44,30,${0.75 * (1 - land)})`;
+        c.beginPath();
+        c.arc(p.sx + Math.cos(ang) * r, p.sy + Math.sin(ang) * r * 0.8, 1.6 + (k % 2), 0, 7);
+        c.fill();
+      }
+      c.restore();
+    }
     c.save();
-    c.globalAlpha = a;
-    c.translate(p.sx, p.sy);
-    c.scale(pu * a, pu * a);
-    seal(F, 0, 0, 14, "ABC"[i]);
+    c.globalAlpha = Math.min(1, d * 2);
+    c.translate(p.sx, p.sy - fall * 60);
+    c.scale(pu / squash, pu * squash);
+    seal(F, 0, 0, 14 * (1 + fall * 0.5), "ABC"[i]);
     c.restore();
   });
   if (t > 1.4) {
