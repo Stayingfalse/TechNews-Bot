@@ -218,3 +218,47 @@ def test_the_request_turns_thinking_off_and_says_why_a_reply_was_blank(monkeypat
     monkeypatch.setattr(writer.httpx, "post", lambda url, **kw: R({"choices": [{"message": {"content": '{"story": "x"}'}}],
                                                                    "usage": {"prompt_tokens": 5}}))
     assert writer._ask([]) == ({"story": "x"}, {"prompt_tokens": 5})
+
+
+# ------------------------------------------------------------------ continuity
+
+
+RIBBON = next(n for n in ARC["nodes"] if n["id"] == "ribbon-hall")
+NO_VOICES = {"voices": {"shouted": []}, "companion_moment": None}
+
+
+def test_the_hero_must_not_do_todays_choices_before_the_vote():
+    # what actually aired on 2 Nov: the writer had the hero pocket the ribbon, then asked whether to pocket it
+    aired = writer._apply(RIBBON, {"story": "A red ribbon on the tomb, still warm. Ellen's.",
+                                   "after": "You pocket it, march three bold laps, jaw shut. The dark stays silent."})
+    assert writer.jumps_ahead(aired, RIBBON) == ["Pocket the ribbon"]
+    assert any("Pocket the ribbon" in p for p in writer.own_problems(aired, NO_VOICES, RIBBON))
+    for said in ("You quickly grab it and pocketed it.", "You are pocketing it."):
+        assert writer.jumps_ahead(writer._apply(RIBBON, {"after": said}), RIBBON) == ["Pocket the ribbon"]
+    # the plan as written, or words that leave the choice open, are fine
+    assert writer.jumps_ahead(RIBBON, RIBBON) == [] and writer.own_problems(RIBBON, NO_VOICES, RIBBON) == []
+    open_ = writer._apply(RIBBON, {"after": "Scratched beside it, in Ellen's hand: do not answer. Your hand hovers."})
+    assert writer.own_problems(open_, NO_VOICES, RIBBON) == []
+
+
+def test_the_plans_names_stay_in():
+    assert writer.plan_names(RIBBON) == {"Ellen"}
+    lost = writer._apply(RIBBON, {"story": "On a tomb lid lies a red ribbon. Still warm."})
+    assert any('keep "Ellen"' in p for p in writer.own_problems(lost, NO_VOICES, RIBBON))
+
+
+def test_the_writer_gets_the_premise_and_the_story_so_far(day):
+    make, answers, sent, _, _ = day
+    answers += [good(success="A soft click. You take the bone stair, torch high."),  # jumps ahead to choice A
+                good()]
+    job = make()
+    w = job["writer"]
+    assert w["status"] == "written" and "Take the bone stair" in w["attempts"][0]["problems"][0]
+    assert "Ellen" in w["input"]["premise"] and "viewer" not in w["input"]["premise"].lower()
+    assert w["input"]["story_so_far"] == [] and "story_so_far" in sent[0][0]["content"]
+    # once it has played, the next day's writer sees it, with the choice that led there
+    s = campaign.state()
+    s["history"].append({"ep": 1, "arc": ARC["id"], "node": "gate-lock", "story": "You kneel.", "outcome": "A click.",
+                         "recap": "You chose to pick the old lock."})
+    so_far = campaign.story_so_far(s)
+    assert so_far == [{"ep": 1, "choice": "You chose to pick the old lock.", "story": "You kneel.", "outcome": "A click."}]

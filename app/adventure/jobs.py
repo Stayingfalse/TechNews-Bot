@@ -262,7 +262,7 @@ def writer_try(pick: int = 0, way: str | None = None, shouts: list[str] | None =
     ep = s["ep"] + 1
     counts = [0, 0, 0][: len(node["choices"])]
     story = {"party": crew, "moment": party.moment_slot(ep, len(crew)), "ep": ep, "hero": s["hero"], "hearts": s["hearts"],
-             "recap": recap, "recent": campaign._recent_text(s), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")},
+             "recap": recap, "so_far": campaign.story_so_far(s), "premise": campaign.premise(s["season"]), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")},
              "voices": {"counts": counts, "chosen": label, "voters": voters, "way": way, "rally": party.rally(voters),
                         "shouts": [{"word": w, "n": 3} for w in (shouts or [])]}}
     check = lambda n: campaign._run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": recap})["problems"]  # noqa: E731
