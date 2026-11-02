@@ -142,7 +142,7 @@ def _adventure_posts() -> list[dict]:
         extra = ({"votes": sum(v["counts"]), "voters": v.get("voters", 0), "comments_read": v.get("comments", 0)}
                  if v else {})
         if v and "joins" in v:  # the party and the Voices: totals counted on this post
-            extra.update(joins=v["joins"], way_votes=sum(v.get("ways") or []))
+            extra.update(joins=v["joins"])
         if v and "shouts" in v:
             extra["shouts"] = sum(s["n"] for s in v["shouts"])
         if "party" in spec:
