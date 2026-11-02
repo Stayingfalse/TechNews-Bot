@@ -111,7 +111,7 @@ def test_the_writer_gets_story_data_and_totals_only_and_its_words_play(day, monk
     for name in NAMES + ["Ann Smith", "my real name", "please"]:
         assert name.lower() not in body.lower(), name  # nothing a viewer is or wrote reaches the AI
     inp = job["writer"]["input"]
-    assert inp["voices"]["shouted"] == [{"word": "torch", "times": 3}] and inp["voices"]["way"] == "sly"
+    assert inp["voices"]["shouted"] == [{"word": "torch", "times": 3}] and "way" not in inp["voices"]
     assert set(inp["party"][0]) == {"slot", "name", "cls"} and inp["companion_moment"]["slot"] == 1
     assert job["writer"]["status"] == "written" and job["spec"]["story"].startswith("You kneel by the lock, torch high.")
     assert job["spec"]["hook"] == ["THE LOCK", "GIVES"] and job["plan_node"]["story"] != job["spec"]["story"]
@@ -188,7 +188,7 @@ def test_trying_the_writer_saves_nothing(day, client):
     make, answers, sent, rendered, _ = day
     answers.append(good())
     before = {j["id"]: j["status"] for j in jobs.recent(20)}
-    r = client.post("/adventure/writer/try", json={"pick": 1, "way": "sly", "shouts": ["torch"], "voters": 30}, headers=AUTH)
+    r = client.post("/adventure/writer/try", json={"pick": 1, "shouts": ["torch"], "voters": 30}, headers=AUTH)
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["status"] == "written" and out["written"]["story"] == good()["story"] and out["node"] == "gate-lock"

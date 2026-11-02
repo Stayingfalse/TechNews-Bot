@@ -277,10 +277,10 @@ def recap_bits(arc: dict, node: dict, s: dict, n: int = 3) -> dict:
     return out
 
 
-def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = None, rally: int = 0,
+def build_story(prev_job: dict, pick: int, counts: list[int], rally: int = 0,
                 story: dict | None = None) -> dict:
-    """The spec (and everything to remember) for today's story episode. `way` (bold/sly/wise, the
-    comments' winning way) picks the check's skill; `rally` (from turnout) adds to the roll.
+    """The spec (and everything to remember) for today's story episode. `rally` (from turnout) adds
+    to the roll.
     `story` (party as story characters, the companion with a moment, the Voices' totals) goes to
     the AI writer, which adapts the planned node's words; without it, or if the writer fails, the
     planned node plays as written."""
@@ -296,7 +296,7 @@ def build_story(prev_job: dict, pick: int, counts: list[int], way: str | None = 
     rolled, proof = dice(ep, node["id"])
     ctx = {"ep": ep, "hero": s["hero"], "hearts": s["hearts"], "dice": rolled,
            "recap": {"pick": pick, "votes": counts, "label": opts[pick], "line": choice["recap"]},
-           "way": way, "rally": rally}
+           "rally": rally}
     planned, written = node, None
     if story is not None:
         from . import writer

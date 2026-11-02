@@ -1,6 +1,5 @@
 """The story's AI writer (phase 2, docs/VOICES_STORY_PLAN.md §4-5): each morning it adapts the
-day's planned node (the weekly routine's) to what the comments added up to: the winning way, how
-many voted, the top shouted word and a companion's moment. It rewrites the node's words only: the
+day's planned node (the weekly routine's) to what the comments added up to: how many voted, the top shouted word and a companion's moment. It rewrites the node's words only: the
 hook, story, outcomes or aftermath. The scene, foe, check (skill, DC), question and choices stay as
 planned, so the story's branches and the dice are untouched.
 
@@ -29,7 +28,6 @@ from . import shouts
 
 log = logging.getLogger(__name__)
 ATTEMPTS = 3  # the first answer and at most 2 corrections
-WAY_HOW = {"bold": "head-on, loud and brave", "sly": "quietly and with tricks", "wise": "carefully and cleverly"}
 TEXT_FIELDS = ("hook", "story", "success", "fail", "after")
 SO_FAR = 12  # episodes of the story so far the writer is given (about two weeks)
 # the writer must never speak to or about the audience as people
@@ -75,8 +73,6 @@ def prompt_input(node: dict, story: dict) -> dict:
             "votes": [int(n) for n in v.get("counts") or []],
             "chosen": str(v.get("chosen") or ""),
             "voters": int(v.get("voters") or 0),
-            "way": v.get("way"),
-            "way_means": WAY_HOW.get(v.get("way") or "", None),
             "rally": int(v.get("rally") or 0),
             "shouted": [{"word": str(s["word"]), "times": int(s["n"])} for s in (v.get("shouts") or [])][:3],
         },
@@ -105,8 +101,6 @@ Rules:
   sees and does now.
 - If the plan has a check, write "success" and "fail" (at most 20 words each) and set "after" to
   null. If it has no check, write "after" (at most 20 words) and set "success" and "fail" to null.
-- The way (voices.way) is how the hero acts today: tell what the plan already has them do that way
-  (voices.way_means), and write the outcomes to fit it. The way never adds a new action.
 - If voices.shouted has words, the first word must appear in today's text: in "story", or (with a
   check) in both "success" and "fail", or (without one) in "after". Use it naturally.
 - If companion_moment is set, that companion (by name) does one small helpful thing in "story".

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { type StorySpec, WAY_SKILLS, captionStory, dailyText, planStory, resolveNode, scriptStory, waySkill } from "../packages/engine/src/index.ts";
+import { type StorySpec, captionStory, commentStory, dailyText, planStory, resolveNode, scriptStory } from "../packages/engine/src/index.ts";
 import { modifier, odds } from "../packages/engine/src/sheet.ts";
 import { type ArcContext, type ArcNode, Story, validateArc, validateNode } from "../packages/shared/src/index.ts";
 import { assembleStory } from "../packages/renderer/src/assemble.ts";
@@ -93,19 +93,17 @@ describe("resolveNode", () => {
     const hard = { ...node("gate-force"), check: { ...node("gate-force").check!, dc: 20 } };
     expect(resolveNode(hard, { ...ctx, dice: [20] }).check!.roll).toMatchObject({ ok: true, natural: 20 });
   });
-  it("the Voices: the winning way picks the hero's best skill for it, and Rally adds to the roll", () => {
+  it("the Voices: the node's own skill is rolled, and Rally adds to the roll", () => {
     const base = resolveNode(node("gate-force"), ctx).check!;
-    const sly = resolveNode(node("gate-force"), { ...ctx, way: "sly", rally: 2 });
-    expect(WAY_SKILLS.sly).toContain(sly.check!.skill);
-    expect(sly.check!.skill).toBe(waySkill(hero.cls, "sly"));
-    expect(sly.check).toMatchObject({ way: "sly", rally: 2 });
-    expect(sly.check!.roll.mod).toBe(modifier(hero.cls, sly.check!.skill) + 2);
-    expect(sly.check!.roll.p).toBeGreaterThan(odds(modifier(hero.cls, sly.check!.skill), sly.check!.dc) - 1e-9);
-    expect(base.way).toBeUndefined();
+    const rallied = resolveNode(node("gate-force"), { ...ctx, rally: 2 });
+    expect(rallied.check!.skill).toBe(node("gate-force").check!.skill);
+    expect(rallied.check!.roll.mod).toBe(modifier(hero.cls, rallied.check!.skill) + 2);
+    expect(rallied.check!.roll.p).toBeGreaterThan(odds(modifier(hero.cls, rallied.check!.skill), rallied.check!.dc) - 1e-9);
     expect(base.rally).toBeUndefined();
-    const withParty = { ...sly, party: [{ name: "Ash", cls: "rogue", look: 1, handle: "mira" }], credits: { rolledBy: "amy" },
-      voices: { ways: [1, 5, 0], way: "sly", voters: 12 } };
+    const withParty = { ...rallied, party: [{ name: "Ash", cls: "rogue", look: 1, handle: "mira" }], credits: { rolledBy: "amy" },
+      voices: { voters: 12 } };
     expect(() => Story.parse(withParty)).not.toThrow();
+    expect(commentStory(rallied)).not.toMatch(/bold|sly|wise/i);
   });
   it("advantage keeps the higher die, disadvantage the lower", () => {
     const n = node("gate-force");

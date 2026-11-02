@@ -24,7 +24,7 @@ export type StorySpec = {
   hook: [string, string];
   recap?: { pick: number; votes: number[]; label: string; line: string } | null;
   story: string;
-  check?: { skill: string; dc: number; mode: Mode; harm: boolean; roll: Roll; way?: Way; rally?: number } | null;
+  check?: { skill: string; dc: number; mode: Mode; harm: boolean; roll: Roll; rally?: number } | null;
   after: string;
   hearts: { before: number; after: number };
   dead?: boolean;
@@ -37,9 +37,9 @@ export type StorySpec = {
   party?: Companion[];
   /** Credits shown on screen: the viewer the roll is credited to. */
   credits?: { rolledBy?: string | null; shouters?: string[] };
-  /** What the comments added up to: votes per way, the winner, how many voted, the word the Voices
-   *  shouted (only when the story uses it). */
-  voices?: { ways: number[]; way?: Way | null; voters: number; shout?: { word: string; n: number } };
+  /** What the comments added up to: how many voted, the word the Voices shouted (only when the
+   *  story uses it). */
+  voices?: { voters: number; shout?: { word: string; n: number } };
   /** Said before the recap line on a week's first episode: the story so far in a sentence or two
    *  (the arc's `previously`, written by the weekly routine). */
   previously?: string;
@@ -47,18 +47,7 @@ export type StorySpec = {
   soFar?: string[];
 };
 
-export type Way = "bold" | "sly" | "wise";
 export type Companion = { name: string; cls: ClassKey; look: number; handle?: string | null };
-export const WAYS: Way[] = ["bold", "sly", "wise"];
-/** The skills each way can use; the hero rolls their best one. */
-export const WAY_SKILLS: Record<Way, string[]> = {
-  bold: ["athletics", "intimidation"],
-  sly: ["stealth", "sleight_of_hand", "deception"],
-  wise: ["perception", "arcana", "persuasion"],
-};
-export function waySkill(cls: ClassKey, way: Way): string {
-  return WAY_SKILLS[way].reduce((best, sk) => (modifier(cls, sk) > modifier(cls, best) ? sk : best));
-}
 
 export type StoryPlan = { dur: number; hook: [number, number]; story: [number, number]; check?: [number, number]; after: [number, number]; cta: number; throwAt?: number };
 
@@ -142,7 +131,7 @@ export function captionStory(s: StorySpec): string {
 export function commentStory(s: StorySpec): string {
   if (s.dead) return "Rest well, hero. A new hero rises next.";
   return `${s.choices.map((o, i) => `${"ABC"[i]}) ${o.label}`).join(" · ")}\nComment your letter by 8am. No votes? We go with ${"ABC"[s.default]}.`
-    + `\nAdd how: bold, sly or wise. Shout a word to the hero (torch, rope, wolf…). Comment "join" to join the party.`;
+    + `\nShout a word to the hero (torch, rope, wolf…). Comment "join" to join the party.`;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -285,7 +274,7 @@ function hook(F: Frame, s: StorySpec, hero: Creature, foe: Creature | undefined,
       fit(F, o.label, 60, y + 5, 13, W - 140, CREAM, "left", 600);
     });
     const crew = (s.party || []).length;
-    fit(F, `+ BOLD · SLY · WISE  ·  SHOUT A WORD  ·  JOIN THE PARTY${crew ? ` (${crew})` : ""}`, 170, 442 + s.choices.length * 25 + 4, 10, W - 100, GOLD, "center", 700);
+    fit(F, `+ SHOUT A WORD  ·  JOIN THE PARTY${crew ? ` (${crew})` : ""}`, 170, 442 + s.choices.length * 25 + 4, 10, W - 100, GOLD, "center", 700);
   }
   c.globalAlpha = 1;
 }
@@ -338,8 +327,8 @@ function checkBeat(F: Frame, s: StorySpec, P: StoryPlan, hx: number, hy: number)
     fit(F, `${skillName(ck.skill).toUpperCase()} · DC ${ck.dc} · ${pct(r.p)}${mode}${rallied}`, 152, 226, 17, W - 130, RED, "center", 900);
   }
   const by = s.credits?.rolledBy, voters = s.voices?.voters || 0;
-  if ((by || ck.rally || ck.way) && T > P.check![0] + 0.3 && T < P.after[1]) {
-    const bits = [ck.way ? `THE VOICES SAID ${ck.way.toUpperCase()}` : "", ck.rally ? `${voters} VOICES` : "", by ? `ROLLED BY @${by}` : ""].filter(Boolean);
+  if ((by || ck.rally) && T > P.check![0] + 0.3 && T < P.after[1]) {
+    const bits = [ck.rally ? `${voters} VOICES` : "", by ? `ROLLED BY @${by}` : ""].filter(Boolean);
     parch(F, 50, 244, W - 126, 22);
     fit(F, bits.join(" · "), 152, 259, 10, W - 140, INK, "center", 700);
   }
@@ -393,7 +382,7 @@ function cta(F: Frame, s: StorySpec, P: StoryPlan) {
     c.roundRect(16, CARD_Y - 36, W - 76, 31, 6);
     c.fill();
     fit(F, `COMMENT ${letters(s.choices.length).toUpperCase()} BY 8AM · NEXT EPISODE AT 9AM`, W / 2 - 22, CARD_Y - 22, 11, W - 92, GOLD, "center", 700);
-    fit(F, `+ BOLD, SLY or WISE + a word to shout · JOIN the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
+    fit(F, `+ a word to shout · JOIN the party · no votes? ${"ABC"[s.default]}`, W / 2 - 22, CARD_Y - 9, 11, W - 92, CREAM, "center", 500);
     c.restore();
   }
   s.choices.forEach((o, i) => {
@@ -426,20 +415,19 @@ export type ArcNode = {
 export function resolveNode(n: ArcNode, ctx: {
   ep: number; hero: { cls: ClassKey; look: number }; hearts: number; dice: number[];
   recap?: { pick: number; votes: number[]; label: string; line: string } | null;
-  way?: Way | null; rally?: number;
+  rally?: number;
 }): StorySpec {
   let check: StorySpec["check"] = null, after = n.after || "", hearts = ctx.hearts;
   if (n.rest) hearts = Math.min(3, hearts + 1);
   if (n.check) {
-    // the Voices: the winning way picks the skill (the hero's best for it); Rally adds to the roll
-    const skill = ctx.way ? waySkill(ctx.hero.cls, ctx.way) : n.check.skill, rally = Math.max(0, ctx.rally || 0);
+    // the Voices: Rally (turnout) adds to the roll
+    const skill = n.check.skill, rally = Math.max(0, ctx.rally || 0);
     const mode = n.check.mode || "normal", mod = modifier(ctx.hero.cls, skill) + rally;
     const d = mode === "normal" ? [ctx.dice[0]] : [ctx.dice[0], ctx.dice[1]];
     const kept = mode === "advantage" ? Math.max(...d) : mode === "disadvantage" ? Math.min(...d) : d[0];
     const natural = kept === 20 ? 20 : kept === 1 ? 1 : undefined;
     const ok = kept === 20 || (kept !== 1 && kept + mod >= n.check.dc);
     check = { skill, dc: n.check.dc, mode, harm: !!n.check.harm, roll: { dice: d, kept, mod, total: kept + mod, ok, p: odds(mod, n.check.dc, mode), natural } };
-    if (ctx.way) check.way = ctx.way;
     if (rally) check.rally = rally;
     after = ok ? n.check.success : n.check.fail;
     if (!ok && n.check.harm) hearts -= 1;

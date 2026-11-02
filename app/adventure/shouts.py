@@ -1,4 +1,4 @@
-"""The Shout List: words viewers can shout to the hero in a comment ("A sly torch"). Only these
+"""The Shout List: words viewers can shout to the hero in a comment ("A torch"). Only these
 words count, so nothing free-form ever reaches the story, the screen or the AI writer. A word only
 counts once MIN_SHOUTERS different people have shouted it (no single comment can be picked out, and
 one person can't steer the story). docs/VOICES_STORY_PLAN.md §3.3.
@@ -36,7 +36,7 @@ for w in WORDS:
     if not w.endswith("s"):
         _STEM.setdefault(w + "s", w)  # "torches" isn't caught, "ropes" is: good enough
 _WORD = re.compile(r"[a-z]+")
-# letters, ways and party words aren't shouts, even when they're on the list ("back" is, "join" isn't)
+# letters, party words and the old way words aren't shouts, even when they're on the list ("back" is, "join" isn't)
 NOT_SHOUTS = {"a", "b", "c", "bold", "sly", "wise", "join", "leave"}
 
 

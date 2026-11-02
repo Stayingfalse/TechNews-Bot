@@ -73,7 +73,7 @@ Use curl from Bash. Write the arc to a file and send it with `-d @arc.json -H 'C
      - `skill` (from `vocab.skills`), `dc` (from `vocab.dcs`), optional `mode` (`advantage`/`disadvantage`), optional `harm: true` (a failure costs a heart)
      - `success` and `fail`: up to 20 words each
      - The hero's odds (`success_pct_by_dc`) must be between 25% and 90%.
-     - Viewers also vote a **way** (bold, sly or wise). When one wins, the server swaps the check's skill for the hero's best skill for that way (bold: athletics/intimidation; sly: stealth/sleight of hand/deception; wise: perception/arcana/persuasion), and turnout can add up to +3 (Rally). So write `story`, `success` and `fail` so they read right whichever way the hero tries it: say what happens, not how ("The gate gives." rather than "Your shoulder breaks the gate."). Pick DCs where each way's best skill for this hero (from `vocab` odds) still has a fair chance, so choosing a way is a real trade-off and none is hopeless.
+     - The check rolls the skill you pick. A big turnout adds up to +3 to the roll (Rally); the odds rule above is checked without it.
    - Without a check, `after`: up to 20 words, what happens next. A rest node has no check and has `after`.
    - **Stop before the choices.** `story`, `success`, `fail` and `after` end where the question starts: the hero never does, starts or decides any of the node's `choices` in them. If a choice is "Pocket the ribbon", the ribbon is still lying there at the end of the day. Each choice should be a real fork: two choices that end the same way aren't worth a vote.
    - `ask`: the question, up to 5 words, e.g. "Which way down?", "Answer it?".

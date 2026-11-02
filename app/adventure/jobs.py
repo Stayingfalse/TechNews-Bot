@@ -171,10 +171,8 @@ def _resolve_votes(job: dict) -> None:
     if error:
         how = "default (comments unreadable)" if not any(t["counts"]) else how
         notify.send(f":warning: **Adventure**: couldn't read the votes on `{prev['id']}` ({error}); going with {'ABC'[pick]}")
-    way = votes.top_way(t["ways"])
     job["votes"] = {"from_job": prev["id"], "counts": t["counts"], "comments": t["comments"], "voters": len(t["voters"]),
                     "pick": pick, "how": how, "option": opts[pick], "counted_at": store.now_iso(),
-                    "ways": t["ways"], "way": votes.WAYS[way] if way is not None else None,
                     "joins": len(t["joins"]), "leaves": len(t["leaves"])}  # totals only
     if job["kind"] == "story":
         ep = campaign.state()["ep"] + 1
@@ -183,9 +181,9 @@ def _resolve_votes(job: dict) -> None:
         job["votes"]["shouts"] = [{"word": s["word"], "n": s["n"]} for s in t["shouts"]]  # totals only
         crew = party.story_party(party.spec_party())
         story = {"party": crew, "moment": party.moment_slot(ep, len(crew)),
-                 "voices": {"counts": t["counts"], "chosen": opts[pick], "voters": len(t["voters"]), "way": job["votes"]["way"],
+                 "voices": {"counts": t["counts"], "chosen": opts[pick], "voters": len(t["voters"]),
                             "rally": bonus, "shouts": job["votes"]["shouts"]}}
-        job.update(campaign.build_story(prev, pick, t["counts"], job["votes"]["way"], bonus, story=story))
+        job.update(campaign.build_story(prev, pick, t["counts"], bonus, story=story))
         top = t["shouts"][0] if t["shouts"] and (job.get("writer") or {}).get("status") == "written" else None
         _add_party(job, party.pick_roller(ep, t["voters"]), moved, top)
     else:
@@ -207,7 +205,7 @@ def _add_party(job: dict, roller: str | None, moved: dict | None = None, shout: 
     spec["party"] = [{k: c[k] for k in ("name", "cls", "look", "handle")} for c in comp]
     spec["credits"] = {"rolledBy": party.shown_name(roller)}
     v = job.get("votes") or {}
-    spec["voices"] = {"ways": v.get("ways") or [0, 0, 0], "way": v.get("way"), "voters": v.get("voters", 0)}
+    spec["voices"] = {"voters": v.get("voters", 0)}
     items = [{"kind": "party", "key": c["key"], "handle": c["handle"], "companion": c["name"]} for c in comp if c["handle"]]
     if spec["credits"]["rolledBy"]:
         items.append({"kind": "rolled_by", "key": roller.lower(), "handle": spec["credits"]["rolledBy"]})
@@ -235,7 +233,7 @@ def _add_party(job: dict, roller: str | None, moved: dict | None = None, shout: 
 # ------------------------------------------------------------------ trying the writer
 
 
-def writer_try(pick: int = 0, way: str | None = None, shouts: list[str] | None = None, voters: int = 12,
+def writer_try(pick: int = 0, shouts: list[str] | None = None, voters: int = 12,
                node_id: str | None = None) -> dict:
     """Run the AI writer on the next episode's planned node with sample totals, and say what happened.
     Nothing is saved, rendered or posted. `pick`: which option of the latest episode won (0 = A);
@@ -263,7 +261,7 @@ def writer_try(pick: int = 0, way: str | None = None, shouts: list[str] | None =
     counts = [0, 0, 0][: len(node["choices"])]
     story = {"party": crew, "moment": party.moment_slot(ep, len(crew)), "ep": ep, "hero": s["hero"], "hearts": s["hearts"],
              "recap": recap, "so_far": campaign.story_so_far(s), "premise": campaign.premise(s["season"]), "arc": {"title": arc.get("title", ""), "notes": arc.get("notes", "")},
-             "voices": {"counts": counts, "chosen": label, "voters": voters, "way": way, "rally": party.rally(voters),
+             "voices": {"counts": counts, "chosen": label, "voters": voters, "rally": party.rally(voters),
                         "shouts": [{"word": w, "n": 3} for w in (shouts or [])]}}
     check = lambda n: campaign._run_node("validate-node", payload={"node": n, "hero": s["hero"], "recap": recap})["problems"]  # noqa: E731
     out, record = writer.adapt(node, story, check)

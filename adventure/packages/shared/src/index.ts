@@ -48,7 +48,7 @@ export const Story = z.object({
   recap: z.object({ pick: z.number().int(), votes: z.array(z.number().int()), label: z.string(), line: z.string() }).nullable().optional(),
   story: z.string(),
   check: z.object({ skill: z.string(), dc: z.number().int(), mode: z.enum(["normal", "advantage", "disadvantage"]), harm: z.boolean(), roll: Roll,
-    way: z.enum(["bold", "sly", "wise"]).optional(), rally: z.number().int().min(0).max(5).optional() }).nullable().optional(),
+    rally: z.number().int().min(0).max(5).optional() }).nullable().optional(),
   after: z.string(),
   hearts: z.object({ before: z.number().int(), after: z.number().int() }),
   dead: z.boolean().optional(),
@@ -60,7 +60,7 @@ export const Story = z.object({
   party: z.array(z.object({ name: z.string().max(16), cls: z.enum(["fighter", "rogue", "wizard"]), look: z.number().int().min(0).max(2),
     handle: z.string().max(30).nullable().optional() })).max(6).optional(),
   credits: z.object({ rolledBy: z.string().max(30).nullable().optional(), shouters: z.array(z.string().max(30)).max(3).optional() }).optional(),
-  voices: z.object({ ways: z.array(z.number().int().min(0)).length(3), way: z.enum(["bold", "sly", "wise"]).nullable().optional(),
+  voices: z.object({
     voters: z.number().int().min(0), shout: z.object({ word: z.string().max(20), n: z.number().int().min(0) }).optional() }).optional(),
   previously: z.string().max(220).optional(),
   soFar: z.array(z.string().max(300)).max(5).optional(),

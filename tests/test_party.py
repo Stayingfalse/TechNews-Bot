@@ -1,4 +1,4 @@
-"""The story's party and the Voices: joining, places that follow turnout, leaving, credits, the way
+"""The story's party and the Voices: joining, places that follow turnout, leaving, credits,
 and Rally reaching the roll, moderation (approve, or remove and make again) and privacy."""
 from __future__ import annotations
 
@@ -28,11 +28,10 @@ def t(*pairs, voters=None):
 # ------------------------------------------------------------------ reading comments
 
 
-def test_a_comment_can_vote_pick_a_way_and_join_at_once():
+def test_a_comment_can_vote_and_join_at_once_and_old_way_words_dont_get_in_the_way():
     r = t(("amy", "A sly join"), ("bob", "b boldly"), ("amy", "B wise"), ("cat", "leave"), ("dan", "a sly"), ("eve", "what a wise move"))
-    assert r["counts"] == [2, 1] and r["ways"] == [1, 2, 1]  # amy's first way counts, not her second
+    assert r["counts"] == [2, 1] and "ways" not in r  # "sly", "boldly" are ignored; amy's first vote counts
     assert [j["key"] for j in r["joins"]] == ["amy"] and [j["key"] for j in r["leaves"]] == ["cat"]
-    assert votes.top_way(r["ways"]) == 1 and votes.top_way([2, 2, 0]) is None and votes.top_way([0, 0, 0]) is None
     assert votes.party_word("I'd join you but the gate is scary and also I have a lot to say about it") is None
 
 
@@ -118,7 +117,7 @@ def test_the_ai_writer_only_ever_gets_story_data():
 
 @pytest.fixture
 def episode(story, monkeypatch):
-    """Episode 1 prepared from comments with votes, ways and joins."""
+    """Episode 1 prepared from comments with votes and joins (some still say a way: it's ignored)."""
     (rendered, posted), seen = story
     monkeypatch.setattr(instagram, "comments", lambda media: [
         {"user": "ann", "text": "b sly join"}, {"user": "bob", "text": "B! sly"}, {"user": "cat", "text": "a bold"},
@@ -130,15 +129,15 @@ def episode(story, monkeypatch):
     return jobs.get(first["id"]), rendered, seen
 
 
-def test_the_episode_gets_the_party_credits_and_the_way_and_names_need_a_look(episode, discord):
+def test_the_episode_gets_the_party_and_credits_and_names_need_a_look(episode, discord):
     job, rendered, seen = episode
     assert job["status"] == "scheduled", job.get("error")
     spec = job["spec"]
     assert {c["handle"] for c in spec["party"]} == {"ann", "dan"} and all(c["name"] and c["cls"] for c in spec["party"])
     assert spec["credits"]["rolledBy"] in ("ann", "bob", "cat")
-    assert spec["voices"] == {"ways": [1, 2, 0], "way": "sly", "voters": 3}
+    assert spec["voices"] == {"voters": 3}
     ctx = [p for cmd, p in seen if cmd == "resolve"][-1]["ctx"]
-    assert ctx["way"] == "sly" and ctx["rally"] == 0  # 3 voters: no Rally yet
+    assert "way" not in ctx and ctx["rally"] == 0  # 3 voters: no Rally yet
     assert job["votes"]["joins"] == 2 and "ann" not in json.dumps(job["votes"])  # the episode keeps totals only
     assert {i["status"] for i in job["moderation"]} == {"pending"} and len(job["moderation"]) == 3
     assert any("shown for the first time" in m for m, _ in discord)
