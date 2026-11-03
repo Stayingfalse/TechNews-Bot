@@ -156,8 +156,12 @@ automatically after 90 days. The videos in `assets/explainer/` come from `render
 
 ## Tests
 
-`pip install -r requirements-dev.txt && python -m pytest` runs the suite (about 45 s; it renders one
-short video, so it needs ffmpeg and the emoji font, as in the Dockerfile). It covers cliffhanger
+`pip install -r requirements-dev.txt && python -m pytest` runs the suite in parallel (about 75 s on
+four cores; it renders one short video, so it needs ffmpeg and the emoji font, as in the Dockerfile).
+`-m "not slow"` skips the two slowest tests (about 40 s); `-n 0` runs in one process, e.g. for pdb.
+`cd adventure && npm test` runs the renderer's own tests. The suite also covers the API token, the
+sign-in cookie and what it may change, OAuth state, the sign-in redirect, music uploads, the
+platforms' token refresh (errors never carry a token) and Discord (never pings). It covers cliffhanger
 judging, shout-outs and replies, next-quiz links, viewer themes, the scheduler and deploy safety
 (lease, restart recovery, stuck-job watchdog), per-channel tokens, the voice-over fallback and mix,
 the API's booking checks, every scene and opening, the story/carousel images and the profile picture

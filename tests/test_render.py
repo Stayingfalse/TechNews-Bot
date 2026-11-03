@@ -47,6 +47,7 @@ def test_story_and_carousel_images(quiz, tmp_path):
     assert {Image.open(p).size for p in slides} == {(1080, 1350)}  # 4:5, the tallest a feed takes
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
 def test_short_video_encodes(quiz, tmp_path):
     q = copy.deepcopy(quiz)

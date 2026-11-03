@@ -10,7 +10,7 @@ from app.adventure import jobs as adv
 from app.main import app
 from app.racing import jobs as rjobs, races
 
-from helpers import ago, posted
+from tests.helpers import ago, posted
 
 AUTH = {"Authorization": "Bearer test-token"}
 

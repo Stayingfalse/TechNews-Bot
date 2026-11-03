@@ -521,7 +521,7 @@ def test_no_arc_fails_loudly_and_retries_when_one_arrives(client, story, discord
     assert r.json()["retried"] == [job["id"]] and jobs.get(job["id"])["status"] == "booked"
 
 
-def test_a_broken_rule_is_remembered_and_a_fallen_hero_stops_the_story(story, discord, monkeypatch):
+def test_a_fallen_hero_stops_the_story(story, discord, monkeypatch):
     monkeypatch.setattr(campaign, "dice", lambda ep, node: ([3, 3], f"1:{ep}:{node}"))
     arc = json.loads(json.dumps(ARC))
     lock = next(n for n in arc["nodes"] if n["id"] == "gate-lock")

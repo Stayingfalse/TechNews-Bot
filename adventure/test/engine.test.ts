@@ -7,6 +7,7 @@ import {
 import { Episode0 } from "../packages/shared/src/index.ts";
 import { EPISODE0_MAP, loadFonts, makeCanvas, prepare } from "../packages/renderer/src/canvas.ts";
 import type { Episode0Spec } from "../packages/engine/src/index.ts";
+import { type TextBox, outside, recordText } from "./safe-zone.ts";
 
 const pixels = (cv: unknown) => {
   const c = cv as ReturnType<typeof createCanvas>;
@@ -100,20 +101,6 @@ describe("episode 0 spec", () => {
   });
 });
 
-// Every piece of text must sit inside the area the Reels / Shorts overlays leave clear.
-const SAFE = { x0: 16, x1: 307, y0: 73, y1: 480 };
-
-function recordText(ctx: CanvasRenderingContext2D, out: { t: string; x0: number; x1: number; y0: number; y1: number }[]) {
-  const fill = ctx.fillText.bind(ctx);
-  ctx.fillText = (t: string, x: number, y: number) => {
-    const m = ctx.measureText(t), tr = ctx.getTransform(), s = 3; // logical units = device px / 3
-    const left = ctx.textAlign === "center" ? x - m.width / 2 : ctx.textAlign === "right" ? x - m.width : x;
-    const pts = [[left, y - m.actualBoundingBoxAscent], [left + m.width, y + m.actualBoundingBoxDescent]].map(([px, py]) => tr.transformPoint({ x: px, y: py }));
-    if (ctx.globalAlpha > 0.05) out.push({ t, x0: Math.min(pts[0].x, pts[1].x) / s, x1: Math.max(pts[0].x, pts[1].x) / s, y0: Math.min(pts[0].y, pts[1].y) / s, y1: Math.max(pts[0].y, pts[1].y) / s });
-    fill(t, x, y);
-  };
-}
-
 describe("episode 0 frames", () => {
   afterEach(() => vi.restoreAllMocks());
   const specs: Episode0Spec[] = [
@@ -129,13 +116,12 @@ describe("episode 0 frames", () => {
 
   it.each(specs.map((s) => [s.part, s] as const))("part %i keeps all text in the safe zone", async (_, spec) => {
     const r = await prepare({ spec, map: await map });
-    const P = plan0(spec), seen: { t: string; x0: number; x1: number; y0: number; y1: number }[] = [];
+    const P = plan0(spec), seen: TextBox[] = [];
     recordText(r.ctx as unknown as CanvasRenderingContext2D, seen);
     const times = [...P.beats.map(([a, b]) => (a + b) / 2), P.cta + 3, P.dur - 0.1];
     for (const t of times) r.draw(t);
     expect(seen.length).toBeGreaterThan(5);
-    const outside = seen.filter((b) => b.x0 < SAFE.x0 - 1 || b.x1 > SAFE.x1 + 1 || b.y0 < SAFE.y0 - 1 || b.y1 > SAFE.y1 + 1);
-    expect(outside.map((b) => `${b.t} [${b.x0.toFixed(0)},${b.y0.toFixed(0)}–${b.x1.toFixed(0)},${b.y1.toFixed(0)}]`)).toEqual([]);
+    expect(outside(seen)).toEqual([]);
   });
 
   it("draws the same frame twice identically and never calls Math.random", async () => {
