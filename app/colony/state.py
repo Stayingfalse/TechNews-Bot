@@ -38,8 +38,9 @@ def erase(handle: str) -> bool:
         hit = rules.erase(s, handle)
         if hit:
             save(s)
-    from . import inbox
+    from . import inbox, replies
 
+    replies.erase(handle)
     return bool(inbox.erase(handle)) or hit
 
 

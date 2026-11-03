@@ -47,6 +47,9 @@ async def lifespan(_: FastAPI):
     pipeline.start_background()
     adventure_jobs.start()
     racing_jobs.start_background()
+    from .colony import jobs as colony_jobs
+
+    colony_jobs.start_background()
     yield
 
 
@@ -543,7 +546,7 @@ def _channel_param(channel: str) -> str | None:
 
 
 @app.get("/metrics", dependencies=[Depends(require_token)])
-def get_metrics(channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+def get_metrics(channel: str = Query(default=channels.MAIN, description="main, adventure, racing, colony, or all")):
     """A channel's posts (default the quiz; `all` for every channel), newest first, each with its
     `channel`, `tags`, `extra` (the adventure's votes, racing's bets) and per-platform numbers
     (latest + 1h/24h/7d snapshots)."""
@@ -588,7 +591,7 @@ def post_insight(ins: Insight):
 
 
 @app.get("/insights", dependencies=[Depends(require_token)])
-def get_insights(limit: int = 8, channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+def get_insights(limit: int = 8, channel: str = Query(default=channels.MAIN, description="main, adventure, racing, colony, or all")):
     return _insights(_channel_param(channel))[-limit:][::-1]
 
 

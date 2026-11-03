@@ -16,6 +16,7 @@ from .config import settings
 MAIN = "main"
 ADVENTURE = "adventure"
 RACING = "racing"
+COLONY = "colony"
 
 
 @dataclass(frozen=True)
@@ -35,13 +36,15 @@ def registry() -> dict[str, Channel]:
                            list(settings.adventure_platforms)),
         RACING: Channel(RACING, "Sixel Speedway", "racing", settings.racing_handle, settings.racing_post_time,
                         list(settings.racing_platforms)),
+        COLONY: Channel(COLONY, "Farside", "colony", settings.colony_handle, settings.colony_post_time, ["instagram"]),
     }
 
 
 def active() -> dict[str, Channel]:
-    """The channels that are running: a switched-off one (RACING_ENABLED=false) keeps its posts and
-    numbers, but its logins aren't watched."""
-    return {cid: ch for cid, ch in registry().items() if cid != RACING or settings.racing_enabled}
+    """The channels that are running: a switched-off one (RACING_ENABLED, COLONY_ENABLED false) keeps
+    its posts and numbers, but its logins aren't watched."""
+    off = {RACING: not settings.racing_enabled, COLONY: not settings.colony_enabled}
+    return {cid: ch for cid, ch in registry().items() if not off.get(cid)}
 
 
 def get(channel_id: str | None) -> Channel:
