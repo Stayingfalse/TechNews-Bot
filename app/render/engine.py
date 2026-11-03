@@ -12,7 +12,7 @@ from pathlib import Path
 from PIL import Image
 
 from ..spec import QuizSpec
-from . import music
+from . import music, priority
 from . import voice as host
 from .audio import SR, voice_track, write_sfx_track, write_wav
 from .background import Background
@@ -112,6 +112,11 @@ def _init_worker(spec_json: str, brand: str, reveal: dict | None = None) -> None
     _WORKER = Video(QuizSpec.model_validate_json(spec_json), brand, reveal)
 
 
+def _init_pool_worker(*args) -> None:
+    priority.lower()  # a pool process: lower only it, never the web server running a 1-worker render
+    _init_worker(*args)
+
+
 def _render_frame(idx: int) -> bytes:
     assert _WORKER is not None
     return _WORKER.frame(idx).convert("RGB").tobytes()
@@ -119,15 +124,17 @@ def _render_frame(idx: int) -> bytes:
 
 def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", workers: int | None = None,
                  cover_path: str | Path | None = None, music_dir: Path | None = None, bundled_music: bool = True,
-                 reveal: dict | None = None, voice: host.VoiceConfig | None = None) -> dict:
+                 reveal: dict | None = None, voice: host.VoiceConfig | None = None, track=music.PICK) -> dict:
     """`reveal` = yesterday's cliffhanger ({answer, note, shoutouts}) to show before the outro.
-    `voice` = ElevenLabs settings, used when the spec asks for the host voice-over."""
+    `voice` = ElevenLabs settings, used when the spec asks for the host voice-over.
+    `track` = the music already chosen (a file, "synth" or None) instead of picking from the library."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     video = Video(spec, brand, reveal)
     workers = workers or max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4"))))
     t0 = time.time()
-    track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec), bundled_music)
+    if track is music.PICK:
+        track = music.pick(spec.music, music_dir or Path("/nonexistent"), seed_of(spec), bundled_music)
 
     voice_status, vo, voice_used = "off", None, ""
     if getattr(spec, "voice", False):
@@ -171,7 +178,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
             "-t", f"{video.duration:.3f}", "-movflags", "+faststart",
             str(out_path),
         ]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        proc = subprocess.Popen(priority.cmd(cmd), stdin=subprocess.PIPE)
         assert proc.stdin
         try:
             if workers == 1:
@@ -180,7 +187,7 @@ def render_video(spec: QuizSpec, out_path: str | Path, *, brand: str = "", worke
                     proc.stdin.write(_render_frame(i))
             else:
                 ctx = mp.get_context("spawn")  # safe inside the threaded web server
-                with ctx.Pool(workers, _init_worker, (spec.model_dump_json(), brand, reveal)) as pool:
+                with ctx.Pool(workers, _init_pool_worker, (spec.model_dump_json(), brand, reveal)) as pool:
                     for buf in pool.imap(_render_frame, range(video.n_frames), chunksize=4):
                         proc.stdin.write(buf)
         finally:

@@ -173,6 +173,12 @@ class Settings:
         self.keep_videos_days = int(os.environ.get("KEEP_VIDEOS_DAYS", "3"))
         # Booked quizzes are rendered this long before their slot (a render takes 2-4 minutes).
         self.render_lead_minutes = int(os.environ.get("RENDER_LEAD_MINUTES", "45"))
+        # Render worker (docs/SETUP.md, "Render worker"): the same image elsewhere, started with
+        # APP=app.render_worker:app, renders the videos; this server posts them. Any failure there
+        # and this server renders the video itself. Unset: everything renders here, as before.
+        self.render_url = os.environ.get("RENDER_URL", "").strip().rstrip("/")
+        self.render_token = os.environ.get("RENDER_TOKEN", "")
+        self.render_timeout = float(os.environ.get("RENDER_TIMEOUT", "900"))  # seconds, per video
         # A quiz is rejected (409) if any of its answers was used within this many days.
         self.repeat_days = int(os.environ.get("REPEAT_DAYS", "365"))
         self._music_dir = os.environ.get("MUSIC_DIR", "")

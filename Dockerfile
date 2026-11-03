@@ -24,5 +24,7 @@ COPY --from=adventure /srv/adventure /srv/adventure
 ENV DATA_DIR=/data PYTHONUNBUFFERED=1 ADVENTURE_DIR=/srv/adventure
 VOLUME /data
 EXPOSE 8000
-HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# APP=app.render_worker:app runs this image as the render worker (docs/SETUP.md, "Render worker");
+# PORT is for hosts that choose the port themselves.
+HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/health')"
+CMD ["sh", "-c", "exec uvicorn \"${APP:-app.main:app}\" --host 0.0.0.0 --port \"${PORT:-8000}\""]

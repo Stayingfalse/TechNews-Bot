@@ -19,6 +19,7 @@ from pathlib import Path
 from . import channels, cliffhanger, health, lease, legal, metrics, notify, privacy, social, store, themes
 from .config import settings
 from .publish import LABELS, PUBLISHERS, refreshers
+from .render import remote
 from .render.engine import render_video
 from .render.voice import VoiceConfig
 from .spec import QuizSpec
@@ -131,9 +132,12 @@ def _render(job: dict) -> None:
     voice_id = settings.voices.get(spec.voice_name.lower(), settings.elevenlabs_voice_id)
     vcfg = VoiceConfig(settings.elevenlabs_api_key, voice_id, settings.elevenlabs_model,
                        settings.data_dir / "voice") if settings.elevenlabs_api_key else None
-    info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
-                        bundled_music=settings.music_bundled,
-                        reveal=screen, voice=vcfg)
+    info = remote.quiz(spec, video, cover, brand=settings.brand_handle, music_dir=settings.music_dir,
+                       bundled_music=settings.music_bundled, reveal=screen, voice=vcfg)
+    if info is None:  # no render worker, or it failed: render here
+        info = render_video(spec, video, brand=settings.brand_handle, cover_path=cover, music_dir=settings.music_dir,
+                            bundled_music=settings.music_bundled,
+                            reveal=screen, voice=vcfg)
     if (store.get_job(job["id"]) or {}).get("status") == "cancelled":  # cancelled while rendering
         video.unlink(missing_ok=True)
         cover.unlink(missing_ok=True)

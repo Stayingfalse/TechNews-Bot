@@ -100,6 +100,12 @@ def _fetch(text: str, cfg: VoiceConfig) -> Path:
     if path.exists():
         cfg.used.add(cfg.voice_id)
         return path
+    if not cfg.api_key:  # a render worker: the main server made every line ahead and sent it along
+        spare = _cached(FALLBACK_VOICE, text, cfg)
+        if spare.exists():
+            cfg.used.add(FALLBACK_VOICE)
+            return spare
+        raise RuntimeError("host line wasn't sent with the render")
     if cfg.model in EXPRESSIVE:  # these read delivery tags; they take only 0, 0.5 or 1 for stability
         body = {"text": f"[excited] {text}", "model_id": cfg.model, "voice_settings": {"stability": 0.5}}
     else:
@@ -135,6 +141,11 @@ def _decode(path: Path) -> np.ndarray:
     raw = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", str(SR), "-"],
                          check=True, capture_output=True).stdout
     return np.frombuffer(raw, np.float32)
+
+
+def fetch_all(video, cfg: VoiceConfig) -> list[Path]:
+    """Every host line as its mp3 (made now if it isn't cached yet), for sending to a render worker."""
+    return [_fetch(text, cfg) for _, text in script(video)]
 
 
 def clips(video, cfg: VoiceConfig) -> list[tuple[float, np.ndarray]]:
