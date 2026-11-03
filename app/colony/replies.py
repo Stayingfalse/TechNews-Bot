@@ -37,16 +37,21 @@ def _save(q: dict) -> None:
     os.replace(tmp, p)
 
 
+def _k(it: dict) -> tuple[str, str]:
+    return it["comment_id"], it.get("kind") or "answer"
+
+
 def add(items: list[dict]) -> int:
-    """Queue {comment_id, user, text} replies; a comment already queued or answered is skipped."""
+    """Queue {comment_id, user, text, kind} replies. A comment gets at most one of each kind: an
+    "ack" straight away and an "answer" once the episode that answers it has posted."""
     with _lock:
         q = queue()
-        known = {i["comment_id"] for i in q["items"] + q["sent"]}
+        known = {_k(i) for i in q["items"] + q["sent"]}
         n = 0
         for it in items:
-            if it.get("comment_id") and it["comment_id"] not in known and it.get("text"):
+            if it.get("comment_id") and _k(it) not in known and it.get("text"):
                 q["items"].append({**it, "text": it["text"][:300]})
-                known.add(it["comment_id"])
+                known.add(_k(it))
                 n += 1
         _save(q)
     return n
@@ -92,6 +97,11 @@ def send_due(now: datetime | None = None) -> int:
         q["sent"] = q["sent"][-2000:]
         _save(q)
     return sent
+
+
+def acked() -> set[str]:
+    q = queue()
+    return {i["comment_id"] for i in q["items"] + q["sent"] if i.get("kind") == "ack"}
 
 
 def erase(handle: str) -> int:

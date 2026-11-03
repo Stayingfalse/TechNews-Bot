@@ -97,7 +97,9 @@ def test_an_adapted_day_posts_its_changes_and_replies(ig, monkeypatch):
     assert st["look"]["carrier"] == "barrel" and st["featured_on"] == [DAY.isoformat()]
     with channels.use(channels.COLONY):
         replies.send_due(at(DAY, 19, 2))
-    assert ig["replies"] == [("a", "Pull up a barrel.")]
+        replies.send_due(at(DAY, 19, 3))
+    assert [cid for cid, _ in ig["replies"]] == ["a", "a"]  # welcomed when it was read, then answered
+    assert "Welcome to Farside" in ig["replies"][0][1] and ig["replies"][1][1] == "Pull up a barrel."
 
 
 def test_followers_and_yesterdays_shares_drive_the_next_day(ig, monkeypatch):
@@ -170,3 +172,25 @@ def test_start_takes_a_time_from_the_api(ig, monkeypatch):
         assert r.status_code == 202, r.text
         first = datetime.fromisoformat(r.json()["first_post"])
         assert timedelta(minutes=29) < first - datetime.now(timezone.utc) < timedelta(minutes=31)
+
+
+def test_new_comments_get_a_quick_welcome_and_requests_a_noted(ig, monkeypatch):
+    monkeypatch.setattr(jobs, "now", lambda: at(DAY, 9, 0))
+    jobs.start(at=at(DAY, 15, 30))
+    jobs.tick(at(DAY, 14, 31)); jobs.tick(at(DAY, 15, 30))  # episode 1 posts
+    ig["comments"] = [comment("c1", "nova.k", "hi!", at(DAY, 15, 40)),
+                      comment("c2", "nova.k", "can I be a pirate", at(DAY, 15, 41)),
+                      comment("c3", "mossbyte", "so cute", at(DAY, 15, 42))]
+    monkeypatch.setattr(inbox, "deepseek_enabled", lambda: False)
+    monkeypatch.setattr(jobs, "now", lambda: at(DAY, 15, 45))
+    inbox.add([])  # nothing new by hand: the poll reads them
+    res = jobs.poll()
+    assert res["acks"] == 2  # nova.k's first comment and mossbyte's (c2 isn't sorted as a request without DeepSeek)
+    q = replies.queue()["items"]
+    assert {i["comment_id"] for i in q} == {"c1", "c3"} and all(i["kind"] == "ack" for i in q)
+    assert "Welcome to Farside, @nova.k" in q[0]["text"] and "the next episode (" in q[0]["text"]
+    assert jobs.poll()["acks"] == 0  # once each
+    box = inbox.load(); box["comments"]["c2"]["kind"] = "request"; inbox._save(box)
+    assert jobs.poll()["acks"] == 1 and "Noted, @nova.k" in replies.queue()["items"][-1]["text"]
+    # the answer after the episode is a second reply to the same comment, not blocked by the ack
+    assert replies.add([{"comment_id": "c1", "user": "nova.k", "text": "You're in!", "kind": "answer"}]) == 1

@@ -84,6 +84,10 @@ def rule_kind(text: str) -> str | None:
     t = (text or "").strip()
     if plan.LINK.search(t) or plan.BLOCKLIST.search(t):
         return "not_ok"
+    from .talk import is_jailbreak
+
+    if is_jailbreak(t):  # aimed at an AI: never sorted, answered or shown
+        return "not_ok"
     if rules._job_in(t) and len(t.split()) <= 3:
         return "job"
     return None

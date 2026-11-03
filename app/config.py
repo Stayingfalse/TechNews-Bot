@@ -111,6 +111,9 @@ class Settings:
         self.colony_reply_per_hour = int(os.environ.get("COLONY_REPLY_PER_HOUR", "60"))
         # Voices (docs/COLONY_PLAN.md §5d): a narrator, the crew's own, and a pool for settlers
         # (name=id,...; "old" and "young" go to old and kid settlers). Characters a month: the budget.
+        # Roll call (app/colony/rollcall.py): everyone's settler in a grid, tagged, every N days (0 = off)
+        self.colony_rollcall_days = int(os.environ.get("COLONY_ROLLCALL_DAYS", "3"))
+        self.colony_rollcall_time = os.environ.get("COLONY_ROLLCALL_TIME", "12:40")
         self.colony_voice = _bool("COLONY_VOICE", True)
         self.colony_voice_budget = int(os.environ.get("COLONY_VOICE_BUDGET", "15000"))
         self.colony_voice_model = os.environ.get("COLONY_VOICE_MODEL", "eleven_multilingual_v2")
