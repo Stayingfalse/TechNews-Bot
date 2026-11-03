@@ -166,5 +166,6 @@ def test_start_takes_a_time_from_the_api(ig, monkeypatch):
     soon = (datetime.now(settings.tz) + timedelta(minutes=30)).strftime("%H:%M")
     r = TestClient(app).post(f"/colony/start?at={soon}", headers=AUTH)
     if datetime.now(settings.tz).hour < 23:  # not across midnight
-        assert r.status_code == 200, r.text
-        assert r.json()["first_post"].startswith(datetime.now(settings.tz).astimezone(timezone.utc).date().isoformat()[:7])
+        assert r.status_code == 202, r.text
+        first = datetime.fromisoformat(r.json()["first_post"])
+        assert timedelta(minutes=29) < first - datetime.now(timezone.utc) < timedelta(minutes=31)
