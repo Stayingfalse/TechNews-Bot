@@ -217,3 +217,24 @@ def test_a_real_quiz_video_comes_back_whole(worker, quiz, tmp_path):
     streams = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(out)],
                              capture_output=True, text=True, check=True).stdout.split()
     assert sorted(streams) == ["audio", "video"] and (tmp_path / "c.jpg").stat().st_size > 1000
+
+
+def test_a_farside_episode_goes_with_its_voice(worker, tmp_path, monkeypatch):
+    import numpy as np
+
+    from app.render.colony import video as colony_video
+
+    got = {}
+
+    def render(spec, out, voice=None):
+        got["spec"], got["voice"] = spec, voice
+        out.write_bytes(b"FARSIDE")
+
+    monkeypatch.setattr(colony_video, "render", render)
+    monkeypatch.setattr(colony_video, "frame_at", lambda spec, t: np.zeros((4, 4, 3), np.uint8))
+    lines = [(1.5, np.linspace(-1, 1, 100, dtype=np.float32)), (7.25, np.ones(50, np.float32))]
+    info = remote.colony({"duration": 30.0, "shots": []}, tmp_path / "f.mp4", tmp_path / "f.jpg", lines)
+    assert info["rendered_by"] == "worker" and (tmp_path / "f.mp4").read_bytes() == b"FARSIDE"
+    assert (tmp_path / "f.jpg").stat().st_size > 0 and got["spec"]["duration"] == 30.0
+    assert [t for t, _ in got["voice"]] == [1.5, 7.25]
+    assert all(np.array_equal(a, b) for (_, a), (_, b) in zip(got["voice"], lines))

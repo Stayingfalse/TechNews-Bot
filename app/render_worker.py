@@ -115,6 +115,28 @@ def _adventure(req: dict, tmp: Path, out: Path) -> dict:
     return _node(str(spec_file), "--out", str(out), "--workers", workers, *args)
 
 
+def _colony(req: dict, tmp: Path, out: Path, cover: Path | None) -> dict:
+    import time
+
+    import numpy as np
+    from PIL import Image
+
+    from .render.colony import video
+
+    voice = None
+    name = req["options"].get("voice")
+    if name:
+        if not remote.safe_name(name) or not (tmp / name).is_file():
+            raise HTTPException(400, f"missing file {name!r}")
+        with np.load(tmp / name) as z:
+            voice = [(float(t), z[f"line{i}"]) for i, t in enumerate(z["times"])]
+    spec, t0 = req["spec"], time.time()
+    video.render(spec, out, voice=voice)
+    if cover is not None:
+        Image.fromarray(video.frame_at(spec, min(spec["duration"] - 0.1, 3.0))).save(cover, quality=90)
+    return {"duration": spec["duration"], "seconds": round(time.time() - t0, 1)}
+
+
 @app.post("/render")
 async def render(request: Request, authorization: str = Header(default="")) -> Response:
     if not TOKEN or not hmac.compare_digest(authorization.encode(), f"Bearer {TOKEN}".encode()):
@@ -146,6 +168,8 @@ def _run(body: bytes) -> Response:
                 info = _quiz(req, tmp, out, cover)
             elif kind == "racing":
                 info = _racing(req, out, cover)
+            elif kind == "colony":
+                info = _colony(req, tmp, out, cover)
             else:
                 info = _adventure(req, tmp, out)
         except HTTPException:

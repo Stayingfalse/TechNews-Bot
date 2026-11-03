@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import priority
 from . import scene, sound, views
 
 FPS = 30
@@ -36,7 +37,7 @@ def render(ep: dict, path: str | Path, audio: str | Path | None = None, voice: l
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "1080x1920",
            "-r", str(FPS), "-i", "-", "-i", str(audio or wav), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(path)]
-    ff = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    ff = subprocess.Popen(priority.cmd(cmd), stdin=subprocess.PIPE)
     cuts = np.cumsum([s["dur"] for s in ep["shots"]])[:-1]
     blend = int(0.5 * FPS)
     try:

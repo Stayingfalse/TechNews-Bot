@@ -322,6 +322,7 @@ def _voice(job: dict, spec: dict, s: dict) -> tuple[dict, list | None]:
 def _render(job: dict, spec: dict, persist: bool = True, voice: list | None = None) -> None:
     from PIL import Image
 
+    from ..render import remote
     from ..render.colony import video
 
     job["status"] = "rendering"
@@ -331,11 +332,14 @@ def _render(job: dict, spec: dict, persist: bool = True, voice: list | None = No
     out = settings.videos_dir / f"{job['id']}-{secrets.token_urlsafe(8)}.mp4"
     cover = out.with_suffix(".jpg")
     t0 = time.time()
-    video.render(spec, out, voice=voice)
-    Image.fromarray(video.frame_at(spec, min(spec["duration"] - 0.1, 3.0))).save(cover, quality=90)
+    info = remote.colony(spec, out, cover, voice)
+    if info is None:  # no render worker, or it failed: render here
+        video.render(spec, out, voice=voice)
+        Image.fromarray(video.frame_at(spec, min(spec["duration"] - 0.1, 3.0))).save(cover, quality=90)
+        info = {"duration": spec["duration"]}
+    info["seconds"] = round(time.time() - t0, 1)
     job.update(video=out.name, video_url=f"{settings.public_base_url}/media/{out.name}",
-               cover_url=f"{settings.public_base_url}/media/{cover.name}",
-               render={"duration": spec["duration"], "seconds": round(time.time() - t0, 1)})
+               cover_url=f"{settings.public_base_url}/media/{cover.name}", render=info)
     if persist:
         save(job)
 

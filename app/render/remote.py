@@ -24,7 +24,7 @@ import httpx
 from ..config import settings
 
 log = logging.getLogger(__name__)
-KINDS = ("quiz", "racing", "adventure")
+KINDS = ("quiz", "racing", "adventure", "colony")
 FILE_ARG = "@file:"  # in `args`, a file sent with the request (the worker swaps in its own path)
 
 _warned = {"at": 0.0}
@@ -154,3 +154,22 @@ def adventure(spec: dict, out: Path, args: list[str]) -> dict | None:
         return None
     sent, files = file_args(args)
     return render("adventure", spec, out, options={"args": sent}, files=files)
+
+
+def colony(spec: dict, out: Path, cover: Path, voice: list | None = None) -> dict | None:
+    """A Farside episode (app/render/colony/video.py); `voice` = its lines as (time, samples)."""
+    if not enabled():
+        return None
+    import tempfile
+
+    import numpy as np
+
+    files, opts = {}, {}
+    with tempfile.TemporaryDirectory() as d:
+        if voice:
+            npz = Path(d) / "voice.npz"
+            np.savez(npz, times=np.array([t for t, _ in voice], np.float64),
+                     **{f"line{i}": np.asarray(a, np.float32) for i, (_, a) in enumerate(voice)})
+            files["files/voice.npz"] = npz
+            opts["voice"] = "files/voice.npz"
+        return render("colony", spec, out, cover, options=opts, files=files)
