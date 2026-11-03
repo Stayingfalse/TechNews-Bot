@@ -321,6 +321,355 @@ export const THINGS: Record<string, Thing> = {
       motes(c, T, 0, -12, 10, 24, "200,225,255", 8);
     },
   },
+  // ---- week 2: Merlin's cave
+  merlin: {
+    glow: "200,190,255",
+    about: "Merlin, old and tired, reading at his desk by a candle, a bowl of stew steaming beside him",
+    words: ["merlin", "seer", "stew", "bowl"],
+    eye: [-12, -34],
+    prop: [
+      ["box", -14, -2, 16, 30, 6, "#4a3020"],
+      ["p", [-28, 0, -24, -30, -14, -36, -4, -30, 0, 0], "#3d4a7a"], ["p", [-24, -30, -14, -36, -16, -16, -22, -14], "#34406b"],
+      ["e", -14, -40, 5, 5.5, "#e3c4a2"], ["p", [-19, -39, -9, -39, -11, -27, -14, -22, -17, -27], "#ece8e0"],
+      ["e", -14, -44, 9.5, 2.4, "#2c3560"], ["p", [-21, -44, -15, -66, -12, -63, -7, -44], "#2c3560"],
+      ["d", -12.5, -63, 0.9, "#d4a440"], ["d", -16.5, -52, 0.8, "#d4a440"],
+      ["box", 8, 0, 36, 14, 20, "#6b4a2a"],
+      ["p", [-6, -17, 6, -19, 14, -17, 2, -15], "#e8dcc0"], ["l", 4, -18, 4, -15, "#8a6e3a", 0.6],
+      ["e", 21, -16, 5.5, 2.4, "#7a4a2a"], ["e", 21, -17, 4.2, 1.5, "#c0803a"],
+      ["cyl", 13, -16, 1.4, 6, "#efe6d0"], ["flame", 13, -23, 2.4], ["light", 6, -24, 90, "255,200,120"],
+    ],
+    live: (c, T) => {
+      // steam off the stew, the candle's shadow on his face, an eye that lifts from the page now and then
+      c.strokeStyle = "rgba(245,240,230,.45)";
+      c.lineWidth = 1;
+      for (let i = 0; i < 2; i++) {
+        const ph = (T * 0.45 + i * 0.5) % 1;
+        c.globalAlpha = Math.sin(ph * Math.PI);
+        c.beginPath();
+        c.moveTo(20 + i * 2, -18);
+        c.bezierCurveTo(17 + i * 2, -23 - ph * 4, 24 + i * 2, -27 - ph * 6, 20 + i * 2, -33 - ph * 8);
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+      const look = Math.sin(T * 0.6) > 0.7 ? -1.2 : 0.4; // he glances up at you
+      c.fillStyle = "#2a1d14";
+      c.beginPath();
+      c.arc(-16, -41 + look * 0.4, 0.75, 0, 7);
+      c.arc(-12, -41 + look * 0.4, 0.75, 0, 7);
+      c.fill();
+      const page = (T * 0.25) % 1; // a page turning
+      if (page < 0.15) {
+        c.fillStyle = "rgba(240,232,210,.9)";
+        c.beginPath();
+        c.moveTo(4, -18);
+        c.lineTo(4 - Math.sin(page / 0.15 * Math.PI) * 6, -22);
+        c.lineTo(6, -16);
+        c.closePath();
+        c.fill();
+      }
+    },
+  },
+  stoneface: {
+    glow: "210,205,180",
+    about: "a giant face carved into the cave wall: its eyes follow you and its stone jaw grinds open",
+    words: ["stone face", "face", "giant"],
+    eye: [0, -30],
+    prop: [
+      ["p", [-36, 0, -32, -48, -14, -62, 14, -62, 32, -48, 36, 0], "#8a857a"],
+      ["p", [-24, -40, 24, -40, 20, -34, -20, -34], "#6f6a60"],
+      ["e", -11, -30, 5.5, 3.6, "#221c1a"], ["e", 11, -30, 5.5, 3.6, "#221c1a"],
+      ["p", [0, -32, 6, -16, -6, -16], "#7a756a"],
+      ["l", -26, -52, -18, -44, "#5a554c", 0.9], ["l", 20, -10, 28, -22, "#5a554c", 0.9],
+      ["c", -28, -10, 4, "#5a6a40"], ["c", 26, -46, 3, "#5a6a40"],
+      ["light", 0, -30, 60, "220,200,150"],
+    ],
+    live: (c, T) => {
+      eyes(c, 0, -30, T, 11, 1.8);
+      const j = 3 + Math.max(0, Math.sin(T * 0.9)) * 5; // the jaw grinds open, and shut
+      c.fillStyle = "#1a1614";
+      c.strokeStyle = "#2a1d14";
+      c.lineWidth = 0.8;
+      c.beginPath();
+      c.ellipse(0, -8, 15, j, 0, 0, 7);
+      c.fill();
+      c.stroke();
+      c.fillStyle = "#d8d2c0";
+      for (const x of [-8, -3, 2, 7]) c.fillRect(x, -8 - j + 0.5, 3, 2);
+      motes(c, T, 0, -10, 14, -14, "200,190,170", 6, -1);
+    },
+  },
+  bridge: {
+    glow: "255,210,150",
+    about: "a sagging rope bridge across a dark chasm between two rock ledges",
+    words: ["rope bridge", "bridge", "ropes"],
+    eye: [0, -8],
+    prop: [
+      ["e", 0, 4, 24, 7, "#0e0a0e"],
+      ["p", [-40, 6, -40, -6, -28, -8, -22, 6], "#7a756e"], ["p", [40, 6, 40, -6, 28, -8, 22, 6], "#7a756e"],
+      ["cyl", -30, -6, 1.8, 16, "#6b4a2a"], ["cyl", 30, -6, 1.8, 16, "#6b4a2a"],
+      ["light", 0, -8, 70, "255,200,140"],
+    ],
+    live: (c, T) => {
+      // planks and ropes, swaying
+      const sw = Math.sin(T * 1.2) * 1.6;
+      const at = (u: number, sag: number) => [-30 + u * 60, -8 + Math.sin(u * Math.PI) * sag + Math.sin(u * Math.PI) * sw];
+      c.strokeStyle = "#8a6e3a";
+      c.lineWidth = 1;
+      for (const [top, sag] of [[-14, 6], [-8, 8]]) {
+        c.beginPath();
+        for (let k = 0; k <= 20; k++) {
+          const [x, y] = at(k / 20, sag);
+          if (k) c.lineTo(x, y + top + 8);
+          else c.moveTo(x, y + top + 8);
+        }
+        c.stroke();
+      }
+      for (let k = 1; k < 14; k++) {
+        const [x, y] = at(k / 14, 8);
+        c.fillStyle = k % 2 ? "#9a7444" : "#86622f";
+        c.fillRect(x - 1.8, y - 1, 3.6, 2.4);
+        c.strokeStyle = "rgba(138,110,58,.8)";
+        c.beginPath();
+        c.moveTo(x, y);
+        c.lineTo(x, y - 6);
+        c.stroke();
+      }
+    },
+  },
+  rootstair: {
+    glow: "220,200,150",
+    about: "a stair of twisted roots climbing the cave wall; something paces at the top",
+    words: ["root stair", "roots", "root", "stair"],
+    eye: [0, -30],
+    prop: [
+      ["p", [-30, 0, -32, -58, 30, -60, 32, 0], "#5f5a52"],
+      ["l", -24, -2, -6, -10, "#5a3a1e", 4.2], ["l", -6, -10, 12, -18, "#6b4a2a", 4.2], ["l", 12, -18, -4, -28, "#5a3a1e", 4.2],
+      ["l", -4, -28, 14, -38, "#6b4a2a", 4.2], ["l", 14, -38, 0, -48, "#5a3a1e", 4.2], ["l", 0, -48, 16, -56, "#6b4a2a", 4],
+      ["l", -20, -30, -10, -36, "#4a3018", 1.6], ["l", 22, -12, 28, -26, "#4a3018", 1.6],
+      ["c", -6, -10, 2.4, "#7a5a32"], ["c", 12, -18, 2.4, "#7a5a32"], ["c", -4, -28, 2.4, "#7a5a32"], ["c", 14, -38, 2.4, "#7a5a32"],
+    ],
+    live: (c, T) => {
+      const x = Math.sin(T * 0.8) * 18; // two eyes pacing in the dark above
+      c.fillStyle = `rgba(230,200,90,${0.55 + 0.35 * Math.sin(T * 5)})`;
+      c.beginPath();
+      c.arc(x - 1.5, -63, 0.9, 0, 7);
+      c.arc(x + 1.5, -63, 0.9, 0, 7);
+      c.fill();
+      motes(c, T, x, -60, 4, -40, "200,180,150", 5, -1);
+    },
+  },
+  cavemouth: {
+    glow: "255,200,130",
+    about: "the mouth of a cave in a rock face, lamplight flickering inside, chalk marks scratched beside it",
+    words: ["cave mouth", "mouth", "chalk"],
+    eye: [0, -18],
+    prop: [
+      ["p", [-36, 0, -32, -36, -18, -52, 18, -52, 32, -36, 36, 0], "#7a756c"],
+      ["p", [-16, 0, -16, -24, 0, -36, 16, -24, 16, 0], "#120e14"],
+      ["l", -28, -30, -22, -22, "#f0ece0", 0.9], ["l", -22, -30, -28, -22, "#f0ece0", 0.9], ["l", -30, -16, -20, -16, "#f0ece0", 0.9],
+      ["l", -26, -12, -24, -8, "#f0ece0", 0.9],
+      ["c", 28, -6, 3, "#5a6a40"], ["c", -30, -44, 2.4, "#5a6a40"],
+      ["light", 0, -14, 90, "255,190,110"],
+    ],
+    live: (c, T) => {
+      const a = 0.45 + 0.25 * Math.sin(T * 7) + 0.1 * Math.sin(T * 13);
+      const g = c.createRadialGradient(0, -12, 1, 0, -12, 15);
+      g.addColorStop(0, `rgba(255,200,120,${a})`);
+      g.addColorStop(1, "rgba(255,200,120,0)");
+      c.fillStyle = g;
+      c.beginPath();
+      c.moveTo(-16, 0);
+      c.lineTo(-16, -24);
+      c.lineTo(0, -36);
+      c.lineTo(16, -24);
+      c.lineTo(16, 0);
+      c.closePath();
+      c.fill();
+      // whispers drifting out of the dark
+      c.strokeStyle = "rgba(225,225,240,.35)";
+      c.lineWidth = 0.7;
+      for (let i = 0; i < 3; i++) {
+        const ph = (T * 0.3 + i / 3) % 1, y = -20 + i * 5;
+        c.globalAlpha = Math.sin(ph * Math.PI);
+        c.beginPath();
+        c.moveTo(8 + ph * 26, y);
+        c.bezierCurveTo(14 + ph * 26, y - 4, 18 + ph * 26, y + 3, 24 + ph * 26, y - 2);
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+    },
+  },
+  ledge: {
+    glow: "200,210,240",
+    about: "a dry stone ledge over a cold drop: somewhere to rest, a blanket and a few stones",
+    words: ["ledge", "drop"],
+    eye: [-6, -12],
+    prop: [
+      ["e", 22, 8, 18, 7, "#0c080c"],
+      ["box", -8, 0, 44, 10, 18, "#8a857c"], ["l", -26, -4, 12, -4, "#6f6a62", 0.8],
+      ["e", -12, -13, 11, 3.4, "#7a3a2a"], ["e", -18, -15, 4, 2.6, "#b08a58"],
+      ["sph", 6, -12, 2.4, "#9a958e"], ["sph", 10, -12, 1.8, "#8a857e"],
+    ],
+    live: (c, T) => {
+      // cold air breathing up out of the drop
+      c.strokeStyle = "rgba(210,225,245,.4)";
+      c.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const ph = (T * 0.35 + i / 3) % 1;
+        c.globalAlpha = Math.sin(ph * Math.PI) * 0.8;
+        c.beginPath();
+        c.moveTo(18 + i * 5, 6 - ph * 22);
+        c.bezierCurveTo(14 + i * 5, 2 - ph * 22, 24 + i * 5, -2 - ph * 22, 20 + i * 5, -8 - ph * 22);
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+    },
+  },
+  echohall: {
+    glow: "190,180,240",
+    about: "a round hall of pillars where every sound comes back, wrong",
+    words: ["echo", "hall"],
+    eye: [0, -14],
+    prop: [
+      ["e", 0, 0, 32, 12, "#5a5660"],
+      ...[-28, -14, 0, 14, 28].map((x, i): Part => ["cyl", x, -4 - Math.abs(Math.cos(i)) * 4 + 4, 3, 30, "#a8a29a"]),
+      ["light", 0, -14, 80, "190,180,240"],
+    ],
+    live: (c, T) => {
+      for (let i = 0; i < 4; i++) { // the sound going round, and round
+        const ph = (T * 0.5 + i / 4) % 1;
+        c.strokeStyle = `rgba(210,200,250,${0.6 * (1 - ph)})`;
+        c.lineWidth = 0.9;
+        c.beginPath();
+        c.ellipse(0, -14, 3 + ph * 30, 1.4 + ph * 12, 0, 0, 7);
+        c.stroke();
+      }
+    },
+  },
+  crack: {
+    glow: "255,210,140",
+    about: "a crack in the rock narrowing to a hand's width, warm air and the smell of old paper coming through",
+    words: ["crack", "narrow"],
+    eye: [0, -26],
+    prop: [
+      ["p", [-32, 0, -30, -58, 30, -60, 32, 0], "#6a655c"],
+      ["p", [-3, 0, -6, -20, -2, -34, -5, -52, 3, -54, 2, -36, 6, -18, 4, 0], "#1a1410"],
+      ["l", -20, -40, -10, -30, "#55504a", 0.8], ["l", 18, -12, 24, -30, "#55504a", 0.8],
+      ["light", 0, -26, 70, "255,210,140"],
+    ],
+    live: (c, T) => {
+      const a = 0.5 + 0.3 * Math.sin(T * 1.7);
+      c.strokeStyle = `rgba(255,215,140,${a})`;
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.moveTo(1, -2);
+      c.lineTo(-1, -20);
+      c.lineTo(2, -34);
+      c.lineTo(0, -50);
+      c.stroke();
+      for (let i = 0; i < 3; i++) { // scraps of old paper, blown out
+        const ph = (T * 0.28 + i / 3) % 1;
+        c.save();
+        c.translate(2 + ph * 22, -30 + i * 8 + Math.sin(T * 2 + i) * 3);
+        c.rotate(T * 2 + i);
+        c.fillStyle = `rgba(235,222,190,${Math.sin(ph * Math.PI)})`;
+        c.fillRect(-1.6, -1.1, 3.2, 2.2);
+        c.restore();
+      }
+    },
+  },
+  // ---- week 3: the fey wood
+  horseherd: {
+    glow: "220,230,190",
+    about: "a horse-herd in a hood, leaning on a staff beside a grey horse; he speaks to you and knows the road",
+    words: ["horse-herd", "horseherd", "horse", "herdsman"],
+    eye: [-14, -34],
+    prop: [
+      ["e", 10, -16, 16, 7, "#9a9590"], ["l", 0, -12, -1, 0, "#7a7570", 2.2], ["l", 6, -12, 6, 0, "#7a7570", 2.2],
+      ["l", 16, -12, 17, 0, "#7a7570", 2.2], ["l", 22, -12, 22, 0, "#7a7570", 2.2],
+      ["p", [22, -20, 30, -32, 34, -30, 30, -18], "#9a9590"], ["e", 33, -30, 4, 2.6, "#a8a39e"], ["d", 33, -32, 0.7, "#1a1414"],
+      ["p", [24, -24, 28, -32, 26, -22], "#5a5048"],
+      ["p", [-22, 0, -18, -28, -14, -32, -10, -28, -6, 0], "#5a6a3a"], ["e", -14, -34, 4.5, 5, "#e3c4a2"],
+      ["p", [-19, -32, -14, -42, -9, -32, -10, -36, -14, -38, -18, -36], "#4a5a2e"],
+      ["l", -4, 0, -2, -40, "#7a5a32", 1.6],
+    ],
+    live: (c, T) => {
+      const s = Math.sin(T * 2.2); // the tail swishes
+      c.strokeStyle = "#6a6058";
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(-5, -18);
+      c.quadraticCurveTo(-9 + s * 3, -12, -7 + s * 4, -6);
+      c.stroke();
+      const ph = (T * 0.5) % 1; // and its breath in the cold
+      c.fillStyle = `rgba(235,235,240,${0.4 * Math.sin(ph * Math.PI)})`;
+      c.beginPath();
+      c.arc(38 + ph * 6, -30 - ph * 3, 1.4 + ph * 2, 0, 7);
+      c.fill();
+    },
+  },
+  cowherd: {
+    glow: "230,220,180",
+    about: "a cow-herd with a crook beside a brown cow with a bell; she speaks to you and knows the road",
+    words: ["cow-herd", "cowherd", "cow", "herd"],
+    eye: [-14, -34],
+    prop: [
+      ["e", 10, -14, 17, 8, "#8a5a3a"], ["e", 6, -16, 5, 3, "#f0e8dc"], ["l", 0, -10, 0, 0, "#6a4228", 2.4], ["l", 6, -10, 6, 0, "#6a4228", 2.4],
+      ["l", 16, -10, 16, 0, "#6a4228", 2.4], ["l", 22, -10, 22, 0, "#6a4228", 2.4],
+      ["e", 30, -20, 5.5, 4.5, "#8a5a3a"], ["e", 33, -18, 3, 2, "#e8c8b0"], ["d", 29, -22, 0.7, "#1a1414"],
+      ["l", 27, -24, 24, -28, "#efe6d0", 1], ["l", 31, -24, 33, -28, "#efe6d0", 1], ["c", 28, -13, 1.6, "#d4a440"],
+      ["p", [-22, 0, -18, -28, -14, -32, -10, -28, -6, 0], "#7a4a5a"], ["e", -14, -34, 4.5, 5, "#e8c8a8"],
+      ["p", [-19, -32, -14, -40, -9, -32], "#a87a40"],
+      ["l", -26, 0, -26, -36, "#7a5a32", 1.4], ["l", -26, -36, -22, -40, "#7a5a32", 1.4],
+    ],
+    live: (c, T) => {
+      const ch = Math.sin(T * 6) * 0.6; // chewing
+      c.fillStyle = "#e8c8b0";
+      c.beginPath();
+      c.ellipse(33, -17 + ch, 2.4, 1.4, 0, 0, 7);
+      c.fill();
+      const ring = (T * 0.7) % 1; // the bell
+      if (ring < 0.3) {
+        c.strokeStyle = `rgba(240,210,120,${0.7 * (1 - ring / 0.3)})`;
+        c.lineWidth = 0.6;
+        c.beginPath();
+        c.arc(28, -13, 2 + ring * 10, -0.8, 0.8);
+        c.stroke();
+      }
+    },
+  },
+  // ---- week 4: the hen-wife and the green hill
+  henwife: {
+    glow: "255,200,130",
+    about: "a kindly old hen-wife by a steaming pot, her hens about her feet, offering food and the way",
+    words: ["hen-wife", "henwife", "old woman", "woman", "hens", "pot"],
+    eye: [-12, -32],
+    prop: [
+      ["p", [-24, 0, -20, -26, -12, -30, -4, -26, 0, 0], "#6a4a6a"], ["p", [-22, -24, -12, -30, -2, -24, -12, -18], "#8a6a4a"],
+      ["e", -12, -32, 4.6, 5, "#e3c4a2"], ["p", [-17, -30, -12, -40, -7, -30, -9, -34, -15, -34], "#e8e0d0"],
+      ["cyl", 14, 0, 9, 12, "#3a3640"], ["e", 14, -12, 9, 3, "#5a4a3a"],
+      ["sph", 6, -1, 3.4, "#e8dcc4"], ["sph", 24, 2, 3, "#c49060"], ["sph", -28, 2, 3, "#e8dcc4"],
+      ["flame", 14, 2, 3], ["light", 14, -8, 90, "255,190,110"],
+    ],
+    live: (c, T) => {
+      c.strokeStyle = "rgba(245,240,230,.45)";
+      c.lineWidth = 1;
+      const ph = (T * 0.4) % 1;
+      c.globalAlpha = Math.sin(ph * Math.PI);
+      c.beginPath();
+      c.moveTo(14, -14);
+      c.bezierCurveTo(10, -20 - ph * 4, 18, -24 - ph * 6, 14, -30 - ph * 8);
+      c.stroke();
+      c.globalAlpha = 1;
+      for (const [x, k] of [[6, 0], [-28, 2]]) { // hens pecking
+        const p = Math.max(0, Math.sin(T * 4 + k)) * 1.6;
+        c.fillStyle = "#c0392b";
+        c.beginPath();
+        c.arc(x + 2.6, -3 + p, 0.9, 0, 7);
+        c.fill();
+      }
+    },
+  },
 };
 
 export const THING_KEYS = Object.keys(THINGS) as [string, ...string[]];
