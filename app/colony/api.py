@@ -25,7 +25,7 @@ def _day(d: str) -> date:
 @router.get("/schema")
 def colony_schema():
     """The episode format, the kit, and the limits, for writing a plan or a day."""
-    return {"episode": plan.__doc__, "kit": kit.KIT, "crew": today.CREW_NOTES, "events": plan.EVENTS,
+    return {"episode": plan.__doc__, "kit": kit.current(), "draw": today.draw_guide(), "crew": today.CREW_NOTES, "events": plan.EVENTS,
             "slots": plan.SLOTS, "caption_line": plan.LINE_CHARS, "say_line": plan.SAY_CHARS,
             "target_seconds": plan.TARGET_SECONDS, "max_seconds": plan.MAX_SECONDS}
 
@@ -67,4 +67,4 @@ def colony_today_post(ep: dict = Body(...), date_: str = Query(default="", alias
     if probs:
         raise HTTPException(422, {"problems": probs})
     return {"ok": True, "date": day.isoformat(), "deadline": today.deadline(day).isoformat(),
-            "note": plan.length_note(ep)}
+            "note": plan.length_note(ep), "new_parts": [f"{p['slot']}/{p['id']}" for p in ep.get("parts") or []]}

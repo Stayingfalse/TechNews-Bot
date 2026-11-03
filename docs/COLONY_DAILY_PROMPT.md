@@ -33,7 +33,7 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
 
 2. Decide, person by person:
    - **Grant what the kit can draw.** "Can I be an old man in a barrel" → `{"body": "old", "beard": "white", "carrier": "barrel", "hair": "none"}`. Build on what they already have, so a look only changes in the parts they asked about.
-   - **Something the kit can't draw**: use the nearest parts, and put the missing thing in `wanted` ("a barrel with a leak", "a pet dragon") so it can be added. Tell them in the story ("no dragons on Farside yet, but here's a slug").
+   - **Something the kit hasn't got: draw it.** Send it in `parts` (up to 5 a day) and use it in their look the same day: a pet dragon, a pirate's tricorn, a balloon to hold, wings, a rocket to ride, or a whole-body `costume` (a ghost, a robot). `draw` in the context has the box for each slot, where it sits on the settler, the palette, and an example. Draw it facing right with a dark outline and 2-4 colours, at the size of a 7×12 settler. Check what's already in `kit` first (someone may have asked before), and pick a plain, reusable id ("dragon", not "nova_dragon"). New parts are shown in the preview before the post and can be blocked, so draw nothing you wouldn't want on screen. Use `wanted` only for things that aren't a part (a new building, a new kind of scene).
    - **Decline in-story, kindly**, anything sexual, hateful, violent beyond teen-and-up, about real people or public figures, other creators' characters or brands, or that names someone else. Don't feature it, and don't reply to it.
    - **Keep people consistent**: write each changed settler's `sheet` (at most 300 characters: who they are, what they've asked for, their running jokes) and up to 3 `traits`. Tomorrow you'll get them back.
    - **Answer yesterday's decision** if there was one: show what the comments chose, and name a few who chose it.
@@ -46,7 +46,8 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
    - `replies`: a short in-story reply (at most 150 characters) to each comment you acted on, by its `id` ("Pull up a barrel, the east row has room."). One reply per comment, none to anything you declined.
    - `summary`: today in one line of the story so far (at most 200 characters). `caption`: the post's caption, 1-3 lines naming who got what, ending with an invitation to comment.
    - `settlers`: `{"@handle": {"look": {...}, "traits": [...], "sheet": "..."}}` for everyone you changed.
+   - `parts`: anything you drew today, e.g. `{"slot": "pet", "id": "dragon", "colors": {"g": "crys2", ...}, "rows": [...], "frames": [[...]]}`. A 422 says exactly what to fix (too big, a colour missing, an id taken).
 
-4. POST APP_URL/colony/today with the episode (`{"date", "beats", "caption", "summary", "settlers", "replies", "wanted"}`). On 422 it lists every problem: fix them all and send it again (up to 4 times). On 409 it's past the cut-off: stop, the plan plays.
+4. POST APP_URL/colony/today with the episode (`{"date", "beats", "caption", "summary", "settlers", "replies", "parts", "wanted"}`). On 422 it lists every problem: fix them all and send it again (up to 4 times). On 409 it's past the cut-off: stop, the plan plays.
 
-5. Report in one short message: who got what (handle → what changed), what you declined or put in `wanted` and why, and the beats as sent.
+5. Report in one short message: who got what (handle → what changed), the parts you drew, what you declined and why, and the beats as sent.

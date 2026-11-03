@@ -76,7 +76,20 @@ GRANTS = [  # what the stand-in Claude can do with a request: (word, look, trait
     ("pirate", {"hat": "tophat", "held": "toysword"}, "pirate", "ARR.", "IS A *PIRATE*"),
     ("fixed", {"held": "wrench"}, None, "FIXED IT|MYSELF.", None),
 ]
-WANTED = {"dragon": "a dragon (body or pet)", "ghost": "a ghost settler", "pirate": "a pirate hat and eyepatch"}
+WANTED = {}  # nothing is out of reach now: what the kit hasn't got, the routine draws (DRAWS)
+DRAWS = {  # word → (a part the stand-in draws, the look that uses it, the line, the feature caption)
+    "dragon": ({"slot": "pet", "id": "dragon", "colors": {"g": "crys2", "d": "grass2", "w": "crys1", "e": "eye"},
+                "rows": ["....ww....", "...dwwd.ge", "..dgggggg.", "dgggggg...", "...g..g..."],
+                "frames": [["...w.w....", "...dwd..ge", "..dgggggg.", "dgggggg...", "..g....g.."]]},
+               {"pet": "dragon"}, "HE BITES.", "GOT A *DRAGON*"),
+    "ghost": ({"slot": "costume", "id": "ghost", "colors": {"w": "ui", "o": "rim", "e": "eye"},
+               "rows": ["..ooooo..", ".owwwwwo.", "owwewewo.", "owwwwwwo.", "owwwwwwo.", "owwwwwwo.", "owwwwwwo.",
+                        "owwwwwwo.", "owwwwwwo.", "owwwwwwo.", "ow.ww.wo.", "o..o..o.."]},
+              {"costume": "ghost"}, "BOO.", "IS A *GHOST*"),
+    "pirate": ({"slot": "hat", "id": "tricorn", "colors": {"k": "ink", "b": "suit_black", "y": "gold"},
+                "rows": ["..bbb..", ".bbybb.", "kbbbbbk"]},
+               {"hat": "tricorn", "held": "toysword"}, "ARR.", "IS A *PIRATE*"),
+}
 
 
 def fake_claude(ctx: dict) -> dict:
@@ -88,6 +101,7 @@ def fake_claude(ctx: dict) -> dict:
     ep["date"] = ctx["date"]
     ep["settlers"], ep["replies"], ep["wanted"] = {}, [], []
     ep["_aim"], ep["_big"] = ctx.get("aim_seconds", 30), ctx.get("big_day", False)
+    ep["_kit"] = ctx.get("kit", {})
     people = {p["handle"]: p for p in ctx["people"]}
     spot = {r["handle"] for r in ctx.get("spotlights", [])}
     moments = []
@@ -104,6 +118,19 @@ def fake_claude(ctx: dict) -> dict:
 
 def _grant(ep: dict, p: dict, c: dict, spotlit: bool, moments: list) -> None:
     h, text = p["handle"], c["text"].lower()
+    for word, (part, look, line, feature) in DRAWS.items():
+        if word in text and not all(p["look"].get(k) == v for k, v in look.items()):
+            known = ep.get("_kit", {}).get(part["slot"], [])
+            if part["id"] not in known and not any(x["id"] == part["id"] for x in ep.setdefault("parts", [])):
+                ep["parts"].append(part)
+            info = ep["settlers"].setdefault(h, {"look": dict(p["look"]), "traits": list(p["traits"]), "sheet": p["sheet"]})
+            info["look"].update(look)
+            info["sheet"] = (info["sheet"] + f" Asked: {c['text'][:60]}.").strip()[-300:]
+            if spotlit:
+                moments.append({"type": "feature", "who": h, "lines": [f"*{h.upper()}*", feature], "secs": 2.6})
+                moments.append({"type": "say", "who": h, "text": line, "secs": 2.4})
+            ep["replies"].append({"comment_id": c["id"], "text": f"Done, {h}. We built one just for you."})
+            return
     for word, want in WANTED.items():
         if word in text:
             ep["wanted"].append(want)
@@ -126,6 +153,7 @@ def _grant(ep: dict, p: dict, c: dict, spotlit: bool, moments: list) -> None:
 
 
 def _finish(ep: dict, moments: list) -> dict:
+    ep.pop("_kit", None)
     ep["wanted"] = sorted(set(ep["wanted"]))
     if moments:
         at = next((i + 1 for i, b in enumerate(ep["beats"]) if b.get("slot") == "arrivals"), 0)

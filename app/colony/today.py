@@ -26,6 +26,28 @@ CREW_NOTES = {
 }
 
 
+def draw_guide() -> dict:
+    """How to draw a part the kit hasn't got (for the routine)."""
+    from ..render.colony import custom
+    return {
+        "how": ("Draw it as rows of characters, '.' for empty, each other character mapped in `colors` to a palette "
+                "name (or #rrggbb, which is snapped to the nearest house colour). Facing right, the bottom row on the "
+                "ground. 1 pixel is small: a settler is 7 wide and 12 tall. Give it a dark outline (ink or metal3) and "
+                "2-4 colours. An optional second frame in `frames` animates it (pets walk, wings flap)."),
+        "boxes": {slot: {"max_width": w, "max_height": h} for slot, (w, h) in custom.BOX.items()},
+        "where": {"hat": "centred on the head, its bottom row on top of the helmet",
+                  "held": "in the front hand: its bottom row at the hand, drawn from the hand outwards",
+                  "back": "behind the body, its right edge at the back",
+                  "carrier": "something to ride or sit in: the settler sits two rows into its top, centred",
+                  "pet": "walks beside the settler",
+                  "costume": "replaces the whole settler (a ghost, a robot, a dragon): feet on the bottom row"},
+        "palette": custom.palette_names(), "max_new_a_day": custom.MAX_NEW_A_DAY,
+        "example": {"slot": "pet", "id": "dragon", "colors": {"g": "crys2", "d": "grass2", "w": "crys1", "e": "eye"},
+                    "rows": ["....ww....", "...dwwd.ge", "..dgggggg.", "dgggggg...", "...g..g..."],
+                    "frames": [["...w.w....", "...dwd..ge", "..dgggggg.", "dgggggg...", "..g....g.."]]},
+    }
+
+
 class TooLate(Exception):
     pass
 
@@ -152,7 +174,7 @@ def context(day: date, now: datetime | None = None, followers: int | None = None
         "colony": {"followers": s["followers"], "built": s["built"], "building": s["building"],
                    "next": report.get("next"), "settlers": len(s["settlers"])},
         "story_so_far": so_far, "people": people, "crew": CREW_NOTES,
-        "kit": kit.KIT, "limits": {"caption_line": plan.LINE_CHARS, "say_line": plan.SAY_CHARS,
+        "kit": kit.current(), "draw": draw_guide(), "limits": {"caption_line": plan.LINE_CHARS, "say_line": plan.SAY_CHARS,
                                    "target_seconds": plan.TARGET_SECONDS, "max_seconds": plan.MAX_SECONDS, "beats": plan.BEATS, "events": plan.EVENTS,
                                    "slots": plan.SLOTS},
         "unsorted": sum(1 for c in comments if not c.get("kind")),
@@ -179,6 +201,12 @@ def accept(day: date, ep: dict, now: datetime | None = None) -> list[str]:
         probs.append("summary: one line of the story so far, at most 200 characters")
     if not probs:
         _write(_dir("days") / f"{day.isoformat()}.json", {**ep, "date": day.isoformat(), "accepted_at": now.isoformat()})
+        from ..render.colony import custom
+        for part in ep.get("parts") or []:  # drawn today: into the kit, with a picture for the preview
+            by = next((h for h, info in (ep.get("settlers") or {}).items()
+                       if (info.get("look") or {}).get(part["slot"]) == part["id"]), None)
+            custom.save(part, by, day.isoformat())
+            custom.preview(part, _dir("kit-previews") / f"{part['slot']}-{part['id']}.png")
         # what this episode answers: comments it replied to, and the comments of everyone it changed
         _, _, comments = _preview(day)
         changed = {h.lstrip("@").lower() for h in (ep.get("settlers") or {})}

@@ -28,12 +28,23 @@ KIT: dict[str, list[str]] = {
     "carrier": ["none", "barrel", "crate", "hoverchair"],
     "back": ["pack", "none", "cape", "scarf", "jetpack"],
     "pet": ["none", "cat", "drone", "slug", "bird", "dog"],
+    "costume": ["none"],  # a whole-body drawing (a ghost, a dragon) that replaces the settler; drawn ones only
 }
 DEFAULT = {slot: ids[0] for slot, ids in KIT.items()}
 DEFAULT.update(suit="white", skin="s2", hair="short")
 
-GW, GH = 13, 20  # the grid a settler is drawn on; the body's feet are on the bottom row
-OX = 3  # body's left column
+GW, GH = 17, 20  # the grid a settler is drawn on; the body's feet are on the bottom row
+OX = 5  # body's left column (the body is 7 wide, centred, so flipping keeps it in place)
+
+
+def ids(slot: str) -> list[str]:
+    """The parts a slot has: the built-in ones and any drawn by the routine (custom.py)."""
+    from . import custom
+    return KIT[slot] + [i for i in custom.ids(slot) if i not in KIT[slot]]
+
+
+def current() -> dict[str, list[str]]:
+    return {slot: ids(slot) for slot in KIT}
 
 
 def validate(look: dict) -> list[str]:
@@ -42,13 +53,13 @@ def validate(look: dict) -> list[str]:
     for slot, part in (look or {}).items():
         if slot not in KIT:
             probs.append(f"unknown slot {slot!r} (slots: {', '.join(KIT)})")
-        elif part not in KIT[slot]:
-            probs.append(f"{slot}: unknown part {part!r} (one of: {', '.join(KIT[slot])})")
+        elif part not in ids(slot):
+            probs.append(f"{slot}: unknown part {part!r} (one of: {', '.join(ids(slot))}; or draw it in `parts`)")
     return probs
 
 
 def full(look: dict | None) -> dict:
-    return {**DEFAULT, **{k: v for k, v in (look or {}).items() if k in KIT and v in KIT[k]}}
+    return {**DEFAULT, **{k: v for k, v in (look or {}).items() if k in KIT and v in ids(k)}}
 
 
 class _Grid:
@@ -67,8 +78,24 @@ class _Grid:
         return Sprite(["".join(r) for r in self.g], self.cols)
 
 
+def _custom(slot: str, pid: str):
+    if pid in KIT.get(slot, []):
+        return None
+    from . import custom
+    return custom.get(slot, pid)
+
+
 def compose(look: dict | None, frame: int = 0) -> Sprite:
     lk = full(look)
+    costume = _custom("costume", lk["costume"])
+    if costume:  # a whole-body drawing, feet on the ground, centred where the body would be
+        from . import custom
+        spr = custom.sprite(costume, frame)
+        g = _Grid()
+        x = OX + 3 - spr.w // 2
+        rows = [costume["rows"], *(costume.get("frames") or [])][frame % (1 + len((costume.get("frames") or [])[:1]))]
+        g.put(rows, x, GH - len(rows), {k: custom.snap(str(v)) for k, v in costume["colors"].items()})
+        return g.sprite()
     suit, skin = hexc(SUITS[lk["suit"]]), hexc(SKINS[lk["skin"]])
     hair = HAIRS[lk["hair"]]
     g = _Grid()
@@ -78,7 +105,12 @@ def compose(look: dict | None, frame: int = 0) -> Sprite:
     torso = {"adult": 4, "kid": 2, "tall": 5, "old": 4}[body]
     legs = {"adult": 3, "kid": 2, "tall": 4, "old": 3}[body]
     head_h = 5
-    top = GH - (head_h + torso + legs)
+    ride = _custom("carrier", lk["carrier"])
+    if ride:  # riding a drawn mount: no legs, sitting two rows into it
+        legs = 0
+        top = GH - len(ride["rows"]) + 2 - (head_h + torso)
+    else:
+        top = GH - (head_h + torso + legs)
     hx = OX + (1 if body == "old" else 0)
     hy = top + (1 if body == "old" else 0)
 
@@ -113,7 +145,12 @@ def compose(look: dict | None, frame: int = 0) -> Sprite:
         "horns": ([".h...h.", ".h...h."], {"h": P["ui"]}),
         "tophat": (["..ttt..", "..ttt..", "..TTT..", ".ttttt."], {"t": hexc("2a2238"), "T": hexc("b03a3a")}),
     }
-    if hat in hats:
+    drawn = _custom("hat", hat)
+    if drawn:  # centred on the head, its bottom row on the helmet's top
+        from . import custom
+        g.put(drawn["rows"], hx + 3 - max(len(r) for r in drawn["rows"]) // 2, hy + 1 - len(drawn["rows"]),
+              {k: custom.snap(str(v)) for k, v in drawn["colors"].items()})
+    elif hat in hats:
         rows, cols = hats[hat]
         g.put(rows, hx, hy - len(rows) + 1 if hat in ("horns",) else hy - len(rows), cols)
 
@@ -132,13 +169,20 @@ def compose(look: dict | None, frame: int = 0) -> Sprite:
         trows = [".PSSSA."] * min(2, torso) + [".PSSS.."] * (torso - min(2, torso))
         g.put(trows, OX, ty)
         ly = ty + torso
-        if carrier == "hoverchair":
+        if ride:
+            pass
+        elif carrier == "hoverchair":
             g.put(["TTTTTTT", ".ttttt.", "..~.~.." if frame % 2 else ".~.~.~."][:legs] + [], OX, ly,
                   {"T": P["metal1"], "t": P["metal2"], "~": P["crys0"]})
         else:
             stance = [["..L.L.."] * (legs - 1) + [".BB.BB."],
                       ["...L..."] + ["..L.L.."] * (legs - 2) + [".B...B."]][frame % 2]
             g.put(stance[:legs], OX, ly)
+
+    if ride:  # the mount, under them
+        from . import custom
+        rr = [ride["rows"], *(ride.get("frames") or [])][frame % (1 + len((ride.get("frames") or [])[:1]))]
+        g.put(rr, OX + 3 - max(len(r) for r in rr) // 2, GH - len(rr), {k: custom.snap(str(v)) for k, v in ride["colors"].items()})
 
     # beards go over the body (and the barrel)
     beard = lk["beard"]
@@ -175,7 +219,17 @@ def compose(look: dict | None, frame: int = 0) -> Sprite:
         "umbrella": (["uuuuu", "..|..", "..|..", "..|.."], {"u": hexc("f05a8a"), "|": P["metal2"]}),
         "toysword": (["w", "w", "w", "Y"], {"w": P["metal0"], "Y": P["gold"]}),
     }
-    if held in items:
+    drawn_held = _custom("held", held)
+    drawn_back = _custom("back", back)
+    if drawn_back:
+        from . import custom
+        rows = drawn_back["rows"]
+        g.put(rows, OX + 1 - max(len(r) for r in rows) + 1, ty - 1, {k: custom.snap(str(v)) for k, v in drawn_back["colors"].items()})
+    if drawn_held:  # in the front hand: its bottom row at the hand
+        from . import custom
+        rows = drawn_held["rows"]
+        g.put(rows, OX + 6, ty + 3 - len(rows) + 1, {k: custom.snap(str(v)) for k, v in drawn_held["colors"].items()})
+    elif held in items:
         rows, cols = items[held]
         off = {"flag": -4, "umbrella": -6, "rod": -3, "toysword": -3}.get(held, 0)
         xo = OX + 6 - (2 if held == "umbrella" else 0)
@@ -184,6 +238,10 @@ def compose(look: dict | None, frame: int = 0) -> Sprite:
 
 
 def pet_sprite(pet: str, frame: int = 0) -> Sprite | None:
+    drawn = _custom("pet", pet)
+    if drawn:
+        from . import custom
+        return custom.sprite(drawn, frame)
     pets = {
         "cat": ([".k.k", "kkkk", "k..k"] if frame % 2 else [".k.k", "kkkk", ".kk."], {"k": hexc("e6a060")}),
         "drone": (["=-=", ".o."], {"=": P["metal1"], "-": P["metal3"], "o": P["crys1"] if frame % 2 else P["crys0"]}),
@@ -198,5 +256,5 @@ def pet_sprite(pet: str, frame: int = 0) -> Sprite | None:
 
 
 def count() -> int:
-    """How many parts the kit has (every id but the 'none's)."""
-    return sum(len([i for i in ids if i != "none"]) for ids in KIT.values())
+    """How many built-in parts the kit has (every id but the 'none's)."""
+    return sum(len([i for i in v if i != "none"]) for v in KIT.values())

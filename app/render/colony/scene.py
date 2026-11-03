@@ -408,17 +408,16 @@ class Tags:
             return int(min(max(x, SAFE[0]), SAFE[2] - w))
 
         y0 = min(y0, 212 - h)  # clear of the captions
-        best = (clamp(x0), y0)
+        best = None
         for dy in range(0, 4 * (h + 1), h + 1):  # sideways first, then up a row
             for dx in (0, w // 2 + 2, -(w // 2 + 2), w + 2, -(w + 2)):
                 x, y = clamp(x0 + dx), y0 - dy
                 if free(x, y):
                     best = (x, y)
                     break
-            else:
-                continue
-            break
-        if best[1] < 80:  # would sit on the title: leave it out
+            if best:
+                break
+        if best is None or best[1] < 80:  # no room, or it would sit on the title: leave it out
             return None
         self.boxes.append((best[0], best[1], w, h))
         return best

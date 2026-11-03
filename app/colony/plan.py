@@ -123,11 +123,21 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
         from .picks import GRANT_MAX
         if len(ep.get("settlers") or {}) > GRANT_MAX:
             probs.append(f"settlers: at most {GRANT_MAX} changed a day ({len(ep['settlers'])} given)")
+        from ..render.colony import custom
+        parts = ep.get("parts") or []
+        if len(parts) > custom.MAX_NEW_A_DAY:
+            probs.append(f"parts: at most {custom.MAX_NEW_A_DAY} new parts a day ({len(parts)} given)")
+        taken = set(custom.all_parts())
+        new = set()
+        for part in parts:
+            probs += custom.check(part, kit.KIT, taken | new)
+            new.add((part.get("slot"), part.get("id")))
         for h, info in (ep.get("settlers") or {}).items():
             if h.lstrip("@").lower() not in handles:
                 probs.append(f"settlers: {h} isn't a settler")
                 continue
-            for p in kit.validate(info.get("look") or {}):
+            look = {k: v for k, v in (info.get("look") or {}).items() if (k, v) not in new}  # drawn today: fine
+            for p in kit.validate(look):
                 probs.append(f"settlers.{h}.look: {p}")
             tr = info.get("traits") or []
             if len(tr) > 3 or any(not re.fullmatch(r"[a-z][a-z -]{1,15}", str(x)) for x in tr):

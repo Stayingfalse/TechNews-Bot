@@ -196,10 +196,13 @@ It returns **structured changes, not free drawing**. The renderer only draws thi
 | `replies` | A short in-story reply to any comment it acted on ("Pull up a barrel, the east row has room") | Length; one per person per day |
 | `wanted` | Requests it couldn't draw: the nearest kit parts were used, and this lists what's missing | - |
 
-**The kit grows from what people ask for.** `wanted` collects over the week. The weekly routine
-(a Claude Code routine, as for the quiz) draws the most asked-for parts as new pixel sprites in
-code and opens a PR. Until a part lands, the writer uses the closest one ("a barrel" now, "a
-barrel with a leak" a week later).
+**The kit grows from what people ask for, the same day.** When nobody has asked for it before, the
+daily routine draws the part itself and sends it as data with the episode (`parts`: a slot, an id,
+rows of characters and their colours; up to 5 a day). The server checks it fits its slot's box,
+snaps its colours to the house palette so it matches, adds it to the kit and makes a preview picture
+for the Discord preview, where it can be blocked. Slots that can be drawn: hat, held, back, carrier
+(something to ride; the settler sits on it), pet, and costume (the whole settler: a ghost, a robot).
+Once drawn, anyone can have it. `app/render/colony/custom.py`.
 
 ### The week plan
 
