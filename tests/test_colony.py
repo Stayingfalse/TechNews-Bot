@@ -88,18 +88,19 @@ def test_blocked_people_never_move_in_and_erase_removes_everything():
 def test_the_fake_week_builds_in_order_and_every_episode_fits():
     s, reports = dryrun.simulate()
     assert s["built"] == ["dome", "condenser"] and s["building"]["id"] == "greenhouse"
+    from app.render.colony import video
     for r in reports:
-        spec = episode.build(s, r)
-        assert 8 <= spec["duration"] <= 30
-        for cap in spec["captions"]:
+        ep = episode.build(s, r)
+        assert 8 <= ep["duration"] <= 30
+        for cap in ep["shots"][0]["spec"]["captions"]:
             for line in cap["lines"]:
                 assert pixfont.width(line.replace("*", ""), scene.fit_scale(line.replace("*", ""))) <= SAFE[2] - SAFE[0], line
-        assert scene.draw(spec, spec["duration"] / 2).frame().shape == (1920, 1080, 3)
+        assert video.frame_at(ep, ep["duration"] / 2).shape == (1920, 1080, 3)
 
 
 def test_episode_shows_people_first():
     s, reports = dryrun.simulate()
-    spec = episode.build(s, reports[1])  # day 2: arrivals, then jobs, then the build
-    texts = [" ".join(c["lines"]) for c in spec["captions"]]
+    ep = episode.build(s, reports[1])  # day 2: arrivals, then jobs, then the build
+    texts = [" ".join(c["lines"]) for c in ep["shots"][0]["spec"]["captions"]]
     assert "SIGNALS" in texts[0] and any("IS NOW" in t for t in texts[1:4])
     assert texts[-1] == "COMMENT TO *MOVE IN*"

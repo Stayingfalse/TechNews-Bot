@@ -53,22 +53,18 @@ def simulate(week=WEEK, start: date = START) -> tuple[dict, list[dict]]:
 def main() -> None:
     from PIL import Image
 
-    from ..render.colony import scene
+    from ..render.colony import video
     out = Path(sys.argv[1] if len(sys.argv) > 1 else "out/week")
     out.mkdir(parents=True, exist_ok=True)
     s = rules.new_state()
     for i, (followers, yesterday, comments) in enumerate(WEEK):
         s, r = rules.apply_day(s, START + timedelta(days=i), comments, followers, yesterday)
-        spec = episode.build(s, r)
-        (out / f"day{i + 1}.json").write_text(json.dumps({"report": r, "spec": spec}, indent=1, default=str))
-        mid = next((c["t0"] + 0.9 for c in spec["captions"] if "MORE" in " ".join(c["lines"]) or "BUILT" in " ".join(c["lines"])
-                    or "DONE" in " ".join(c["lines"])), spec["duration"] / 2)
-        Image.fromarray(scene.draw(spec, min(mid, spec["duration"] - 0.1)).frame()).save(out / f"day{i + 1}.png")
+        ep = episode.build(s, r)
+        (out / f"day{i + 1}.json").write_text(json.dumps({"report": r, "episode": ep}, indent=1, default=str))
+        Image.fromarray(video.frame_at(ep, ep["duration"] * 0.55)).save(out / f"day{i + 1}.png")
         if "--video" in sys.argv:
-            import render_colony
-            render_colony.video(spec, out / f"day{i + 1}.mp4")
-        print(f"day {i + 1}: {s['followers']} followers, built {s['built']}, building {s['building']}, "
-              f"{len(spec['captions'])} captions, {spec['duration']} s")
+            video.render(ep, out / f"day{i + 1}.mp4")
+        print(f"day {i + 1}: {s['followers']} followers, built {s['built']}, building {s['building']}, {ep['duration']} s")
 
 
 if __name__ == "__main__":

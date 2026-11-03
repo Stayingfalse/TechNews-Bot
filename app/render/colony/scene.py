@@ -12,7 +12,8 @@ from functools import lru_cache
 import numpy as np
 
 from . import pixfont
-from .art import BAYER, CAPSULE, CRATE, H, P, SAFE, SKINS, SUITS, W, Canvas, barrel_elder, settler
+from . import kit
+from .art import BAYER, CAPSULE, CRATE, H, P, SAFE, SKINS, SUITS, W, Canvas
 
 WW = 260  # world width
 GROUND = 176  # the surface line
@@ -312,19 +313,44 @@ def crowd(spec: dict) -> list[dict]:
     return out
 
 
-def draw_person(c: Canvas, p: dict, x: float, t: float, walking: bool, flip: bool, carry: bool = False) -> float:
-    gy = ground_y(x)
+BARREL_ELDER = {"body": "old", "suit": "orange", "skin": "s1", "helmet": "bowl", "hair": "none",
+                "beard": "white", "carrier": "barrel", "back": "none"}
+
+
+def look_of(p: dict) -> dict:
+    """A settler's look: their kit parts, or one made from their suit and skin."""
+    if isinstance(p.get("look"), dict):
+        return p["look"]
     if p.get("look") == "barrel":
-        spr = barrel_elder()
-        hop = round(abs(math.sin(t * 6)) * 2) if walking else 0
-        c.sprite(spr, round(x) - 4, gy - spr.h - hop, flip=flip)
-        return gy - spr.h - hop
-    spr = settler(int(t * 6) if walking else 0, p["suit"], p["skin"])
-    c.sprite(spr, round(x) - 3, gy - spr.h, flip=flip)
+        return BARREL_ELDER
+    suit = {v: k for k, v in kit.SUITS.items()}.get(p.get("suit"), "white")
+    skin = {v: k for k, v in kit.SKINS.items()}.get(p.get("skin"), "s2")
+    return {"suit": suit, "skin": skin}
+
+
+def draw_person(c: Canvas, p: dict, x: float, t: float, walking: bool, flip: bool, carry: bool = False) -> float:
+    """Draw a settler standing on the ground at x; returns the y of the top of their head (or hat)."""
+    gy = ground_y(x)
+    look = kit.full(look_of(p))
+    frame = int(t * 6) if walking else 0
+    spr = kit.compose(look, frame)
+    bob = 0
+    if look["carrier"] in ("barrel", "crate") and walking:
+        bob = round(abs(math.sin(t * 6)) * 2)
+    elif look["carrier"] == "hoverchair":
+        bob = round(1 + math.sin(t * 3))
+    sx = round(x) - kit.OX - 3
+    c.sprite(spr, sx + (kit.GW - 1 - 2 * (kit.OX + 3) if flip else 0), gy - spr.h - bob, flip=flip)
+    pet = kit.pet_sprite(look["pet"], frame)
+    if pet:
+        px = round(x) + (6 if flip else -9)
+        hover = 4 + round(math.sin(t * 4)) if look["pet"] in ("drone", "bird") and walking or look["pet"] == "drone" else 0
+        c.sprite(pet, px, gy - pet.h - hover, flip=flip)
+    top = gy - spr.h - bob + spr.top
     if carry:
-        c.sprite(CRATE, round(x) - 2, gy - spr.h - 5)
-        return gy - spr.h - 5
-    return gy - spr.h
+        c.sprite(CRATE, round(x) - 2, top - 5)
+        return top - 5
+    return top
 
 
 # ------------------------------------------------------------------ UI (screen coordinates)
@@ -439,9 +465,58 @@ def camera(spec: dict, t: float) -> int:
     return int(keys[-1][1])
 
 
+def _events(spec: dict, t: float) -> dict[str, float]:
+    """The story events on at t, each with how far in it is (0-1)."""
+    out = {}
+    for e in spec.get("events", []):
+        if e["t0"] <= t <= e["t1"]:
+            out[e["kind"]] = (t - e["t0"]) / max(0.01, e["t1"] - e["t0"])
+    return out
+
+
+def _event_overlay(c: Canvas, ev: dict[str, float], t: float):
+    if "aurora" in ev:
+        k = min(1.0, ev["aurora"] * 4, (1 - ev["aurora"]) * 4)
+        for x in range(W):
+            for band, (col, base) in enumerate(((P["crys0"], 96), (P["crys2"], 108), (P["crys1"], 120))):
+                y = int(base + 7 * math.sin(x * 0.05 + t * 0.9 + band) + 3 * math.sin(x * 0.13 - t * 1.4))
+                for dy in range(0, 10):
+                    if BAYER[(y + dy) % 4][x % 4] < k * (0.55 - dy * 0.05):
+                        if not c.world[y + dy, x]:
+                            c.px(x, y + dy, col, world=False)
+    if "meteors" in ev:
+        for i in range(5):
+            ph = (t * 0.7 + i * 0.37) % 1.6
+            if ph < 0.5:
+                x0, y0 = 20 + i * 31, 20 + (i * 17) % 50
+                for j in range(9):
+                    x, y = x0 + ph * 90 - j * 2, y0 + ph * 45 - j
+                    if 0 <= x < W and 0 <= y < H and not c.world[int(y), int(x)]:
+                        c.px(x, y, P["star"] if j < 3 else P["sky7"], world=False)
+    if "signal" in ev:
+        k = ev["signal"]
+        r = int(8 + (t * 40) % 60)
+        m, x0, y0 = c.disc(POD_X - 1, 40, r)
+        ring = m & ~c.disc(POD_X - 1, 40, max(1, r - 1))[0]
+        c.mask(ring, x0, y0, P["crys1"], world=False)
+        if int(t * 6) % 2 == 0:
+            c.rect(POD_X - 2, 0, 1, GROUND - 35, P["crys1"] * 0.8, world=False)
+    if "dust_storm" in ev:
+        k = min(1.0, ev["dust_storm"] * 3, (1 - ev["dust_storm"]) * 3)
+        full = np.ones((H, W), bool)
+        c.dither_mask(full, 0, 0, P["soil0"] * 1.4, 0.35 * k, world=False)
+        rng = np.random.default_rng(int(t * 30))
+        for _ in range(int(160 * k)):
+            x, y = rng.integers(0, W), rng.integers(30, GROUND + 20)
+            c.rect(x, y, int(rng.integers(3, 8)), 1, P["metal1"], world=False)
+
+
 def draw(spec: dict, t: float) -> Canvas:
     seed = spec.get("seed", 1)
+    ev = _events(spec, t)
     cam = max(0, min(WW - W, camera(spec, t)))
+    if "quake" in ev:
+        cam = max(0, min(WW - W, cam + int(round(2 * math.sin(t * 47)))))
     sky, stars = _sky(seed)
     scr = Canvas()
     sox = int(cam * 0.15)
@@ -541,7 +616,9 @@ def draw(spec: dict, t: float) -> Canvas:
         draw_beacon_ghost(wc, t)
 
     scr.paste(wc, cam)
-    scr.light([(lx - cam, ly, r, s) for (lx, ly, r, s) in lights], spec.get("ambient", 0.6))
+    amb = spec.get("ambient", 0.6) - (0.15 if "night" in ev else 0) - (0.1 if "dust_storm" in ev else 0)
+    scr.light([(lx - cam, ly, r, s) for (lx, ly, r, s) in lights], amb)
+    _event_overlay(scr, ev, t)
 
     tags = Tags(scr)
     for b in spec.get("bubbles", []):

@@ -13,7 +13,8 @@ from functools import lru_cache
 import numpy as np
 
 from . import pixfont
-from .art import BAYER, CRATE, H, P, SAFE, SKINS, SUITS, W, Canvas, barrel_elder, hexc, settler
+from . import kit
+from .art import BAYER, CRATE, H, P, SAFE, SKINS, SUITS, W, Canvas, hexc
 from .scene import Tags, caption, progress, title
 
 
@@ -253,15 +254,21 @@ def draw_inside(spec: dict, t: float) -> Canvas:
     c.rect(58, FLOOR - 9, 2, 9, P["wood1"])
     c.rect(45, FLOOR - 14, 2, 3, P["ui"] * 0.85)
     heads = {}
-    for (name, x, flip, suit, skin) in spec.get("people", []):
-        spr = settler(0, suit, skin)
-        c.sprite(spr, x - 3, FLOOR - spr.h, flip=flip)
-        heads[name] = (x, FLOOR - spr.h)
+    from .scene import BARREL_ELDER, look_of
+    people = list(spec.get("people", []))
     if spec.get("elder"):
-        e = barrel_elder()
-        bob = round(abs(math.sin(t * 2)))
-        c.sprite(e, 78, FLOOR - e.h - bob, flip=True)
-        heads[spec["elder"]] = (82, FLOOR - e.h - bob)
+        people.append({"name": spec["elder"], "x": 82, "flip": True, "look": BARREL_ELDER})
+    for p in people:
+        if isinstance(p, (list, tuple)):  # (name, x, flip, suit, skin)
+            p = {"name": p[0], "x": p[1], "flip": p[2], "suit": p[3], "skin": p[4]}
+        look = kit.full(look_of(p))
+        spr = kit.compose(look, 0)
+        bob = round(abs(math.sin(t * 2))) if look["carrier"] != "none" else 0
+        c.sprite(spr, p["x"] - kit.OX - 3, FLOOR - spr.h - bob, flip=p.get("flip", False))
+        pet = kit.pet_sprite(look["pet"], int(t * 3))
+        if pet:
+            c.sprite(pet, p["x"] + (5 if p.get("flip") else -9), FLOOR - pet.h, flip=p.get("flip", False))
+        heads[p["name"]] = (p["x"], FLOOR - spr.h - bob + spr.top)
     c.light([(lamp_x, 56, 40, 0.75 + 0.03 * math.sin(t * 9)), (door[0], door[1], 14, 0.25 * glow)],
             spec.get("ambient", 0.5), warm=P["warm1"])
     scr = Canvas()
@@ -278,8 +285,8 @@ def draw_inside(spec: dict, t: float) -> Canvas:
     if q and q["t0"] <= t:
         mid = (SAFE[0] + SAFE[2]) // 2
         for i, line in enumerate(q["lines"]):
-            scale = min(2, *(2 if pixfont.width(l, 2) <= SAFE[2] - SAFE[0] else 1 for l in q["lines"]))
-            scr.text(line.strip("*"), mid, 42 + i * 9 * scale, P["gold"] if line.startswith("*") else P["ui"],
+            scale = min(2 if pixfont.width(l.replace("*", ""), 2) <= SAFE[2] - SAFE[0] else 1 for l in q["lines"])
+            scr.text(line.replace("*", ""), mid, 42 + i * 9 * scale, P["gold"] if line.startswith("*") else P["ui"],
                      scale=scale, center=True)
         x = SAFE[0] + 4
         for i, (letter, word) in enumerate(q["choices"]):

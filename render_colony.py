@@ -128,25 +128,9 @@ def still(spec: dict, t: float, path: Path) -> None:
 
 
 def video(spec: dict, path: Path) -> None:
-    n = int(spec["duration"] * FPS)
-    first = scene.draw(spec, 0.0).frame().astype(np.float32)
-    wav = path.with_suffix(".wav")
-    sound.write(spec, wav)
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "1080x1920",
-           "-r", str(FPS), "-i", "-", "-i", str(wav), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(path)]
-    ff = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    blend = int(0.5 * FPS)  # the last half second fades into the first frame, so a replay loops
-    for i in range(n):
-        f = scene.draw(spec, i / FPS).frame()
-        if i >= n - blend:
-            k = (i - (n - blend) + 1) / blend
-            f = (f * (1 - k) + first * k).astype(np.uint8)
-        ff.stdin.write(f.tobytes())
-    ff.stdin.close()
-    if ff.wait():
-        raise RuntimeError("ffmpeg failed")
-    wav.unlink(missing_ok=True)
+    from app.render.colony import video as vid
+    vid.render({"shots": [{"view": "side", "spec": spec, "dur": spec["duration"]}], "duration": spec["duration"],
+                "sfx": spec.get("sfx", [])}, path)
 
 
 def main() -> None:

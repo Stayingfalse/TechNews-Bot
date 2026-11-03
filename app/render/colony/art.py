@@ -167,6 +167,8 @@ class Sprite:
         self.h, self.w = grid.shape
         self.cols = cols
         self.layers = {k: grid == k for k in set(grid.flat) if k != "."}
+        rows = np.where((grid != ".").any(axis=1))[0]
+        self.top = int(rows[0]) if len(rows) else 0  # first row with anything drawn
 
 
 def settler(frame: int, suit: str, skin: str) -> Sprite:
