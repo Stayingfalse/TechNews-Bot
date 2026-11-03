@@ -48,8 +48,11 @@ Two Claude Code Routines, created switched **off**, to switch on once steps 2-3 
 
 | Routine | When | Prompt |
 |---|---|---|
-| Farside weekly plan | Sundays 20:41 Europe/London | [COLONY_ROUTINE_PROMPT.md](COLONY_ROUTINE_PROMPT.md) |
-| Farside daily episode | every day 15:47 Europe/London (about 3 h before the 19:00 post) | [COLONY_DAILY_PROMPT.md](COLONY_DAILY_PROMPT.md) |
+| Farside weekly plan (`trig_0141jgKc2wQkRjsBqvUjdZP6`) | Sundays 20:41 Europe/London | [COLONY_ROUTINE_PROMPT.md](COLONY_ROUTINE_PROMPT.md) |
+| Farside daily episode (`trig_017krnrETPjNx22Dgx9ivMQf`) | every day 15:47 Europe/London (about 3 h before the 19:00 post) | [COLONY_DAILY_PROMPT.md](COLONY_DAILY_PROMPT.md) |
+
+Both run in a fresh cloud session in the same environment as the quiz routines (which has
+`SHORTS_API_TOKEN`), and need no connectors.
 
 Before the first week: run the weekly routine once by hand (fire it now) so the first days have a
 plan, and check the server accepted it (`GET /colony/week?date=<first day>` shows `"from": "plan"`).
