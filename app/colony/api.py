@@ -74,16 +74,31 @@ def colony_today_post(ep: dict = Body(...), date_: str = Query(default="", alias
 
 
 @router.post("/start", status_code=202)
-def colony_start(date_: str = Query(default="", alias="date")):
+def colony_start(date_: str = Query(default="", alias="date"), at: str = "", restart: bool = False):
     """Start the daily schedule from `date` (default: today if its slot is over an hour away, else
-    tomorrow). Needs COLONY_ENABLED, PUBLISH_ENABLED and @farside.colony connected
+    tomorrow). `at` (HH:MM today, local, or an ISO time) posts the first episode then instead,
+    with every day after at COLONY_POST_TIME. `restart=true` books it again while nothing has
+    posted. Needs COLONY_ENABLED, PUBLISH_ENABLED and @farside.colony connected
     (/oauth/instagram/start?channel=colony)."""
+    import re
+
     from . import jobs
 
     if not settings.colony_enabled:
         raise HTTPException(409, "Farside is switched off: set COLONY_ENABLED=true")
+    when = None
+    if at:
+        if re.fullmatch(r"\d{1,2}:\d{2}", at):
+            h, m = (int(x) for x in at.split(":"))
+            when = datetime.now(settings.tz).replace(hour=h, minute=m, second=0, microsecond=0)
+        else:
+            try:
+                when = datetime.fromisoformat(at)
+            except ValueError:
+                raise HTTPException(400, "at: HH:MM (today, local) or an ISO date-time")
+            when = when if when.tzinfo else when.replace(tzinfo=settings.tz)
     try:
-        return jobs.start(date.fromisoformat(date_) if date_ else None)
+        return jobs.start(date.fromisoformat(date_) if date_ else None, at=when, restart=restart)
     except jobs.NotConnected as e:
         raise HTTPException(409, str(e))
     except ValueError as e:

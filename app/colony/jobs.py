@@ -90,6 +90,12 @@ def slot_for(day: date) -> datetime:
     return datetime(day.year, day.month, day.day, h, m, tzinfo=settings.tz).astimezone(timezone.utc)
 
 
+def post_time(day: date) -> datetime:
+    """When `day` posts: its booked time (the first day can be at any time), else the usual slot."""
+    job = get(day.isoformat())
+    return datetime.fromisoformat(job["publish_at"]) if job else slot_for(day)
+
+
 def _local(iso: str) -> str:
     return datetime.fromisoformat(iso).astimezone(settings.tz).strftime("%a %d %b %H:%M")
 
@@ -120,18 +126,32 @@ def followers_now() -> int | None:
 # ------------------------------------------------------------------ starting
 
 
-def start(first: date | None = None) -> dict:
+def start(first: date | None = None, at: datetime | None = None, restart: bool = False) -> dict:
     """Start the daily schedule from `first` (default: tomorrow, or today if its slot is over an
-    hour away). Day 0 needs nothing from viewers: the crew, the pod and the signal going out."""
+    hour away). `at` posts the first episode at that time instead (it renders straight away when
+    that's sooner than the usual lead), and every day after at COLONY_POST_TIME. `restart` books
+    it again, only while nothing has posted. Day 0 needs nothing from viewers: the crew, the pod
+    and the signal going out."""
     if why := can_publish():
         raise NotConnected(why)
     if channel_state().get("started"):
-        raise ValueError(f"Farside already started on {channel_state()['start_date']}; see GET /colony/state")
+        if not restart:
+            raise ValueError(f"Farside already started on {channel_state()['start_date']}; see GET /colony/state "
+                             "(restart=true books it again while nothing has posted)")
+        if any(j["status"] in ("publishing", "done") for j in recent(50)):
+            raise ValueError("can't restart: an episode has already posted")
+        for p in _dir().glob("*.json"):
+            p.unlink()
     today_local = datetime.now(settings.tz).date()
-    if first is None:
-        first = today_local if slot_for(today_local) - now() > timedelta(hours=1) else today_local + timedelta(days=1)
-    if slot_for(first) - now() < timedelta(minutes=settings.colony_render_lead_minutes + 5):
-        raise ValueError("the first post must be at least an hour and five minutes away")
+    if at is not None:
+        first = at.astimezone(settings.tz).date()
+        if at - now() < timedelta(minutes=10):
+            raise ValueError("the first post must be at least 10 minutes away (it takes a few to render)")
+    else:
+        if first is None:
+            first = today_local if slot_for(today_local) - now() > timedelta(hours=1) else today_local + timedelta(days=1)
+        if slot_for(first) - now() < timedelta(minutes=settings.colony_render_lead_minutes + 5):
+            raise ValueError("the first post must be at least an hour and five minutes away (or give `at`)")
     s = state.load()
     if s["followers"] == 0:
         n = followers_now()
@@ -139,18 +159,19 @@ def start(first: date | None = None) -> dict:
             s["followers"] = n
             state.save(s)
     st = _set_channel(started=True, start_date=first.isoformat(), started_at=store.now_iso())
-    book(first)
-    notify.send(f":ringed_planet: **Farside** starts {_local(slot_for(first).isoformat())}: the first episode "
-                f"renders {settings.colony_render_lead_minutes} minutes before.")
-    return st
+    job = book(first, at)
+    notify.send(f":ringed_planet: **Farside** starts {_local(job['publish_at'])}: the first episode renders "
+                f"up to {settings.colony_render_lead_minutes} minutes before, with a preview here.")
+    return {**st, "first_post": job["publish_at"]}
 
 
-def book(day: date) -> dict:
+def book(day: date, at: datetime | None = None) -> dict:
     job = get(day.isoformat())
     if job:
         return job
     job = {"id": f"farside-{day.isoformat()}", "date": day.isoformat(), "channel": channels.COLONY,
-           "publish_at": slot_for(day).isoformat(), "status": "booked", "created_at": store.now_iso(), "results": {}}
+           "publish_at": (at or slot_for(day)).astimezone(timezone.utc).isoformat(), "status": "booked",
+           "created_at": store.now_iso(), "results": {}}
     save(job)
     return job
 

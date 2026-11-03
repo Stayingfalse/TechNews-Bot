@@ -65,10 +65,11 @@ def _write(p: Path, data) -> None:
 
 
 def deadline(day: date) -> datetime:
-    """The cut-off for `day`'s adaptation: COLONY_CUTOFF_MINUTES before the post, as UTC."""
-    h, m = (int(x) for x in settings.colony_post_time.split(":"))
-    post = datetime(day.year, day.month, day.day, h, m, tzinfo=settings.tz)
-    return (post - timedelta(minutes=settings.colony_cutoff_minutes)).astimezone(timezone.utc)
+    """The cut-off for `day`'s adaptation: COLONY_CUTOFF_MINUTES before its post, as UTC. A day
+    booked at another time (the first one can be) has its cut-off from that time."""
+    from . import jobs
+
+    return (jobs.post_time(day) - timedelta(minutes=settings.colony_cutoff_minutes)).astimezone(timezone.utc)
 
 
 # ------------------------------------------------------------------ the week
