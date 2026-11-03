@@ -87,6 +87,7 @@ def fake_claude(ctx: dict) -> dict:
                                            "caption": "Farside tonight."}
     ep["date"] = ctx["date"]
     ep["settlers"], ep["replies"], ep["wanted"] = {}, [], []
+    ep["_aim"], ep["_big"] = ctx.get("aim_seconds", 30), ctx.get("big_day", False)
     people = {p["handle"]: p for p in ctx["people"]}
     spot = {r["handle"] for r in ctx.get("spotlights", [])}
     moments = []
@@ -130,7 +131,10 @@ def _finish(ep: dict, moments: list) -> dict:
         at = next((i + 1 for i, b in enumerate(ep["beats"]) if b.get("slot") == "arrivals"), 0)
         ep["beats"][at:at] = moments[:4]
     from . import plan
-    while plan.estimate(ep) + (plan.SLOT_SECS["granted"] if ep["settlers"] else 0) > plan.MAX_SECONDS:
+    aim = ep.pop("_aim", plan.TARGET_SECONDS)
+    if ep.pop("_big", False):
+        aim -= 5  # the 7 s planet opens it, less the 2 s a surge saves on arrivals and the build
+    while plan.estimate(ep) > aim:  # aims for the target, as the prompt says
         drop = None
         for test in (lambda b: b["type"] in ("caption", "event") or (b["type"] == "say" and b["who"] in today.CREW_NOTES),
                      lambda b: b.get("slot") in ("people", "next"),

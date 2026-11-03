@@ -30,7 +30,8 @@ BEATS = ("slot", "caption", "say", "feature", "event", "decision")
 SLOT_SECS = {"arrivals": 9.1, "people": 7.8, "granted": 7.4, "build": 8.0, "next": 3.6, "ask": 3.0}  # the most each can take
 LINE_CHARS = 24  # a caption line (the font fits 24 small or 12 big)
 SAY_CHARS = 18  # a speech-bubble line
-MAX_SECONDS = 34  # the whole episode at its longest (most run 20-28 s)
+TARGET_SECONDS = 30  # what to aim for: people watch 8-12 s, and shorter parts get pushed further
+MAX_SECONDS = 40  # the most an episode may run: for big days (a surge, lots of newcomers, a decision)
 LINK = re.compile(r"https?://|www\.|\.(com|net|org|io|ly|gg|co)\b", re.I)
 # a short backstop; the writer is told the rules, and the preview has a human last look
 BLOCKLIST = re.compile(r"\b(fuck|shit|cunt|nigg|fag|retard|kill yourself|kys|nazi|porn|sex)\w*", re.I)
@@ -112,7 +113,7 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
         probs.append("at most one decision an episode")
     secs = estimate(ep)
     if secs > MAX_SECONDS:
-        probs.append(f"about {secs:.0f} s long, at most {MAX_SECONDS} s: cut a beat or shorten secs")
+        probs.append(f"about {secs:.0f} s long, at most {MAX_SECONDS} s (aim for {TARGET_SECONDS}): cut a beat or shorten secs")
     cap = str(ep.get("caption", ""))
     if not cap or len(cap) > 600:
         probs.append("caption: the post's caption, 1-600 characters")
@@ -164,6 +165,15 @@ def estimate(ep: dict) -> float:
         else:
             t += float(b.get("secs", 2.6))
     return t
+
+
+def length_note(ep: dict) -> str | None:
+    """A nudge (not a problem) when an episode is over the target."""
+    secs = estimate(ep)
+    if secs > TARGET_SECONDS:
+        return (f"about {secs:.0f} s at its longest: fine for a big day, but aim for {TARGET_SECONDS} s "
+                "(cut crew lines and captions first)")
+    return None
 
 
 def check_week(week: dict, handles: set[str]) -> list[str]:

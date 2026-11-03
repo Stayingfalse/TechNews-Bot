@@ -159,3 +159,22 @@ def test_old_farside_comments_are_deleted_after_30_days():
                {"id": "n", "user": "b", "uid": "2", "text": "hi", "at": new}])
     privacy.anonymise_old()
     assert set(inbox.load()["comments"]) == {"n"}
+
+
+def test_aim_for_30_but_a_big_day_may_run_to_40():
+    week = json.loads((replay.ROOT / "examples" / "colony_week.json").read_text())
+    assert not today.save_week(week)
+    day = date(2026, 11, 9)
+    early = today.deadline(day) - timedelta(hours=2)
+    ordinary = today.context(day, now=early, followers=3)
+    big = today.context(day, now=early, followers=1200)
+    assert not ordinary["big_day"] and ordinary["aim_seconds"] == plan.TARGET_SECONDS == 30
+    assert big["big_day"] and big["new_followers"] == 1200 and big["aim_seconds"] == plan.MAX_SECONDS - 2
+    long = {"beats": [{"type": "slot", "slot": s} for s in ("arrivals", "people", "build", "next", "ask")]
+            + [{"type": "caption", "lines": ["HI"], "secs": 4}], "caption": "x"}
+    assert plan.check_episode(long, set()) == [] and "aim for 30" in plan.length_note(long)
+    long["beats"] += [{"type": "caption", "lines": ["HI"], "secs": 5}] * 2
+    assert any("at most 40" in p for p in plan.check_episode(long, set()))
+    r = TestClient(app).post(f"/colony/today?date={day}", json={**long, "beats": long["beats"][:-2]}, headers=AUTH)
+    if r.status_code == 200:  # before the cut-off on the day the tests run
+        assert "aim for 30" in r.json()["note"]

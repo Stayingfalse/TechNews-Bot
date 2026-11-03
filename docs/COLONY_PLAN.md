@@ -37,7 +37,7 @@ followers" title card, a flash-forward montage, or their wording.
 
 ## 1. The concept: "the colony"
 
-One short vertical video a day (**20-30 s**: the review found that people watch 8-12 s
+One short vertical video a day (**aim for 30 s, up to 40 s on big days**: the review found that people watch 8-12 s
 whatever the length, and the shortest parts did best). Each video is the next day in a small
 settlement that only grows when the account does.
 

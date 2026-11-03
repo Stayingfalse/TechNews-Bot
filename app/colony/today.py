@@ -87,8 +87,14 @@ def planned(day: date) -> tuple[dict | None, str]:
 # ------------------------------------------------------------------ the day
 
 
-def _preview(day: date) -> tuple[dict, dict, list[dict]]:
-    """The colony as it would be today, from the comments so far (nothing saved)."""
+# Reads the account's follower count right now, or None. Set when the channel's account is
+# connected (the scheduler, M3); until then the preview keeps yesterday's count.
+live_followers = None
+
+
+def _preview(day: date, followers: int | None = None) -> tuple[dict, dict, list[dict]]:
+    """The colony as it would be today, from the comments so far and (if known) today's follower
+    count (nothing saved)."""
     s = state.load()
     after = deadline(day - timedelta(days=1)).isoformat()
     cut = deadline(day).isoformat()
@@ -96,14 +102,20 @@ def _preview(day: date) -> tuple[dict, dict, list[dict]]:
     older = [c for c in inbox.waiting(after) if c.get("kind") != "not_ok"]
     if s["day"] == day.isoformat():  # today's already been applied (a re-run after the post was made)
         return s, s["days"][s["day"]], older + comments
-    s2, report = rules.apply_day(s, day, comments, None)
+    s2, report = rules.apply_day(s, day, comments, followers)
     return s2, report, older + comments
 
 
-def context(day: date, now: datetime | None = None) -> dict:
+def context(day: date, now: datetime | None = None, followers: int | None = None) -> dict:
     """What the daily routine is given (GET /colony/today)."""
     now = now or datetime.now(timezone.utc)
-    s, report, comments = _preview(day)
+    if followers is None and live_followers:
+        try:
+            followers = live_followers()
+        except Exception:
+            followers = None
+    s, report, comments = _preview(day, followers)
+    big = rules.surge(report, s["followers"])
     ep, source = planned(day)
     by_settler: dict[str, list[dict]] = {}
     for c in comments:
@@ -131,13 +143,17 @@ def context(day: date, now: datetime | None = None) -> dict:
         so_far.append({"date": e.get("date"), "summary": e.get("summary", "")})
     return {
         "date": day.isoformat(), "deadline": deadline(day).isoformat(), "open": now < deadline(day),
+        # a big day (a surge of followers) opens on the planet and may run longer: the new people
+        # are likely to come back, so give the spotlights their moments
+        "big_day": big, "new_followers": report.get("joined", 0),
+        "aim_seconds": plan.MAX_SECONDS - 2 if big else plan.TARGET_SECONDS,
         "planned": ep, "planned_from": source,
         "featured": {f"${i + 1}": "@" + s["settlers"][k]["handle"] for i, k in enumerate(report["featured"]) if k in s["settlers"]},
         "colony": {"followers": s["followers"], "built": s["built"], "building": s["building"],
                    "next": report.get("next"), "settlers": len(s["settlers"])},
         "story_so_far": so_far, "people": people, "crew": CREW_NOTES,
         "kit": kit.KIT, "limits": {"caption_line": plan.LINE_CHARS, "say_line": plan.SAY_CHARS,
-                                   "max_seconds": plan.MAX_SECONDS, "beats": plan.BEATS, "events": plan.EVENTS,
+                                   "target_seconds": plan.TARGET_SECONDS, "max_seconds": plan.MAX_SECONDS, "beats": plan.BEATS, "events": plan.EVENTS,
                                    "slots": plan.SLOTS},
         "unsorted": sum(1 for c in comments if not c.get("kind")),
         # whose requests: three spotlights get a moment on screen, the rest of `grant` walk in the

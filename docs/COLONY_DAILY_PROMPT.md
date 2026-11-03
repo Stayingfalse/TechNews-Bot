@@ -22,6 +22,7 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
 1. GET APP_URL/colony/today. It gives you:
    - `planned`: today's episode from the week plan (or a spare). Start from it.
    - `deadline` and `open`: if `open` is false, stop and report "too late, the plan plays".
+   - `big_day`, `new_followers`, `aim_seconds`: on a big day (a surge of new followers) the video opens on the planet for 7 s with every new light coming on, and you can run longer: aim for `aim_seconds` in total, and keep the spotlights' moments, since the new people are likely to come back tomorrow.
    - `featured`: who `$1`-`$4` will be today (newcomers first).
    - `people`: everyone with something new to say: their `handle`, rank, job, `look` (sprite kit parts), `traits`, `sheet` (your memory of them from earlier days) and their new `comments` (each with an `id` and a `kind`: request, job, story, question, chatter, or unsorted). Requests from earlier days that no episode has answered yet are included.
    - `spotlights`: the three people whose requests get a moment on screen today, and why (the most wanted by likes, waiting and loyalty; a newcomer drawn fairly; whoever has waited longest). The server picks them, so it's fair and the same on a re-run: use them.
@@ -41,7 +42,7 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
    - Only the `spotlights` get `feature` and `say` beats. Everyone else in `grant` is changed in `settlers` and appears in the parade (don't add a beat for them).
    - A `feature` beat ("*@OLDBARREL* GOT" / "HIS *BARREL*") shows what someone got. A `say` beat ("IT LEAKS.|I LOVE IT.") gives them a line in their voice. Put people's moments early, right after `arrivals`.
    - Keep the plan's thread and its decision. Cut crew lines or captions to make room, never the `arrivals` slot.
-   - The limits are in `limits`: caption lines at most 24 characters, speech lines at most 18 (split with `|`), only the font's characters, ~30 s at most. Name only people who live here.
+   - The limits are in `limits`: caption lines at most 24 characters, speech lines at most 18 (split with `|`), only the font's characters. Aim for about 30 s; up to 40 s is allowed on a big day (lots of newcomers, a decision, many granted), since people who just arrived are likely to come back. The POST's `note` says when you're over 30. Name only people who live here.
    - `replies`: a short in-story reply (at most 150 characters) to each comment you acted on, by its `id` ("Pull up a barrel, the east row has room."). One reply per comment, none to anything you declined.
    - `summary`: today in one line of the story so far (at most 200 characters). `caption`: the post's caption, 1-3 lines naming who got what, ending with an invitation to comment.
    - `settlers`: `{"@handle": {"look": {...}, "traits": [...], "sheet": "..."}}` for everyone you changed.

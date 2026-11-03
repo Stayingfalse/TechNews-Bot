@@ -28,7 +28,7 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
    - The founding crew (MAREN, TOLU, BASK, IKO; see the schema for who they are) carry the story on quiet days. Keep them in character.
    - One `decision` in the week (or two, not on neighbouring days), always about a person or the colony: "@$1 found a sealed door: OPEN IT / LEAVE IT". A decision ends its episode. The next day's episode should start by showing what was decided (the daily routine fills in who chose what).
    - Use story `event`s (dust_storm, signal, aurora, meteors, quake, night) for the thread, not as filler: two or three a week.
-   - Short: each episode at most ~30 s, most 20-28 s. The server estimates every slot at its longest and rejects anything over the limit.
+   - Short: aim for about 30 s an episode (the server estimates every slot at its longest). 40 s is the hard limit, for big days; the response's `notes` say which episodes are over 30.
    - Text: caption lines at most 24 characters, speech lines at most 18, split with `|`. `*word*` makes a word gold. Only the characters the font has (A-Z, 0-9, . , ! ? ' : - + % @ / # &). No links, nothing a 13-year-old shouldn't see, and no real people, brands or other creators' characters.
    - Each episode has `date`, a `title`, a one-line `summary` (the story so far, at most 200 characters), `beats` and the post's `caption` (1-3 friendly lines that end by inviting people to comment to move in; no hashtags beyond #farside #pixelart #story).
    - Two `spares` (no date) that fit any day of any week: a quiet night, a meteor shower, something cosy. They play if a week ever starts without a plan.

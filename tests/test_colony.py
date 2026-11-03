@@ -113,7 +113,8 @@ def test_a_surge_opens_on_the_planet_and_the_count_follows_the_lights():
     s2, r = rules.apply_day(s, D + timedelta(days=7), [c(f"v{i}", "hi", 7, i % 50) for i in range(120)], 1033)
     assert rules.surge(r, s2["followers"]) and r["joined"] == 1000
     ep = episode.build(s2, r)
-    assert ep["shots"][0]["view"] == "planet" and ep["duration"] <= 34
+    from app.colony import plan
+    assert ep["shots"][0]["view"] == "planet" and ep["duration"] <= plan.MAX_SECONDS
     planet = ep["shots"][0]["spec"]
     assert views.draw_planet(planet, 3.0).frame().shape == (1920, 1080, 3)
     on = views._surge_times(planet["lights"], planet["lights_from"], tuple(planet["surge"]), planet["seed"])

@@ -32,7 +32,6 @@ JOB_LINE = {"farm": "*FARMING*", "build": "*BUILDING*", "scout": "*SCOUTING*", "
             "tinker": "*TINKERING*"}
 BEAT = 2.6
 PARADE_MAX = 12  # people shown walking in the parade (the caption counts them all)
-PARADE_MAX_SURGE = 8
 DEFAULT_BEATS = [{"type": "slot", "slot": s} for s in ("arrivals", "people", "build", "next", "ask")]
 
 
@@ -102,11 +101,12 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
     named = [k for k in report["arrived"] if k in people][:2 if big else 3]
     if big:  # the planet shot comes first: make room for it, keeping people's moments
         beats = list(beats)
-        budget = planmod.MAX_SECONDS - SURGE_SECS - 2
+        # a big day can run long (up to the hard limit): the new people will likely be back tomorrow
+        budget = planmod.MAX_SECONDS - SURGE_SECS - 1
         if (ep or {}).get("settlers") and not any(b.get("slot") == "granted" for b in beats):
             at = next((i for i, b in enumerate(beats) if b.get("slot") in ("build", "next", "ask")), len(beats))
             beats.insert(at, {"type": "slot", "slot": "granted"})
-        budget += 5  # what a surge day saves on arrivals, the parade and the build (see below)
+        budget += 4  # what a surge day saves on arrivals and the build (two capsules, a shorter build)
         for kind in ("caption", "crew", "event", "say", "people", "next"):
             while planmod.estimate({"beats": beats}) > budget:
                 i = next((i for i, b in enumerate(beats) if (b.get("type") == kind and kind != "people") or
@@ -171,7 +171,7 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
                     keys.append(k)
             if not keys:
                 continue
-            show = keys[:PARADE_MAX_SURGE if big else PARADE_MAX]
+            show = keys[:PARADE_MAX]
             dur = round(2.0 + 0.45 * len(show), 2)
             parades.append({"t0": t, "t1": t + dur,
                             "people": [{"name": people[k]["handle"], "look": look_for(s, k, ep)} for k in show]})
