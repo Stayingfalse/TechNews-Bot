@@ -236,7 +236,24 @@ def build(job: dict) -> tuple[dict, dict, dict, str, dict | None]:
     return s, report, spec, source, ep
 
 
-def _render(job: dict, spec: dict, persist: bool = True) -> None:
+def _voice(job: dict, spec: dict, s: dict) -> tuple[dict, list | None]:
+    """Voice the episode if it can be; otherwise it goes out silent and the summary says why."""
+    from . import voice
+
+    if not voice.enabled():
+        job["voice"] = {"on": False, "why": "voice is off (COLONY_VOICE, or no ELEVENLABS_API_KEY)"}
+        return spec, None
+    try:
+        spec, lines, info = voice.add(spec, s)
+        job["voice"] = {"on": True, **info, "month_chars": voice.spent(), "budget": settings.colony_voice_budget}
+        return spec, lines
+    except Exception as e:
+        log.warning("farside voice: %s", e)
+        job["voice"] = {"on": False, "why": str(e)[:200]}
+        return spec, None
+
+
+def _render(job: dict, spec: dict, persist: bool = True, voice: list | None = None) -> None:
     from PIL import Image
 
     from ..render.colony import video
@@ -248,7 +265,7 @@ def _render(job: dict, spec: dict, persist: bool = True) -> None:
     out = settings.videos_dir / f"{job['id']}-{secrets.token_urlsafe(8)}.mp4"
     cover = out.with_suffix(".jpg")
     t0 = time.time()
-    video.render(spec, out)
+    video.render(spec, out, voice=voice)
     Image.fromarray(video.frame_at(spec, min(spec["duration"] - 0.1, 3.0))).save(cover, quality=90)
     job.update(video=out.name, video_url=f"{settings.public_base_url}/media/{out.name}",
                cover_url=f"{settings.public_base_url}/media/{cover.name}",
@@ -273,12 +290,18 @@ def _preview(job: dict) -> None:
     sm = job["summary"]
     lines = [f":ringed_planet: **Farside, {job['date']}** ({sm['source']}), posts {_local(job['publish_at'])} unless blocked",
              f"{sm['followers']:,} followers ({sm['joined']:+,} today){' · SURGE' if sm['surge'] else ''} · "
-             f"{sm['arrived_count']} new settlers · {job['render']['duration']:.0f}s",
+             f"{sm['arrived_count']} new settlers · {job['render']['duration']:.0f}s · " + (
+                 f"voiced ({job['voice']['lines']} lines, {job['voice']['chars']} chars; {job['voice']['month_chars']:,}/"
+                 f"{job['voice']['budget']:,} this month)" if (job.get("voice") or {}).get("on")
+                 else f"NO VOICE: {(job.get('voice') or {}).get('why', 'off')}"),
              f"Caption: {job.get('caption', '')[:300]}"]
     if sm["changed"]:
         lines.append("Looks changed: " + ", ".join(sm["changed"][:30]))
     if sm["parts"]:
         lines.append("New parts drawn: " + ", ".join(sm["parts"]))
+    if (job.get("voice") or {}).get("refused_voices"):
+        lines.append("ElevenLabs refused these voices (a built-in voice spoke instead; add them to the account's "
+                     "voices, or change COLONY_*_VOICE): " + ", ".join(job["voice"]["refused_voices"]))
     if sm["arrived"]:
         lines.append("Named in it: " + ", ".join(sm["arrived"][:12]))
     lines.append("Block someone or a part (re-renders): `POST /colony/block?user=@name` or `?part=pet/dragon`")
@@ -297,10 +320,12 @@ def prepare(job: dict) -> None:
             save(job)
             poll()
             s, report, spec, source, ep = build(job)
+            spec, lines = _voice(job, spec, s)
+            state.save(s)  # keeps the voices settlers were given
             job["caption"] = spec["caption"]
             job["summary"] = _summary(s, report, ep, source)
             job["episode"] = {"source": source, "ep": ep, "shots": [x["view"] for x in spec["shots"]]}
-            _render(job, spec)
+            _render(job, spec, voice=lines)
             job["status"] = "scheduled"
             save(job)
             _preview(job)
@@ -512,9 +537,10 @@ def preview(day: date | None = None) -> dict:
                     s, report = rules.apply_day(s, day, comments, followers_now(), {})
                 ep, source = today.episode_for(day)
                 spec = episode.build(s, report, ep)
+                spec, lines = _voice(job, spec, s)
                 job["caption"] = spec["caption"]
                 job["summary"] = _summary(s, report, ep, f"{source}, PREVIEW: nothing posted or saved")
-                _render(job, spec, persist=False)
+                _render(job, spec, persist=False, voice=lines)
                 _preview(job)
         except Exception as e:
             log.exception("farside preview failed")

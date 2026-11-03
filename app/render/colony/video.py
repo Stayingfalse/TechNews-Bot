@@ -27,12 +27,12 @@ def _iris(f: np.ndarray, k: float) -> np.ndarray:
     return f[::blk, ::blk].repeat(blk, 0).repeat(blk, 1)[:1920, :1080]
 
 
-def render(ep: dict, path: str | Path, audio: str | Path | None = None) -> None:
+def render(ep: dict, path: str | Path, audio: str | Path | None = None, voice: list | None = None) -> None:
     path = Path(path)
     n = int(ep["duration"] * FPS)
     first = frame_at(ep, 0.0).astype(np.float32)
     wav = path.with_suffix(".wav")
-    sound.write({"duration": ep["duration"], "sfx": ep.get("sfx", [])}, wav)
+    sound.write({"duration": ep["duration"], "sfx": ep.get("sfx", [])}, wav, voice=voice)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "1080x1920",
            "-r", str(FPS), "-i", "-", "-i", str(audio or wav), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(path)]

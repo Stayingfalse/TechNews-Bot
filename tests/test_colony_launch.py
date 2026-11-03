@@ -31,7 +31,7 @@ def ig(monkeypatch, discord):
     monkeypatch.setattr(instagram, "publish_reel", lambda url, cap, cover=None: calls["posts"].append((url, cap))
                         or {"media_id": f"m{len(calls['posts'])}", "url": "https://instagram.com/p/x"})
     monkeypatch.setattr(instagram, "reply", lambda cid, text: calls["replies"].append((cid, text)) or "r")
-    monkeypatch.setattr(video, "render", lambda spec, path, audio=None: path.write_bytes(b"mp4"))
+    monkeypatch.setattr(video, "render", lambda spec, path, audio=None, voice=None: path.write_bytes(b"mp4"))
     monkeypatch.setattr(jobs, "_spawn", lambda target, job: target(job))  # run steps in this thread
     store.set_tokens("instagram", {"access_token": "t", "user_id": "9", "expires_at": 9e12}, channel=channels.COLONY)
     calls["discord"] = discord
@@ -52,7 +52,8 @@ def test_start_needs_the_channel_switched_on_and_connected(monkeypatch):
     monkeypatch.setattr(settings, "colony_enabled", True)
     r = c.post("/colony/start", headers=AUTH)
     assert r.status_code == 409 and ("PUBLISH_ENABLED" in r.text or "connected" in r.text)
-    assert c.get("/colony/state", headers=AUTH).status_code == 200
+    st = c.get("/colony/state", headers=AUTH)
+    assert st.status_code == 200 and st.json()["voice"]["budget"] == settings.colony_voice_budget
     assert c.get("/colony/state").status_code == 401
 
 

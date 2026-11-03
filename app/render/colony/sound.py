@@ -52,11 +52,18 @@ def effect(kind: str) -> np.ndarray:
     return _tone(1318.5, 0.18, 0.05, "square") * 0.12
 
 
-def write(spec: dict, path) -> None:
+def write(spec: dict, path, voice: list | None = None) -> None:
+    """The bed and effects, and (if given) the voice lines as (time, samples), with the music
+    ducked under them."""
+    from ..audio import duck_envelope, voice_track
+
     n = int(SR * spec["duration"])
     mix = pad(spec["duration"])[:n]
     for at, kind in spec.get("sfx", []):
         fx = effect(kind)
         s0 = int(at * SR)
         mix[s0:s0 + len(fx)] += fx[: max(0, n - s0)]
-    write_wav(np.clip(mix, -1, 1), str(path))
+    if voice:
+        v = voice_track(voice, n)
+        mix = mix * duck_envelope(v)[: len(mix)] + v * 1.1
+    write_wav(np.clip(np.tanh(mix * 1.1) * 0.9, -1, 1), str(path))
