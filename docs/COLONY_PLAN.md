@@ -31,6 +31,9 @@ followers" title card, a flash-forward montage, or their wording.
 | How Claude runs | **Claude Code Routines call the server**, as the quiz batch does: a weekly one and a daily one. The server never calls Claude and holds no Anthropic key, so it all runs on the existing Claude usage, not paid API usage. |
 | Week ahead | Claude plans the **whole week as complete, playable episodes**. If the AI can't run on a day (out of credits, API down), that day plays as planned; if it can, it builds in what people asked for (§5b). |
 | Moderation | A Discord preview before each post with Block buttons. **Not blocked means it goes out**, as the dungeon crawl's party names do. |
+| The core | **People get their decisions.** What does best on every channel is content about the viewer, so most of each video shows what particular people asked for and chose (§1a). The counts are the backdrop. |
+| Views | **Four views, picked per scene** (§5c): side-on (story beats, the bunkers), top-down (the colony at scale), inside buildings, and the whole planet (later, planets) |
+| Voice | **ElevenLabs on this channel too.** The subscription stays at 30,000 credits a month for three channels, and the colony gets 15,000 (§5d). |
 
 ## 1. The concept: "the colony"
 
@@ -45,6 +48,29 @@ settlement that only grows when the account does.
 | **Personal upgrades** | Things you do yourself, read from comments (§3): rank goes up with streaks, you pick a job, you recruit by tagging a friend. |
 | **Colony upgrades** | Milestones the colony reaches together: follower thresholds and post totals (shares, saves) unlock buildings (§4). |
 | **Story** | Written every day from the comments (§5a): settlers become who their owners say they are, feuds and friendships start from what people write, and a weekly arc brings in storms, signals, ruins and visitors. Now and then a vote. |
+
+## 1a. People get their decisions
+
+The numbers from the other channels all point the same way: the best part on any channel was
+the dungeon crawl's "pick your class", where the question was about the viewer. So the counts
+(followers, shares) build the colony in the background, and **each video is mostly about
+particular people and what they decided**:
+
+- **Every request gets an answer on screen, by name.** "@oldbarrel wanted a barrel. He got the
+  drafty corner." Requests that can't be done get an in-story answer too ("The council says no
+  pets bigger than the airlock").
+- **Personal decisions:** a settler's owner picks their job, home, look, a side in a dispute, or
+  what to do with a find ("@mossbyte found a sealed door in the cellar: comment OPEN or LEAVE").
+  The writer offers a personal choice to 1-3 featured settlers per episode, and their next
+  appearance shows what came of it.
+- **Colony decisions** (where the next dome goes, what to do about the signal) are votes as on
+  the dungeon crawl, but the video names who swung it and shows the first few voters' settlers
+  doing it.
+- **Consequences stick.** A settler who chose the night shift is drawn on it from then on.
+  Someone who opened the door is "the one who opened the door". The settler sheet (§5a) keeps
+  this.
+- **Order on screen:** the people (arrivals, answers, consequences) come first. Colony progress
+  comes after, as the payoff.
 
 ### The setting
 
@@ -194,6 +220,46 @@ short as the colony grows.
   say so before launch. Opted-out users' comments are never sent. Sheets and comments are
   anonymised after `RETENTION_DAYS`, and erasure removes a settler, their sheet and their comments.
 
+## 5c. Views: picking the camera for each scene
+
+The side-on diorama is good for story beats and the bunkers below, but it fits a few dozen
+people. Thousands need other views. Each scene in an episode names its view, and the writer
+picks one to suit what's happening:
+
+| View | For | Holds | What it shows |
+|---|---|---|---|
+| **Side-on** (the look test) | Arrivals, a settler's moment, a request answered, building a dome, the **bunkers and tunnels** underground | ~30 people, 3-5 named | Sky and the planet above, the surface, a slice of the underground |
+| **Top-down** | The colony at scale: districts, roads, farms, crowds, a march or festival, where a new building goes | thousands (one pixel each when far out, sprites when close) | A tile map of the surface. The camera can fly to a district or someone's home. |
+| **Inside** | A dome, the workshop, the council room, someone's quarters, a cellar | 2-8 | A cut-away room with furniture and their looks up close. This is where personal scenes and decisions play. |
+| **Planet** | Milestones, the follower count as lights on the night side, later a second moon or planet | everyone, as lights | The whole moon turning, with the colony's districts lit up |
+
+All four use the same palette, font, sprite kit and settler sheets, so a settler looks the same
+in each. One episode can cut between them: planet → top-down push in → side-on → inside.
+
+**As it grows:** in the first weeks it's mostly side-on and inside. Top-down becomes the overview
+once the colony spreads beyond a couple of screens (around 100 people). The planet view is for
+milestones from the start, and becomes the overview past a few thousand. Every view keeps the
+named, featured settlers at sprite size, so the people stay the centre whatever the scale.
+
+## 5d. Voice
+
+ElevenLabs stays on **30,000 credits a month** now that three channels use it. Budgets:
+
+| Channel | Credits a month | Notes |
+|---|---|---|
+| Quiz | 2,000 | as now |
+| Dungeon crawl | 10,000 | up from 7,200 (`ADVENTURE_VOICE_BUDGET`) |
+| **Colony** | **15,000** | A narrator plus character voices |
+| Spare | 3,000 | retries and tests |
+
+- **A narrator** (a calm "colony log" voice): ~250 characters a day, ~7,500 a month.
+- **Character voices** for featured settlers' lines: a cast of ~8 designed voices from the voice
+  library (old, young, gruff, bright...), assigned by the writer to suit each settler's sheet and
+  kept from then on. ~150 characters a day, ~4,500 a month. The barrel elder gets the old one.
+- **The founding crew** each have a fixed voice.
+- Out of credits: speech bubbles stay, voice drops out (as on the other channels). Voice is made
+  only for the episode that actually posts, after the day's adaptation.
+
 ## 5b. Who does what, and what happens when the AI can't run
 
 ### The split
@@ -278,7 +344,7 @@ weekly and daily routine prompts (`docs/COLONY_ROUTINE_PROMPT.md`, `docs/COLONY_
 
 | | What | Done when |
 |---|---|---|
-| M1 Look test | Pixel renderer on the moon: the landing pod's first night, a dome going up, the founding crew plus 30 named settlers, a progress bar. Three stills and a 25 s video in Discord. | Owner picks the look |
+| M1 Look test | ~~Side-on~~ (done 3 Nov: `render_colony.py`). Then the top-down view, an interior and the planet, all in the same style, plus one episode that cuts between them. | Owner picks the look of each view |
 | M2 Counts | `followers()`, the colony and roster store, the comment rules of §3, milestone and resource rules of §4, tests | A dry run over a fake week posts nothing and renders 7 correct videos |
 | M2.5 Writer | §5a-b: sprite kit v1 (≈ 40 parts, barrel included), `POST /colony/week` and the spare episodes, `GET`/`POST /colony/today` and the DeepSeek sorter with their checks, the moderation preview, a replay test over a fake week of comments (requests, a troll, a prompt injection, a returning settler) run four times: full AI, no Claude, no DeepSeek, neither | Every run gives 7 good videos and every bad comment is handled |
 | M3 Launch | New account connected; "Day 0" (an empty world: the first follower is the first settler); daily posts at a slot clear of the others (09:00 / 12:00; 19:00 is free now racing is off) | First automatic post |
