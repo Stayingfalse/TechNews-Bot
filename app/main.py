@@ -860,7 +860,9 @@ def racing_start(at: str = "", now: bool = False, restart: bool = False):
     `at` (HH:MM local or ISO; default the next RACING_POST_TIME), or with now=true as soon as it's
     rendered (race 1's video then posts at the next RACING_POST_TIME). restart=true starts over,
     only while nothing has been posted or bet. From then on it runs by itself.
-    Needs the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
+    Needs RACING_ENABLED, the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
+    if not settings.racing_enabled:
+        raise HTTPException(409, "Sixel Speedway is switched off: set RACING_ENABLED=true to run it again.")
     try:
         job = racing_jobs.start(_when(at) if at else None, right_now=now, restart=restart)
     except racing_jobs.NotConnected as e:

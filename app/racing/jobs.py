@@ -602,7 +602,7 @@ def _loop() -> None:
     last_poll = last_tick = 0.0
     while True:
         try:
-            if lease.held() and state().get("started"):
+            if settings.racing_enabled and lease.held() and state().get("started"):
                 if time.time() - last_tick > 30:
                     last_tick = time.time()
                     recover()

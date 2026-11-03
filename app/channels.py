@@ -38,6 +38,12 @@ def registry() -> dict[str, Channel]:
     }
 
 
+def active() -> dict[str, Channel]:
+    """The channels that are running: a switched-off one (RACING_ENABLED=false) keeps its posts and
+    numbers, but its logins aren't watched."""
+    return {cid: ch for cid, ch in registry().items() if cid != RACING or settings.racing_enabled}
+
+
 def get(channel_id: str | None) -> Channel:
     return registry()[channel_id or MAIN]
 

@@ -99,6 +99,9 @@ class Settings:
 
         # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
         # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.
+        # Switched off (Nov 2026: no viewers, see docs/CHANNEL_REVIEW_AND_NEXT.md). Off, nothing races,
+        # renders, posts or replies; the code, races, ledger and bets pages are kept for a comeback.
+        self.racing_enabled = _bool("RACING_ENABLED", False)
         self.racing_handle = os.environ.get("RACING_HANDLE", "sixelspeedway")
         self.racing_post_time = os.environ.get("RACING_POST_TIME", "19:00")
         self.racing_close_minutes = int(os.environ.get("RACING_CLOSE_MINUTES", "60"))
