@@ -217,32 +217,53 @@ def _next_post_label(t: datetime | None = None) -> str:
         f"the next episode ({day} {local.strftime('%-I:%M%p').lower()})"
 
 
-def acknowledge(t: datetime | None = None) -> int:
-    """A quick reply to every new comment worth one, so nobody waits a day to hear back: a welcome
-    on someone's first comment, and "noted" on a request. Plain templates, no AI; the episode's own
-    reply follows once it has posted."""
+def acknowledge(t: datetime | None = None, ask=None) -> int:
+    """A quick reply to every new comment worth one, so nobody waits a day to hear back: someone's
+    first comment, a request, a question. Written by DeepSeek in a crew member's voice from what
+    they said (talk.py); a plain template when it can't. Comments that try to steer an AI get no
+    reply. The episode's own reply follows once it has posted."""
+    from . import talk
+
     t = t or now()
     box = inbox.load()["comments"]
     done = replies.acked()
     s = state.load()
-    known = {k for k in s["settlers"]}
+    known = set(s["settlers"])
     cutoff = (t - timedelta(hours=ACK_HOURS)).isoformat()
     seen_first: set[str] = set()
-    items = []
+    todo = []
     nxt = _next_post_label(t)
     for c in sorted(box.values(), key=lambda c: c["at"]):
         first = c["settler"] not in known and c["settler"] not in seen_first
         seen_first.add(c["settler"])
-        if c["at"] < cutoff or c["id"] in done or c.get("kind") == "not_ok" or c["user"].lstrip("@").lower() in s["blocked"]:
+        if c["at"] < cutoff or c["id"] in done or c.get("kind") == "not_ok" or talk.is_jailbreak(c["text"]) \
+                or c["user"].lstrip("@").lower() in s["blocked"]:
             continue
-        if first:
+        if first or c.get("kind") in ("request", "question"):
+            todo.append({**c, "new": first})
+    if not todo:
+        return 0
+    facts = {"followers": s["followers"], "next_episode": nxt, "built": s["built"],
+             "building": (s["building"] or {}).get("id"),
+             "how_to_join": "comment anything to get a settler; follow to be counted as one of the colony",
+             "jobs": ["farm", "build", "scout", "guard", "tinker"],
+             "can_ask_for": "a look (hat, pet, something to hold or ride, a costume), a job, a part in the story"}
+    written = talk.write([{"id": c["id"], "text": c["text"], "new": c["new"], "kind": c.get("kind")} for c in todo],
+                         facts, ask=ask)
+    items = []
+    for c in todo:
+        text = written.get(c["id"])
+        if text:
+            text = f"@{c['user']} {text}"
+        elif c["new"]:
             text = (f"Welcome to Farside, @{c['user']}! You've landed, and you'll be in {nxt}. "
                     "Tell us who you are, or comment FARM, BUILD, SCOUT, GUARD or TINKER to pick a job.")
         elif c.get("kind") == "request":
             text = f"Noted, @{c['user']}! It goes to the colony for {nxt}."
         else:
-            continue
-        items.append({"comment_id": c["id"], "user": c["user"], "text": text, "kind": "ack"})
+            continue  # a question we couldn't answer well: better no reply than a canned one
+        items.append({"comment_id": c["id"], "user": c["user"], "text": text, "kind": "ack",
+                      "written": bool(written.get(c["id"]))})
     return replies.add(items)
 
 
