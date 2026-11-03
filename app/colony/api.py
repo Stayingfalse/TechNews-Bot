@@ -118,7 +118,15 @@ def colony_state():
             "inbox": {"comments": len(inbox.load()["comments"]),
                       "unsorted": sum(1 for c in inbox.load()["comments"].values() if not c.get("kind"))},
             "replies": {"queued": len(q["items"]), "sent": len(q["sent"]), "paused_until": q.get("paused_until")},
+            "voice": _voice_status(),
             "jobs": [{k: v for k, v in j.items() if k not in ("episode",)} for j in jobs.recent(7)]}
+
+
+def _voice_status() -> dict:
+    from . import voice
+
+    return {"on": voice.enabled(), "model": settings.colony_voice_model, "month_chars": voice.spent(),
+            "budget": settings.colony_voice_budget, "refused_voices": sorted(voice.refused)}
 
 
 @router.post("/block")

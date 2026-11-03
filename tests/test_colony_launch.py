@@ -52,7 +52,8 @@ def test_start_needs_the_channel_switched_on_and_connected(monkeypatch):
     monkeypatch.setattr(settings, "colony_enabled", True)
     r = c.post("/colony/start", headers=AUTH)
     assert r.status_code == 409 and ("PUBLISH_ENABLED" in r.text or "connected" in r.text)
-    assert c.get("/colony/state", headers=AUTH).status_code == 200
+    st = c.get("/colony/state", headers=AUTH)
+    assert st.status_code == 200 and st.json()["voice"]["budget"] == settings.colony_voice_budget
     assert c.get("/colony/state").status_code == 401
 
 
