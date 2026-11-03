@@ -20,6 +20,8 @@ POD_X = 32
 DOME = (102, 22)  # habitat dome: centre x, radius
 GREEN = (166, 19)  # greenhouse
 BEACON_X = 228
+CONDENSER_X = 136
+WORKSHOP_X = 202
 OUTSIDE_MAX = 16  # settlers drawn outside; the rest are lit windows and heads in the dome
 
 
@@ -208,6 +210,65 @@ def draw_dome(c: Canvas, cx: int, r: int, fill: float = 1.0, inside: str = "home
     return None
 
 
+def _built(c: Canvas, fill: float, top: int, draw, t: float, x0: int, x1: int):
+    """Draw a building bottom-up to `fill` (0-1) of its height, with scaffold while unfinished."""
+    tmp = Canvas(c.w, c.h)
+    draw(tmp, t)
+    cut = int(GROUND - (GROUND - top) * max(0.0, min(1.0, fill)))
+    a = tmp.alpha.copy()
+    a[:cut] = False
+    c.rgb[a] = tmp.rgb[a]
+    c.world[a] = tmp.world[a]
+    c.alpha |= a
+    if fill < 1:
+        for sx in range(x0, x1 + 1, 6):
+            c.rect(sx, top - 2, 1, GROUND - top + 2, P["wood1"])
+        c.rect(x0, top - 2, x1 - x0 + 1, 1, P["wood1"])
+        rng = _rng("spark", x0, int(t * 12))
+        for _ in range(3):
+            c.px((x0 + x1) // 2 + rng.integers(-4, 5), cut + rng.integers(-2, 2), P["warm0"], world=False)
+        return ((x0 + x1) / 2, cut)
+    return None
+
+
+def _condenser(c: Canvas, t: float):
+    x, gy = CONDENSER_X, GROUND
+    c.rect(x - 5, gy - 18, 10, 17, P["metal1"])
+    c.rect(x - 5, gy - 18, 10, 2, P["metal0"])
+    c.rect(x - 3, gy - 14, 2, 10, P["glass"])
+    lvl = int(6 + 2 * math.sin(t * 0.8))
+    c.rect(x - 3, gy - 4 - lvl, 2, lvl, P["crys0"] * 0.8)
+    c.rect(x + 5, gy - 10, 5, 1, P["metal2"])
+    c.rect(x + 9, gy - 10, 1, 9, P["metal2"])
+    for i in range(3):  # fins
+        c.rect(x - 7, gy - 16 + i * 5, 2, 3, P["metal2"])
+    if int(t * 2) % 3 == 0:
+        c.px(x, gy - 20 - int(t * 6) % 4, P["rim"], world=False)
+
+
+def _workshop(c: Canvas, t: float):
+    x, gy = WORKSHOP_X, GROUND
+    c.rect(x - 10, gy - 14, 20, 13, P["metal2"])
+    c.rect(x - 11, gy - 16, 22, 2, P["metal1"])
+    c.rect(x + 5, gy - 22, 3, 6, P["metal3"])  # chimney
+    c.rect(x - 7, gy - 10, 6, 9, P["warm1"])  # open bay
+    c.rect(x + 1, gy - 11, 6, 4, P["warm0"])  # window
+    gm, gx, gy0 = c.disc(x + 4, gy - 19, 2)
+    c.mask(gm, gx, gy0, P["gold"])
+    if int(t * 3) % 2 == 0:
+        c.px(x + 6, gy - 25 - int(t * 4) % 3, P["metal1"], world=False)
+
+
+def _beacon(c: Canvas, t: float):
+    x, gy = BEACON_X, ground_y(BEACON_X)
+    c.rect(x - 4, gy - 4, 9, 4, P["metal2"])
+    c.rect(x - 2, gy - 40, 5, 36, P["metal1"])
+    for y in range(gy - 38, gy - 4, 6):
+        c.rect(x - 3, y, 7, 1, P["metal3"])
+    c.rect(x - 3, gy - 44, 7, 4, P["metal0"])
+    c.rect(x - 1, gy - 43, 3, 2, P["gold"] if int(t * 2) % 2 == 0 else P["warm2"], world=False)
+
+
 def draw_heater(c: Canvas, x: int, t: float):
     gy = ground_y(x)
     c.rect(x - 1, gy - 4, 3, 4, P["metal3"])
@@ -274,19 +335,20 @@ def fit_scale(text: str, max_w: int = SAFE[2] - SAFE[0]) -> int:
 
 
 def caption(c: Canvas, lines: list[str], t: float, t0: float):
+    """Centred lines above the bottom of the safe area; *word* is gold. Each line is as big as fits."""
     k = min(1.0, (t - t0) / 0.18)
-    scale = min(fit_scale(l.replace("*", "")) for l in lines)
-    lh = 9 * scale
-    y = 238 - (len(lines) - 1) * lh + int((1 - k) * 4)
-    for i, line in enumerate(lines):
+    scales = [fit_scale(l.replace("*", "")) for l in lines]
+    y = 252 - sum(9 * sc for sc in scales) + int((1 - k) * 4)
+    for line, scale in zip(lines, scales):
         words = line.split(" ")
-        text = " ".join(w.strip("*") for w in words)
+        text = " ".join(w.replace("*", "") for w in words)
         x = (SAFE[0] + SAFE[2]) // 2 - pixfont.width(text, scale) // 2
         for w in words:
             col = P["gold"] if w.startswith("*") else P["ui"]
-            w = w.strip("*")
-            c.text(w, x, y + i * lh, col, scale=scale)
+            w = w.replace("*", "")
+            c.text(w, x, y, col, scale=scale)
             x += pixfont.width(w + " ", scale)
+        y += 9 * scale
 
 
 def title(c: Canvas, count: int, bump: float):
@@ -401,14 +463,29 @@ def draw(spec: dict, t: float) -> Canvas:
     outside, inside = people[:OUTSIDE_MAX], people[OUTSIDE_MAX:]
     sparks = None
     for b in spec.get("buildings", []):
+        f0, f1, ta, tb = b.get("from", 1.0), b.get("to", b.get("from", 1.0)), b.get("t0", 0), b.get("t1", 1)
+        fill = f0 + (f1 - f0) * _ease((t - ta) / max(0.01, tb - ta))
+        if fill <= 0:
+            continue
+        sp = None
         if b["kind"] == "dome":
-            draw_dome(wc, *DOME, fill=1.0, inside="home", t=t, heads=min(10, len(inside)))
-            lights.append((DOME[0], GROUND - 8, 34, 0.7))
+            sp = draw_dome(wc, *DOME, fill=fill, inside="home", t=t, heads=min(10, len(inside)) if fill >= 1 else 0)
+            lights.append((DOME[0], GROUND - 8, 34, 0.25 + 0.45 * fill))
         elif b["kind"] == "greenhouse":
-            f0, f1, ta, tb = b.get("from", 1.0), b.get("to", 1.0), b.get("t0", 0), b.get("t1", 1)
-            fill = f0 + (f1 - f0) * _ease((t - ta) / max(0.01, tb - ta))
-            sparks = draw_dome(wc, *GREEN, fill=fill, inside="green", t=t)
+            sp = draw_dome(wc, *GREEN, fill=fill, inside="green", t=t)
             lights.append((GREEN[0], GROUND - 6, 26, 0.3 + 0.3 * fill))
+        elif b["kind"] == "condenser":
+            sp = _built(wc, fill, GROUND - 21, _condenser, t, CONDENSER_X - 7, CONDENSER_X + 9)
+            lights.append((CONDENSER_X, GROUND - 10, 14, 0.25))
+        elif b["kind"] == "workshop":
+            sp = _built(wc, fill, GROUND - 25, _workshop, t, WORKSHOP_X - 11, WORKSHOP_X + 10)
+            lights.append((WORKSHOP_X - 3, GROUND - 6, 22, 0.55 * fill))
+        elif b["kind"] == "beacon":
+            sp = _built(wc, fill, ground_y(BEACON_X) - 45, _beacon, t, BEACON_X - 4, BEACON_X + 4)
+            if fill >= 1:
+                lights.append((BEACON_X, ground_y(BEACON_X) - 42, 30, 0.7))
+        if sp and fill < 1:
+            sparks = sp
     if sparks and spec.get("building_now", (0, 0))[0] <= t <= spec.get("building_now", (0, 0))[1]:
         lights.append((sparks[0], sparks[1], 12, 0.6))
     for hx in spec.get("heaters", []):

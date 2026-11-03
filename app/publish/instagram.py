@@ -236,6 +236,11 @@ def account() -> dict:
     return _get("me", "user_id,username,account_type")
 
 
+def followers() -> int:
+    """The connected account's follower count (the API never says who followed)."""
+    return int(_get("me", "followers_count")["followers_count"])
+
+
 def media_info(media_id: str) -> dict:
     return _get(media_id, "permalink,username,timestamp,media_type,media_product_type")
 

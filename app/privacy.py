@@ -77,6 +77,9 @@ def erase(user: str) -> int:
     from .adventure import party
 
     n += party.erase(key)  # the story's party and credits
+    from .colony import state as colony
+
+    n += int(colony.erase(key))  # their settler on Farside
     return n
 
 

@@ -345,7 +345,7 @@ weekly and daily routine prompts (`docs/COLONY_ROUTINE_PROMPT.md`, `docs/COLONY_
 | | What | Done when |
 |---|---|---|
 | M1 Look test | ~~Side-on~~ (done 3 Nov: `render_colony.py`). Then the top-down view, an interior and the planet, all in the same style, plus one episode that cuts between them. | Owner picks the look of each view |
-| M2 Counts | `followers()`, the colony and roster store, the comment rules of §3, milestone and resource rules of §4, tests | A dry run over a fake week posts nothing and renders 7 correct videos |
+| M2 Counts | ~~Done 3 Nov~~: `instagram.followers()`, `app/colony/` (rules, state, episode, dryrun: `python -m app.colony.dryrun out/week --video`), side-on drawings for every building to the beacon, privacy erase, tests | A dry run over a fake week posts nothing and renders 7 correct videos |
 | M2.5 Writer | §5a-b: sprite kit v1 (≈ 40 parts, barrel included), `POST /colony/week` and the spare episodes, `GET`/`POST /colony/today` and the DeepSeek sorter with their checks, the moderation preview, a replay test over a fake week of comments (requests, a troll, a prompt injection, a returning settler) run four times: full AI, no Claude, no DeepSeek, neither | Every run gives 7 good videos and every bad comment is handled |
 | M3 Launch | New account connected; "Day 0" (an empty world: the first follower is the first settler); daily posts at a slot clear of the others (09:00 / 12:00; 19:00 is free now racing is off) | First automatic post |
 | M4 Story | The weekly routine live, occasional votes, the `wanted` → new sprites loop; weekly review covers the channel | Two weeks of posts |
