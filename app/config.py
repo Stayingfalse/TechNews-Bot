@@ -97,6 +97,13 @@ class Settings:
         self.adventure_writer = os.environ.get("ADVENTURE_WRITER", "deepseek").strip().lower()
         self.deepseek_thinking = os.environ.get("DEEPSEEK_THINKING", "disabled").strip().lower()  # disabled / enabled / default
 
+        # Farside (@farside.colony, docs/COLONY_PLAN.md): Claude Code routines plan the week and adapt
+        # each day through /colony/week and /colony/today; whatever is accepted by COLONY_CUTOFF_MINUTES
+        # before the post is used, else the plan stands.
+        self.colony_handle = os.environ.get("COLONY_HANDLE", "farside.colony")
+        self.colony_post_time = os.environ.get("COLONY_POST_TIME", "19:00")
+        self.colony_cutoff_minutes = int(os.environ.get("COLONY_CUTOFF_MINUTES", "90"))
+
         # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
         # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.
         # Switched off (Nov 2026: no viewers, see docs/CHANNEL_REVIEW_AND_NEXT.md). Off, nothing races,

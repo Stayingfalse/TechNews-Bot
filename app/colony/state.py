@@ -35,10 +35,12 @@ def erase(handle: str) -> bool:
     """A privacy request: the settler leaves the colony and every record of them goes."""
     with _lock:
         s = load()
-        if rules.erase(s, handle):
+        hit = rules.erase(s, handle)
+        if hit:
             save(s)
-            return True
-        return False
+    from . import inbox
+
+    return bool(inbox.erase(handle)) or hit
 
 
 def block(handle: str) -> None:

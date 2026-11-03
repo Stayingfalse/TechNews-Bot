@@ -1,0 +1,383 @@
+{
+ "week_start": "2026-11-09",
+ "episodes": [
+  {
+   "date": "2026-11-09",
+   "title": "THE LANDING",
+   "summary": "The pod is down on the far side. The crew waits for anyone who answers the signal.",
+   "beats": [
+    {
+     "type": "caption",
+     "lines": [
+      "THE POD IS DOWN",
+      "ON THE *FAR SIDE*"
+     ],
+     "secs": 2.6
+    },
+    {
+     "type": "say",
+     "who": "MAREN",
+     "text": "WE MADE IT.|NOW WE WAIT.",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "event",
+     "event": "signal",
+     "lines": [
+      "THE SIGNAL",
+      "*GOES OUT*"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "slot",
+     "slot": "next"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 1: The Landing. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-10",
+   "title": "FIRST COLD NIGHT",
+   "summary": "The first night is colder than anyone planned for.",
+   "beats": [
+    {
+     "type": "event",
+     "event": "night",
+     "lines": [
+      "THE FIRST NIGHT",
+      "IS *COLD*"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "say",
+     "who": "IKO",
+     "text": "HEATER'S|HOLDING. JUST.",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "say",
+     "who": "$1",
+     "text": "IS IT ALWAYS|THIS PURPLE?",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 2: First Cold Night. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-11",
+   "title": "DUST STORM",
+   "summary": "A dust storm drives everyone inside the pod.",
+   "beats": [
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "event",
+     "event": "dust_storm",
+     "lines": [
+      "A *DUST STORM*",
+      "ROLLS IN"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "say",
+     "who": "TOLU",
+     "text": "EVERYONE|INSIDE!",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 3: Dust Storm. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-12",
+   "title": "LIGHTS ON THE RIDGE",
+   "summary": "After the storm, someone sees lights on the ridge. Go and look, or stay in?",
+   "beats": [
+    {
+     "type": "event",
+     "event": "aurora",
+     "lines": [
+      "THE SKY",
+      "*GLOWS*"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "decision",
+     "who": "$1",
+     "lines": [
+      "LIGHTS ON",
+      "THE *RIDGE*",
+      "WHAT NOW?"
+     ],
+     "choices": [
+      [
+       "A",
+       "GO LOOK"
+      ],
+      [
+       "B",
+       "STAY IN"
+      ]
+     ]
+    }
+   ],
+   "caption": "Farside, day 4: Lights On The Ridge. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-13",
+   "title": "WHAT WAS ON THE RIDGE",
+   "summary": "The colony decided about the ridge lights; today we find out what they were.",
+   "beats": [
+    {
+     "type": "caption",
+     "lines": [
+      "THE RIDGE",
+      "*VOTE IS IN*"
+     ],
+     "secs": 2.6
+    },
+    {
+     "type": "say",
+     "who": "MAREN",
+     "text": "WE GO AT|FIRST LIGHT.",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "event",
+     "event": "meteors",
+     "lines": [
+      "SO THAT'S",
+      "WHAT THEY WERE"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "slot",
+     "slot": "next"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 5: What Was On The Ridge. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-14",
+   "title": "THE QUAKE",
+   "summary": "A moonquake shakes the colony and Bask's crates go everywhere.",
+   "beats": [
+    {
+     "type": "event",
+     "event": "quake",
+     "lines": [
+      "THE GROUND",
+      "*SHAKES*"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "say",
+     "who": "BASK",
+     "text": "MY CRATES!",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 6: The Quake. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  },
+  {
+   "date": "2026-11-15",
+   "title": "ONE WEEK",
+   "summary": "One week on Farside: who came, what got built.",
+   "beats": [
+    {
+     "type": "caption",
+     "lines": [
+      "ONE WEEK",
+      "ON *FARSIDE*"
+     ],
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "say",
+     "who": "MAREN",
+     "text": "GOOD WORK,|EVERYONE.",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Farside, day 7: One Week. Follow and comment to move in; comment FARM, BUILD, SCOUT, GUARD or TINKER to pick your job."
+  }
+ ],
+ "spares": [
+  {
+   "title": "A QUIET NIGHT",
+   "summary": "A quiet night under the ringed planet.",
+   "beats": [
+    {
+     "type": "event",
+     "event": "night",
+     "lines": [
+      "A *QUIET* NIGHT"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "slot",
+     "slot": "people"
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "slot",
+     "slot": "next"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "A quiet night on Farside. Follow and comment to move in."
+  },
+  {
+   "title": "METEOR SHOWER",
+   "summary": "A meteor shower lights up the sky.",
+   "beats": [
+    {
+     "type": "event",
+     "event": "meteors",
+     "lines": [
+      "SHOOTING",
+      "*STARS*"
+     ],
+     "secs": 3.0
+    },
+    {
+     "type": "slot",
+     "slot": "arrivals"
+    },
+    {
+     "type": "say",
+     "who": "TOLU",
+     "text": "MAKE A WISH.",
+     "secs": 2.6
+    },
+    {
+     "type": "slot",
+     "slot": "build"
+    },
+    {
+     "type": "slot",
+     "slot": "next"
+    },
+    {
+     "type": "slot",
+     "slot": "ask"
+    }
+   ],
+   "caption": "Meteors over Farside tonight. Follow and comment to move in."
+  }
+ ]
+}

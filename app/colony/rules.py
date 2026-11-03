@@ -15,7 +15,7 @@ from datetime import date, timedelta
 # jobs: the word to comment, what the settler is drawn doing, the building it pushes up the queue
 JOBS = {"farm": "farming", "build": "building", "scout": "scouting", "guard": "on guard", "tinker": "tinkering"}
 JOB_WORD = re.compile(r"\b(farm|build|scout|guard|tinker)(?:ing|er|s)?\b", re.I)
-MENTION = re.compile(r"(?<![\w.])@([a-z0-9._]{2,30})", re.I)
+MENTION = re.compile(r"(?<![\w.])@([a-z0-9._]{1,29}[a-z0-9_])", re.I)  # a full stop after a handle isn't part of it
 
 RANKS = [(0, "newcomer"), (3, "settler"), (7, "veteran"), (14, "elder")]  # streak days → rank
 

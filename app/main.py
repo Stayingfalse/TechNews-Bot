@@ -25,6 +25,7 @@ from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
 from .adventure import votes as adventure_votes_mod
+from .colony import api as colony_api
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .racing import jobs as racing_jobs
@@ -849,6 +850,11 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     """Themes viewers commented on the `ask_theme` posts of the last `days` days, grouped and ranked
     (most suggested first, then earliest). Credit a pick with the group's `first` entry as `picked_by`."""
     return themes.suggestions(days)
+
+
+# ------------------------------------------------------------------ Farside (the colony): routine endpoints
+
+app.include_router(colony_api.router, dependencies=[Depends(require_token)])
 
 
 # ------------------------------------------------------------------ racing channel (Sixel Speedway)

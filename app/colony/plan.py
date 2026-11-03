@@ -26,9 +26,10 @@ CREW = ("MAREN", "TOLU", "BASK", "IKO")
 SLOTS = ("arrivals", "people", "build", "next", "ask")
 EVENTS = ("dust_storm", "signal", "aurora", "meteors", "quake", "night")
 BEATS = ("slot", "caption", "say", "feature", "event", "decision")
+SLOT_SECS = {"arrivals": 9.1, "people": 7.8, "build": 5.4, "next": 3.6, "ask": 3.0}  # the most each can take
 LINE_CHARS = 24  # a caption line (the font fits 24 small or 12 big)
 SAY_CHARS = 18  # a speech-bubble line
-MAX_SECONDS = 32  # the whole episode
+MAX_SECONDS = 34  # the whole episode at its longest (most run 20-28 s)
 LINK = re.compile(r"https?://|www\.|\.(com|net|org|io|ly|gg|co)\b", re.I)
 # a short backstop; the writer is told the rules, and the preview has a human last look
 BLOCKLIST = re.compile(r"\b(fuck|shit|cunt|nigg|fag|retard|kill yourself|kys|nazi|porn|sex)\w*", re.I)
@@ -42,7 +43,7 @@ def _text_problems(where: str, text: str, limit: int, handles: set[str]) -> list
         probs.append(f"{where}: no links")
     if BLOCKLIST.search(text):
         probs.append(f"{where}: not teen-friendly: {text!r}")
-    for m in re.findall(r"@([a-z0-9._]+)", text, re.I):
+    for m in re.findall(r"@([a-z0-9._]*[a-z0-9_])", text, re.I):
         if m.lower() not in handles:
             probs.append(f"{where}: @{m} isn't a settler (only name people who live here)")
     missing = {ch for ch in text.upper().replace("*", "") if ch not in pixfont.GLYPHS}
@@ -72,7 +73,7 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
         if t == "slot":
             if b.get("slot") not in SLOTS:
                 probs.append(f"{w}: slot must be one of {', '.join(SLOTS)}")
-            secs += {"arrivals": 5, "people": 5, "build": 5.4, "next": 3.6, "ask": 3}.get(b.get("slot"), 0)
+            secs += SLOT_SECS.get(b.get("slot"), 0)
             continue
         s = float(b.get("secs", 2.6))
         if not 1.0 <= s <= 6.0:
@@ -108,6 +109,7 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
                     probs += _text_problems(f"{w}.choice {c[0]}", str(c[1]), 10, handles)
     if decisions > 1:
         probs.append("at most one decision an episode")
+    secs = estimate(ep)
     if secs > MAX_SECONDS:
         probs.append(f"about {secs:.0f} s long, at most {MAX_SECONDS} s: cut a beat or shorten secs")
     cap = str(ep.get("caption", ""))
@@ -142,6 +144,19 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
             if len(str(w)) > 80:
                 probs.append(f"wanted[{i}]: at most 80 characters")
     return probs
+
+
+def estimate(ep: dict) -> float:
+    """The longest the episode can run, in seconds (slots at their fullest; a decision is 6 s)."""
+    t = 0.0
+    for b in ep.get("beats") or []:
+        if b.get("type") == "slot":
+            t += SLOT_SECS.get(b.get("slot"), 0)
+        elif b.get("type") == "decision":
+            t += 6.0
+        else:
+            t += float(b.get("secs", 2.6))
+    return t
 
 
 def check_week(week: dict, handles: set[str]) -> list[str]:
