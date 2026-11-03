@@ -122,6 +122,7 @@ def test_odds_carry_the_margin_and_cover_every_car():
     assert sim.payout(100, "4/6") == 166
 
 
+@pytest.mark.slow
 def test_odds_match_how_often_cars_really_win():
     """The real races (one seed each) win about as often as the priced chances say."""
     chances = sim.win_chances(STATS, "rally", 9, runs=4000, seed=1)
@@ -227,9 +228,17 @@ def test_recover_leaves_another_servers_fresh_jobs_alone(discord):
     assert jobs.get(b["id"])["status"] == "failed" and "check" in discord[-1][0]
 
 
-def test_a_missed_post_can_be_retried_and_posts_at_once(cycle):
-    slot = datetime(2026, 11, 3, 19, 0, tzinfo=timezone.utc)
+def _start_at(slot, monkeypatch):
+    """Book the launch for a fixed slot, as if it were two days before (start() refuses past slots)."""
+    real_now = jobs.now
+    monkeypatch.setattr(jobs, "now", lambda: slot - timedelta(days=2))
     jobs.start(slot - timedelta(days=1))
+    monkeypatch.setattr(jobs, "now", real_now)
+
+
+def test_a_missed_post_can_be_retried_and_posts_at_once(cycle, monkeypatch):
+    slot = datetime(2026, 11, 3, 19, 0, tzinfo=timezone.utc)
+    _start_at(slot, monkeypatch)
     job = [j for j in jobs.recent(10) if j["kind"] == "launch"][0]
     jobs.tick(slot - timedelta(days=1) + timedelta(hours=7))  # the server was down through the slot
     assert jobs.get(job["id"])["status"] == "missed"
@@ -356,10 +365,8 @@ def cycle(monkeypatch, platforms):
 
 def test_launch_then_a_day_of_betting_then_the_race(cycle, discord, monkeypatch):
     slot = datetime(2026, 11, 1, 19, 0, tzinfo=timezone.utc)  # a Sunday (UTC = London in November)
-    real_now = jobs.now
-    monkeypatch.setattr(jobs, "now", lambda: slot - timedelta(days=2))  # booking needs a launch still to come
-    job = jobs.start(slot - timedelta(days=1))
-    monkeypatch.setattr(jobs, "now", real_now)
+    _start_at(slot, monkeypatch)
+    job = [j for j in jobs.recent(10) if j["kind"] == "launch"][0]
     assert job["kind"] == "launch" and races.get(1)["status"] == "open"
     jobs.tick(slot - timedelta(days=1, minutes=20))
     assert jobs.get(job["id"])["status"] == "scheduled" and cycle["renders"][0]["launch"]
@@ -426,9 +433,9 @@ def test_launch_right_now_then_race_1_at_the_next_post_time(cycle, monkeypatch):
         jobs.start(right_now=True, restart=True)
 
 
-def test_a_race_is_never_run_twice(cycle):
+def test_a_race_is_never_run_twice(cycle, monkeypatch):
     slot = datetime(2026, 11, 3, 19, 0, tzinfo=timezone.utc)
-    jobs.start(slot - timedelta(days=1))
+    _start_at(slot, monkeypatch)
     jobs.tick(slot - timedelta(days=1, minutes=20))
     jobs.tick(slot - timedelta(days=1))
     job = [j for j in jobs.recent(10) if j["kind"] == "race"][0]
@@ -504,3 +511,26 @@ def test_racing_endpoints_need_the_token():
     assert c.get("/racing/state").status_code == 401
     r = c.get("/racing/state", headers={"Authorization": f"Bearer {settings.api_token}"})
     assert r.status_code == 200 and r.json()["domain"] == "race.onlydan.uk"
+
+
+@pytest.mark.parametrize("fmt", ["gp", "endurance", "drag"])
+def test_the_sound_mix_fills_the_video_and_never_clips(fmt):
+    """The audio render() builds for every race video (the full encode isn't run here)."""
+    import numpy as np
+
+    from app.render.audio import SR
+    from app.render.racing import sound
+    from app.render.racing.engine import sfx
+
+    race = races.draft(1, STATS, "2026-10-27T18:00:00+00:00", "2026-10-28T17:00:00+00:00", fmt)
+    race["result"], race["status"] = races.run(race), "run"
+    out = ledger.settle(race, [comment("c1", "amy", "4 250", 1)], race["result"]["order"][0], race["odds"])
+    spec = json.loads(json.dumps(video.spec("pitwall", _race(2), race, out)))
+    v = Video(spec)
+    span = (v.at["race"], v.at["race"] + spec["race"]["race_end"] + 1.5)
+    events = sfx(spec, v.scenes)
+    assert events and all(0 <= t <= v.duration for t, _ in events)
+    audio = sound.mix(v.duration, events, v.theme.sound, spec.get("seed", 0), spec.get("race"), span)
+    assert abs(len(audio) / SR - v.duration) < 0.05 and np.isfinite(audio).all()
+    assert np.abs(audio).max() <= 1.0 and np.sqrt((audio.astype(np.float64) ** 2).mean()) > 0.01  # loud enough, not clipped
+    assert sound.mix(v.duration, events, v.theme.sound, spec.get("seed", 0), spec.get("race"), span).tobytes() == audio.tobytes()

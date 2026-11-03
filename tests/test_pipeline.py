@@ -87,3 +87,58 @@ def test_submit_records_channel(quiz, monkeypatch):
 
     j = pipeline.submit(QuizSpec.model_validate(quiz), dry_run=True)
     assert j["channel"] == "main" and queued() == [("render", j["id"])]
+
+
+@pytest.fixture
+def publishing(quiz, monkeypatch):
+    """A slot's video ready to post to both platforms; `outcome[platform]` is a result or an exception."""
+    from app import health
+    from app.config import settings
+    from app.publish import instagram, youtube
+
+    outcome, pinged = {}, []
+    monkeypatch.setattr(settings, "publish_enabled", True)
+    monkeypatch.setattr(settings, "platforms", ["instagram", "youtube"])
+    monkeypatch.setattr(health, "ping", lambda name, fail=False: pinged.append((name, fail)))
+    for name, mod in (("instagram", instagram), ("youtube", youtube)):
+        monkeypatch.setattr(mod, "configured", lambda: True)
+
+        def publish(video, spec, job, _n=name):
+            o = outcome[_n]
+            if isinstance(o, Exception):
+                raise o
+            return o
+        monkeypatch.setattr(mod, "publish", publish)
+    for name in ("after_publish", "link_previous"):
+        monkeypatch.setattr(pipeline.cliffhanger, name, lambda job: None)
+    monkeypatch.setattr(pipeline.themes, "after_publish", lambda job: None)
+    settings.videos_dir.mkdir(parents=True, exist_ok=True)
+    (settings.videos_dir / "v.mp4").write_bytes(b"x")
+    j = job("slot-1", quiz, "publishing", publish_in_min=-1, video="v.mp4", video_url="u", render={"duration": 50})
+    return j, outcome, pinged, settings.videos_dir / "v.mp4"
+
+
+def test_one_platform_failing_keeps_the_other_post_and_the_video_for_a_retry(publishing, monkeypatch):
+    j, outcome, pinged, video = publishing
+    outcome.update(instagram={"media_id": "M", "url": "u"}, youtube=RuntimeError("quota exceeded"))
+    pipeline._publish(j)
+    done = store.get_job("slot-1")
+    assert done["status"] == "done" and done["results"]["instagram"]["ok"]
+    assert done["results"]["youtube"] == {"ok": False, "error": "quota exceeded"}
+    assert pinged == [("daily-post", False)] and video.exists()  # kept: the retry needs it
+    assert pipeline.failures(done) == {"youtube": "quota exceeded"}
+
+    outcome["instagram"] = AssertionError("must not post twice")
+    outcome["youtube"] = {"video_id": "V", "url": "y"}
+    assert pipeline.retry(done) == ["youtube"] and queued() == [("publish", "slot-1")]
+    pipeline._publish(store.get_job("slot-1"))
+    done = store.get_job("slot-1")
+    assert all(r["ok"] for r in done["results"].values()) and not video.exists() and done["video_deleted"]
+    assert pinged == [("daily-post", False)]  # a retry doesn't ping again
+
+
+def test_every_platform_failing_pings_failure(publishing):
+    j, outcome, pinged, video = publishing
+    outcome.update(instagram=RuntimeError("down"), youtube=RuntimeError("down"))
+    pipeline._publish(j)
+    assert pinged == [("daily-post", True)] and video.exists()

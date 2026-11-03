@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type ArcNode, type StorySpec, THINGS, THING_KEYS, bake, focusWord, merge, planStory, resolveNode, wordTime } from "../packages/engine/src/index.ts";
 import { type ArcContext, validateArc, validateNode } from "../packages/shared/src/index.ts";
 import { loadFonts, makeCanvas, mapFor, prepare } from "../packages/renderer/src/canvas.ts";
+import { type TextBox, outside, recordText } from "./safe-zone.ts";
 
 const ARC = JSON.parse(readFileSync(new URL("../examples/arc-s1w1.json", import.meta.url), "utf8"));
 const CTX: ArcContext = { start_date: "2026-10-31", days: 4, links_from: [{ id: "episode0", choices: 3 }], hero: { cls: "rogue", look: 0 } };
@@ -74,26 +75,13 @@ describe("maps", () => {
   });
 });
 
-// text must stay where the Reels / Shorts overlays leave it clear
-const SAFE = { x0: 16, x1: 307, y0: 73, y1: 480 };
-function recordText(ctx: CanvasRenderingContext2D, out: { t: string; x0: number; x1: number; y0: number; y1: number }[]) {
-  const fill = ctx.fillText.bind(ctx);
-  ctx.fillText = (t: string, x: number, y: number) => {
-    const m = ctx.measureText(t), tr = ctx.getTransform(), s = 3;
-    const left = ctx.textAlign === "center" ? x - m.width / 2 : ctx.textAlign === "right" ? x - m.width : x;
-    const pts = [[left, y - m.actualBoundingBoxAscent], [left + m.width, y + m.actualBoundingBoxDescent]].map(([px, py]) => tr.transformPoint({ x: px, y: py }));
-    if (ctx.globalAlpha > 0.05 && t.trim()) out.push({ t, x0: Math.min(pts[0].x, pts[1].x) / s, x1: Math.max(pts[0].x, pts[1].x) / s, y0: Math.min(pts[0].y, pts[1].y) / s, y1: Math.max(pts[0].y, pts[1].y) / s });
-    fill(t, x, y);
-  };
-}
-
 describe("frames", () => {
   it.each([["dungeon", 33], ["cave", 7], ["forest", 41], ["mountain", 42]] as const)(
     "%s: push-in, stage and pins draw every half second, text in the safe zone, no Math.random", async (type, seed) => {
       loadFonts();
       const s = spec(ribbonNode(), { type, seed });
       const r = await prepare({ spec: s, map: await mapFor(s) });
-      const P = planStory(s), seen: { t: string; x0: number; x1: number; y0: number; y1: number }[] = [];
+      const P = planStory(s), seen: TextBox[] = [];
       recordText(r.ctx as unknown as CanvasRenderingContext2D, seen);
       const rnd = vi.spyOn(Math, "random").mockImplementation(() => {
         throw new Error("Math.random in the engine");
@@ -103,7 +91,6 @@ describe("frames", () => {
       expect(seen.some((b) => b.t.includes("ELLEN'S RIBBON"))).toBe(true); // the label in the close-up
       expect(seen.some((b) => b.t === "Pocket the ribbon")).toBe(true); // the pinned choice
       // (viewers' @handles ride under their minis wherever they walk, so they aren't held to the zone)
-      const outside = seen.filter((b) => !b.t.startsWith("@")).filter((b) => b.x0 < SAFE.x0 - 1 || b.x1 > SAFE.x1 + 1 || b.y0 < SAFE.y0 - 1 || b.y1 > SAFE.y1 + 1);
-      expect([...new Set(outside.map((b) => `${b.t} [${b.x0.toFixed(0)},${b.y0.toFixed(0)}–${b.x1.toFixed(0)},${b.y1.toFixed(0)}]`))]).toEqual([]);
+      expect(outside(seen.filter((b) => !b.t.startsWith("@")))).toEqual([]);
     }, 120_000);
 });
