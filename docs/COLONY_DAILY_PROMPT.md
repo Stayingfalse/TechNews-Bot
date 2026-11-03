@@ -1,7 +1,7 @@
 # Farside daily routine (today's episode, adapted)
 
-A Claude Code Routine runs this prompt **every day about three hours before Farside's post**
-(`COLONY_POST_TIME`, 19:00 Europe/London, so it runs at about 16:00). It reads today's planned
+A Claude Code Routine ("Farside daily episode") runs this prompt **every day at 15:47 Europe/London**,
+about three hours before Farside's post (`COLONY_POST_TIME`, 19:00). It reads today's planned
 episode and what people have asked for, and sends back today's episode with those people in it.
 The server takes whatever it has accepted by the cut-off (`COLONY_CUTOFF_MINUTES` before the post,
 17:30). If nothing is accepted by then, the plan plays as written and the requests wait for the

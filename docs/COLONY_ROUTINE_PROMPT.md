@@ -1,6 +1,6 @@
 # Farside weekly routine (the week plan)
 
-A Claude Code Routine runs this prompt every **Sunday evening (Europe/London)** in a fresh cloud
+A Claude Code Routine ("Farside weekly plan") runs this prompt every **Sunday at 20:41 Europe/London** in a fresh cloud
 session. It writes next week's 7 episodes of Farside (@farside.colony) and 2 spares, and sends
 them to the server, which checks them. Each day another routine ([COLONY_DAILY_PROMPT.md](COLONY_DAILY_PROMPT.md))
 adapts that day's episode to what people asked for. If that doesn't happen, the plan plays as
