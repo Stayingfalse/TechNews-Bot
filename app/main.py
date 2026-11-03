@@ -25,6 +25,7 @@ from .adventure import campaign as adventure_campaign
 from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
 from .adventure import votes as adventure_votes_mod
+from .colony import api as colony_api
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .racing import jobs as racing_jobs
@@ -46,6 +47,9 @@ async def lifespan(_: FastAPI):
     pipeline.start_background()
     adventure_jobs.start()
     racing_jobs.start_background()
+    from .colony import jobs as colony_jobs
+
+    colony_jobs.start_background()
     yield
 
 
@@ -542,7 +546,7 @@ def _channel_param(channel: str) -> str | None:
 
 
 @app.get("/metrics", dependencies=[Depends(require_token)])
-def get_metrics(channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+def get_metrics(channel: str = Query(default=channels.MAIN, description="main, adventure, racing, colony, or all")):
     """A channel's posts (default the quiz; `all` for every channel), newest first, each with its
     `channel`, `tags`, `extra` (the adventure's votes, racing's bets) and per-platform numbers
     (latest + 1h/24h/7d snapshots)."""
@@ -587,7 +591,7 @@ def post_insight(ins: Insight):
 
 
 @app.get("/insights", dependencies=[Depends(require_token)])
-def get_insights(limit: int = 8, channel: str = Query(default=channels.MAIN, description="main, adventure, racing, or all")):
+def get_insights(limit: int = 8, channel: str = Query(default=channels.MAIN, description="main, adventure, racing, colony, or all")):
     return _insights(_channel_param(channel))[-limit:][::-1]
 
 
@@ -851,6 +855,11 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
     return themes.suggestions(days)
 
 
+# ------------------------------------------------------------------ Farside (the colony): routine endpoints
+
+app.include_router(colony_api.router, dependencies=[Depends(require_token)])
+
+
 # ------------------------------------------------------------------ racing channel (Sixel Speedway)
 
 
@@ -860,7 +869,9 @@ def racing_start(at: str = "", now: bool = False, restart: bool = False):
     `at` (HH:MM local or ISO; default the next RACING_POST_TIME), or with now=true as soon as it's
     rendered (race 1's video then posts at the next RACING_POST_TIME). restart=true starts over,
     only while nothing has been posted or bet. From then on it runs by itself.
-    Needs the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
+    Needs RACING_ENABLED, the racing Instagram connected and PUBLISH_ENABLED; to see the look first, use /racing/preview."""
+    if not settings.racing_enabled:
+        raise HTTPException(409, "Sixel Speedway is switched off: set RACING_ENABLED=true to run it again.")
     try:
         job = racing_jobs.start(_when(at) if at else None, right_now=now, restart=restart)
     except racing_jobs.NotConnected as e:

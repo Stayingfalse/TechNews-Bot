@@ -534,3 +534,29 @@ def test_the_sound_mix_fills_the_video_and_never_clips(fmt):
     assert abs(len(audio) / SR - v.duration) < 0.05 and np.isfinite(audio).all()
     assert np.abs(audio).max() <= 1.0 and np.sqrt((audio.astype(np.float64) ** 2).mean()) > 0.01  # loud enough, not clipped
     assert sound.mix(v.duration, events, v.theme.sound, spec.get("seed", 0), spec.get("race"), span).tobytes() == audio.tobytes()
+
+
+# ------------------------------------------------------------------ switched off (RACING_ENABLED)
+
+
+def test_switched_off_the_channel_cannot_start_and_its_login_is_not_watched(monkeypatch, discord):
+    import time
+
+    from app import channels, health, store
+    from app.publish import instagram
+
+    monkeypatch.setattr(settings, "racing_enabled", False)
+    r = TestClient(app).post("/racing/start", headers={"Authorization": f"Bearer {settings.api_token}"})
+    assert r.status_code == 409 and "RACING_ENABLED" in r.json()["detail"]
+    assert channels.RACING not in channels.active() and channels.RACING in channels.registry()
+
+    monkeypatch.setattr(instagram, "configured", lambda: True)
+    monkeypatch.setattr(instagram, "account", lambda: (_ for _ in ()).throw(RuntimeError("invalidated")))
+    store.set_tokens("instagram", {"access_token": "x", "user_id": "2", "expires_at": time.time() + 2 * 86400},
+                     channel=channels.RACING)
+    assert health.check_connections() == []
+    health.check_logins()
+    assert discord == []
+
+    monkeypatch.setattr(settings, "racing_enabled", True)
+    assert health.check_connections() == ["racing:instagram"]

@@ -232,7 +232,8 @@ def comments(video_id: str, limit: int = 300) -> list[dict]:
             sn = item["snippet"]["topLevelComment"]["snippet"]
             out.append({"id": item["snippet"]["topLevelComment"]["id"], "user": sn.get("authorDisplayName", "").lstrip("@"),
                         "channel": (sn.get("authorChannelId") or {}).get("value", ""),
-                        "text": sn.get("textOriginal") or sn.get("textDisplay", ""), "at": sn.get("publishedAt", "")})
+                        "text": sn.get("textOriginal") or sn.get("textDisplay", ""), "at": sn.get("publishedAt", ""),
+                        "likes": int(sn.get("likeCount") or 0)})
         if not d.get("nextPageToken"):
             break
         params["pageToken"] = d["nextPageToken"]

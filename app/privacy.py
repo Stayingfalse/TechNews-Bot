@@ -77,6 +77,9 @@ def erase(user: str) -> int:
     from .adventure import party
 
     n += party.erase(key)  # the story's party and credits
+    from .colony import state as colony
+
+    n += int(colony.erase(key))  # their settler on Farside
     return n
 
 
@@ -96,5 +99,8 @@ def anonymise_old(days: int = RETENTION_DAYS) -> int:
     from .adventure import party
 
     n += party.purge_old(days)  # past party members' usernames and story credits
+    from .colony import inbox
+
+    n += inbox.prune(30)  # Farside comments: 30 days (privacy policy §5)
     return n
 

@@ -193,9 +193,33 @@ def _racing_posts() -> list[dict]:
     return out
 
 
+def _colony_posts() -> list[dict]:
+    from .colony import jobs as cjobs
+
+    out = []
+    for job in cjobs.recent(1000):
+        if not _posted(job):
+            continue
+        sm, ep = job.get("summary") or {}, job.get("episode") or {}
+        when = _when(job)
+        tags = {"ai": {"adapted": "full", "plan": "plan", "spare": "spare"}.get(sm.get("source"), "counts"),
+                "surge": "yes" if sm.get("surge") else "no",
+                "decision": "yes" if any(b.get("type") == "decision" for b in ((ep.get("ep") or {}).get("beats") or [])) else "no",
+                "views": "+".join(ep.get("shots") or []), "weekday": when.strftime("%a"),
+                "length": _length((job.get("render") or {}).get("duration") or 0)}
+        extra = {"new_settlers": sm.get("arrived_count", 0), "new_followers": sm.get("joined", 0),
+                 "looks_changed": len(sm.get("changed") or []), "parts_drawn": len(sm.get("parts") or []),
+                 "replies": job.get("replies_queued", 0)}
+        out.append({"id": job["id"], "channel": channels.COLONY, "published_at": job["published_at"],
+                    "slot": job["date"], "title": f"Farside {job['date']}", "duration": (job.get("render") or {}).get("duration") or 0,
+                    "results": job["results"], "tags": tags, "extra": extra})
+    return out
+
+
 def posts(channel: str | None = None) -> list[dict]:
     """Posts that went out to at least one platform, newest first; one channel's, or every channel's."""
-    makers = {channels.MAIN: _quiz_posts, channels.ADVENTURE: _adventure_posts, channels.RACING: _racing_posts}
+    makers = {channels.MAIN: _quiz_posts, channels.ADVENTURE: _adventure_posts, channels.RACING: _racing_posts,
+              channels.COLONY: _colony_posts}
     out = []
     for ch, make in makers.items():
         if channel in (None, ch):

@@ -121,7 +121,7 @@ def check_logins() -> None:
     """An Instagram login refreshes when it has 20 days left; under 7 means refreshing keeps failing."""
     from . import channels
 
-    for cid, ch in channels.registry().items():
+    for cid, ch in channels.active().items():
         tok = store.get_tokens("instagram", channel=cid)
         if tok and tok.get("expires_at"):
             days = (tok["expires_at"] - time.time()) / 86400
@@ -142,7 +142,7 @@ def check_connections() -> list[str]:
     from .publish import PUBLISHERS
 
     broken = []
-    for cid, ch in channels.registry().items():
+    for cid, ch in channels.active().items():
         for name in ch.platforms:
             mod = PUBLISHERS.get(name)
             if not mod or not hasattr(mod, "account") or not mod.configured():

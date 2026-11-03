@@ -249,7 +249,7 @@ every 15 min   read new comments on the open race's post → reply to each bet (
 - **Endpoints** (token): `POST /racing/start`, `GET /racing/state`, `GET /racing/races/{n}`,
   `GET /racing/jobs[/{id}]`, `POST /racing/jobs/{id}/retry`, `GET /racing/players?q=`,
   `GET /racing/metrics`, `POST /racing/preview`.
-- **Settings**: `RACING_HANDLE`, `RACING_POST_TIME` (19:00), `RACING_CLOSE_MINUTES` (60),
+- **Settings**: `RACING_ENABLED` (off: the channel is switched off and nothing races, posts or replies; its code, races and bets pages are kept), `RACING_HANDLE`, `RACING_POST_TIME` (19:00), `RACING_CLOSE_MINUTES` (60),
   `RACING_PLATFORMS` (instagram), `RACING_DOMAIN`, `RACING_THEMES` (pitwall), `RACING_INTROS` (cold,pick,lights,tease), `RACING_POLL_MINUTES` (15),
   `RACING_REPLY_GAP` (20 s), `RACING_REPLY_PER_HOUR` (60), `RACING_REPLIES` (on), `RACING_LAUNCH_WEEKS` (4),
   `RACING_CALENDAR` (`mon=oval,tue=rally,wed=gp,thu=figure8,fri=drag,sat=endurance|oval,sun=gp`).
