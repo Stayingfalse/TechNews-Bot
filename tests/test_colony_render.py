@@ -32,3 +32,13 @@ def test_the_other_views_render_at_full_size():
     for name, (kind, t, spec) in vs.items():
         draw = {"topdown": views.draw_topdown, "inside": views.draw_inside, "planet": views.draw_planet}[kind]
         assert draw(spec, t).frame().shape == (1920, 1080, 3), name
+
+
+def test_every_story_event_draws_through_its_whole_span():
+    from app.colony.plan import EVENTS
+
+    spec = render_colony.day_spec()
+    for kind in EVENTS:
+        spec = {**spec, "events": [{"kind": kind, "t0": 0.0, "t1": 3.0}]}
+        for i in range(0, 31, 2):
+            assert scene.draw(spec, i / 10).frame().shape == (1920, 1080, 3), (kind, i)

@@ -496,9 +496,9 @@ def _event_overlay(c: Canvas, ev: dict[str, float], t: float):
     if "signal" in ev:
         k = ev["signal"]
         r = int(8 + (t * 40) % 60)
-        m, x0, y0 = c.disc(POD_X - 1, 40, r)
-        ring = m & ~c.disc(POD_X - 1, 40, max(1, r - 1))[0]
-        c.mask(ring, x0, y0, P["crys1"], world=False)
+        yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
+        ring = np.abs(np.sqrt(xx ** 2 + yy ** 2) - r) < 0.7
+        c.mask(ring, POD_X - 1 - r, 40 - r, P["crys1"], world=False)
         if int(t * 6) % 2 == 0:
             c.rect(POD_X - 2, 0, 1, GROUND - 35, P["crys1"] * 0.8, world=False)
     if "dust_storm" in ev:
