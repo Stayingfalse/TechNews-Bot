@@ -477,7 +477,13 @@ def get_job(job_id: str):
     job = store.get_job(job_id)
     if not job:
         raise HTTPException(404)
-    return job
+    from .cliffhanger import outcome
+
+    try:  # comments_read, shoutouts and replies, on the cliffhanger post as well as the reveal post
+        cliff = outcome(job)
+    except Exception:  # a record the spec no longer validates must still be readable
+        cliff = None
+    return {**job, **({"cliffhanger_outcome": cliff} if cliff else {})}
 
 
 @app.get("/jobs/{job_id}/comments", dependencies=[Depends(require_token)])

@@ -88,6 +88,25 @@ def test_reveal_shoutouts_and_replies(quiz, cliff_spec, platforms):
     assert store.get_job("cliff-1")["cliff_revealed_by"] == "next-1"
     assert ch.pending_for({"id": "later", "publish_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()}) is None
 
+    # the outcome reads the same from either job id: the API, and the metrics' extras
+    from fastapi.testclient import TestClient
+
+    from app import metrics
+    from app.main import app
+
+    store.save_job(nxt)
+    client = TestClient(app)
+    h = {"Authorization": "Bearer test-token"}
+    for job_id, role in (("cliff-1", "cliffhanger"), ("next-1", "reveal")):
+        out = client.get(f"/jobs/{job_id}", headers=h).json()["cliffhanger_outcome"]
+        assert (out["role"], out["cliffhanger_job"], out["revealed_in"]) == (role, "cliff-1", "next-1")
+        assert (out["comments_read"], out["shoutouts"], out["replies_sent"]) == (5, ["TubeFan", "early_bird"], 2)
+    nxt["published_at"] = store.now_iso()
+    store.save_job(nxt)
+    extras = {p["id"]: p["extra"] for p in metrics.posts("main")}
+    assert extras["cliff-1"] == {"cliff_comments_read": 5, "cliff_correct": 2, "cliff_replies_sent": 2}
+    assert extras["next-1"] == {"revealed_comments_read": 5, "revealed_correct": 2, "revealed_replies_sent": 2}
+
 
 def test_reveal_without_comment_access(quiz, cliff_spec, platforms, monkeypatch):
     from app.publish import instagram, youtube
