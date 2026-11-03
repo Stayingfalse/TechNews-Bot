@@ -31,6 +31,8 @@ SPOT_X = [96, 112, 128, 144]  # where featured settlers stand for their moment (
 JOB_LINE = {"farm": "*FARMING*", "build": "*BUILDING*", "scout": "*SCOUTING*", "guard": "ON *GUARD*",
             "tinker": "*TINKERING*"}
 BEAT = 2.6
+PARADE_MAX = 12  # people shown walking in the parade (the caption counts them all)
+PARADE_MAX_SURGE = 8
 DEFAULT_BEATS = [{"type": "slot", "slot": s} for s in ("arrivals", "people", "build", "next", "ask")]
 
 
@@ -75,13 +77,19 @@ def resolve(who: str, s: dict, report: dict) -> tuple[str, str | None] | None:
 
 
 def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
-    beats = (ep or {}).get("beats") or DEFAULT_BEATS
+    beats = list((ep or {}).get("beats") or DEFAULT_BEATS)
+    if (ep or {}).get("settlers") and not any(b.get("slot") == "granted" for b in beats):
+        # everyone whose look changed gets their walk past, before the build (or the end)
+        at = next((i for i, b in enumerate(beats) if b.get("slot") in ("build", "next", "ask") or b.get("type") == "decision"),
+                  len(beats))
+        beats.insert(at, {"type": "slot", "slot": "granted"})
     if not any(b.get("type") == "slot" and b.get("slot") == "ask" for b in beats) and \
             not any(b.get("type") == "decision" for b in beats):
         beats = list(beats) + [{"type": "slot", "slot": "ask"}]
     people = s["settlers"]
     t = 0.0
-    caps, tags, bubbles, sfx, arrivals, events, progress = [], {}, [], [], [], [], []
+    caps, tags, bubbles, sfx, arrivals, events, progress, parades = [], {}, [], [], [], [], [], []
+    paraded: set[str] = set()
     cam = [(0, 0)]
     beacon_ghost = None
     spotted: dict[str, int] = {}  # settler key → their spot
@@ -89,15 +97,19 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
     if s.get("building") and s["building"]["id"] in DRAWN and s["building"]["paid"] > 0 and not report.get("progress"):
         bid = s["building"]["id"]
         buildings.append({"kind": bid, "from": s["building"]["paid"] / rules.BY_ID[bid]["cost"]})
-    named = [k for k in report["arrived"] if k in people][:3]
     decision = None
     big = rules.surge(report, s["followers"])
+    named = [k for k in report["arrived"] if k in people][:2 if big else 3]
     if big:  # the planet shot comes first: make room for it, keeping people's moments
         beats = list(beats)
         budget = planmod.MAX_SECONDS - SURGE_SECS - 2
-        for kind in ("caption", "crew", "event", "people", "next"):
+        if (ep or {}).get("settlers") and not any(b.get("slot") == "granted" for b in beats):
+            at = next((i for i, b in enumerate(beats) if b.get("slot") in ("build", "next", "ask")), len(beats))
+            beats.insert(at, {"type": "slot", "slot": "granted"})
+        budget += 5  # what a surge day saves on arrivals, the parade and the build (see below)
+        for kind in ("caption", "crew", "event", "say", "people", "next"):
             while planmod.estimate({"beats": beats}) > budget:
-                i = next((i for i, b in enumerate(beats) if (b.get("type") == kind) or
+                i = next((i for i, b in enumerate(beats) if (b.get("type") == kind and kind != "people") or
                           (kind == "crew" and b.get("type") == "say" and b.get("who") in planmod.CREW) or
                           (b.get("type") == "slot" and b.get("slot") == kind)), None)
                 if i is None:
@@ -150,6 +162,26 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
                 tags[people[who]["handle"]] = (t, t + BEAT)
                 sfx.append((t, "blip"))
                 t += BEAT
+        elif kind == "slot" and b["slot"] == "granted":
+            spot_handles = {str(x.get("who", "")).lstrip("@").lower() for x in beats if x.get("type") in ("feature", "say")}
+            keys = []
+            for h in (ep or {}).get("settlers") or {}:
+                k = _by_handle(s).get(h.lstrip("@").lower())
+                if k and h.lstrip("@").lower() not in spot_handles and k not in named:
+                    keys.append(k)
+            if not keys:
+                continue
+            show = keys[:PARADE_MAX_SURGE if big else PARADE_MAX]
+            dur = round(2.0 + 0.45 * len(show), 2)
+            parades.append({"t0": t, "t1": t + dur,
+                            "people": [{"name": people[k]["handle"], "look": look_for(s, k, ep)} for k in show]})
+            for k in show:
+                tags[people[k]["handle"]] = (t, t + dur)
+                paraded.add(k)
+            n = len(keys)
+            caps.append({"lines": ["GRANTED TODAY", f"*{n}* WISHES" if n > 1 else "*1* WISH"], "t0": t, "t1": t + dur})
+            sfx += [(t + 0.4 + i * 0.45, "blip") for i in range(len(show))]
+            t += dur
         elif kind == "slot" and b["slot"] == "build":
             if len(report.get("unlocked") or []) >= 2:  # a jump in followers unlocks several at once
                 n = len(report["unlocked"])
@@ -173,11 +205,12 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
                 lines = [f"*+{int(round((prog['to'] - prog['from']) * 100))}%* TODAY", f"*{g['shares']}* SHARES HELPED"]
             else:
                 lines = ["WORK GOES ON", hl(bd["name"])]
-            caps.append({"lines": lines, "t0": t, "t1": t + 5.0})
+            secs = 4.2 if big else 5.4
+            caps.append({"lines": lines, "t0": t, "t1": t + secs - 0.4})
             progress.append({"label": bd["name"], "from": prog["from"], "to": 1.0 if done else prog["to"],
-                             "right": "{pct}", "t0": t, "t1": t + 5.4, "fill_s": 4.0})
+                             "right": "{pct}", "t0": t, "t1": t + secs, "fill_s": secs - 1.4})
             sfx.append((t, "chime"))
-            t += 5.4
+            t += secs
         elif kind == "slot" and b["slot"] == "next":
             nxt = report.get("next")
             if not nxt:
@@ -231,7 +264,7 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
     for k, x in spotted.items():
         settlers.append({"name": people[k]["handle"], "job": "sit", "x": x, "look": look_for(s, k, ep)})
     for k in rules.featured(s, report, limit=12) + list(people):
-        if k in spotted or k in named or any(x["name"] == people[k]["handle"] for x in settlers):
+        if k in spotted or k in named or k in paraded or any(x["name"] == people[k]["handle"] for x in settlers):
             continue
         st = people[k]
         row = {"name": st["handle"], "look": look_for(s, k, ep)}
@@ -243,7 +276,7 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
     side = {
         "seed": seed, "count": max(0, s["followers"] - len(named)), "settlers": settlers[:40],
         "buildings": buildings, "heaters": [61], "camera": cam, "arrivals": arrivals, "tags": tags,
-        "bubbles": bubbles, "progress": progress, "beacon_ghost": beacon_ghost, "captions": caps, "events": events,
+        "bubbles": bubbles, "progress": progress, "parades": parades, "beacon_ghost": beacon_ghost, "captions": caps, "events": events,
         "duration": round(t, 2), "building_now": (0, t),
     }
     shots = [{"view": "side", "spec": side, "dur": round(t, 2)}] if t > 0 else []

@@ -5,7 +5,8 @@ episodes stand on their own (the founding crew, and slots code fills); the daily
 the people: their looks, sheets, lines, replies.
 
 Beats:
-  {"type": "slot", "slot": "arrivals" | "people" | "build" | "next" | "ask"}      filled by code
+  {"type": "slot", "slot": "arrivals" | "people" | "granted" | "build" | "next" | "ask"}   filled by code
+      ("granted": everyone whose look changed today walks past, named: the "granted today" parade)
   {"type": "caption", "lines": [...], "secs": 2.5}
   {"type": "say", "who": WHO, "text": "LINE ONE|LINE TWO", "secs": 2.5}
   {"type": "feature", "who": WHO, "lines": [...], "secs": 2.5}                      a settler's moment
@@ -23,10 +24,10 @@ from datetime import date
 from ..render.colony import kit, pixfont
 
 CREW = ("MAREN", "TOLU", "BASK", "IKO")
-SLOTS = ("arrivals", "people", "build", "next", "ask")
+SLOTS = ("arrivals", "people", "granted", "build", "next", "ask")
 EVENTS = ("dust_storm", "signal", "aurora", "meteors", "quake", "night")
 BEATS = ("slot", "caption", "say", "feature", "event", "decision")
-SLOT_SECS = {"arrivals": 9.1, "people": 7.8, "build": 5.4, "next": 3.6, "ask": 3.0}  # the most each can take
+SLOT_SECS = {"arrivals": 9.1, "people": 7.8, "granted": 7.4, "build": 8.0, "next": 3.6, "ask": 3.0}  # the most each can take
 LINE_CHARS = 24  # a caption line (the font fits 24 small or 12 big)
 SAY_CHARS = 18  # a speech-bubble line
 MAX_SECONDS = 34  # the whole episode at its longest (most run 20-28 s)
@@ -118,6 +119,9 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
     elif LINK.search(cap) or BLOCKLIST.search(cap):
         probs.append("caption: no links, teen-friendly")
     if adapted:
+        from .picks import GRANT_MAX
+        if len(ep.get("settlers") or {}) > GRANT_MAX:
+            probs.append(f"settlers: at most {GRANT_MAX} changed a day ({len(ep['settlers'])} given)")
         for h, info in (ep.get("settlers") or {}).items():
             if h.lstrip("@").lower() not in handles:
                 probs.append(f"settlers: {h} isn't a settler")
@@ -149,7 +153,10 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
 def estimate(ep: dict) -> float:
     """The longest the episode can run, in seconds (slots at their fullest; a decision is 6 s)."""
     t = 0.0
-    for b in ep.get("beats") or []:
+    beats = ep.get("beats") or []
+    if ep.get("settlers") and not any(b.get("slot") == "granted" for b in beats):
+        t += SLOT_SECS["granted"]  # the parade is added for everyone whose look changed
+    for b in beats:
         if b.get("type") == "slot":
             t += SLOT_SECS.get(b.get("slot"), 0)
         elif b.get("type") == "decision":

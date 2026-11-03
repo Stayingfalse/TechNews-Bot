@@ -67,7 +67,10 @@ def add(comments: list[dict], post: str | None = None) -> list[dict]:
     with _lock:
         box = load()
         for c in comments:
-            if c["id"] in box["comments"] or c["user"].lstrip("@").lower() in gone:
+            if c["user"].lstrip("@").lower() in gone:
+                continue
+            if c["id"] in box["comments"]:  # seen before: only its likes change
+                box["comments"][c["id"]]["likes"] = int(c.get("likes") or 0)
                 continue
             row = {**c, "post": post, "kind": rule_kind(c["text"]), "settler": rules.key(c)}
             box["comments"][c["id"]] = row

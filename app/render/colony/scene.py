@@ -23,6 +23,7 @@ GREEN = (166, 19)  # greenhouse
 BEACON_X = 228
 CONDENSER_X = 136
 WORKSHOP_X = 202
+PARADE_GAP = 13  # pixels between people in the parade
 OUTSIDE_MAX = 16  # settlers drawn outside; the rest are lit windows and heads in the dome
 
 
@@ -589,6 +590,17 @@ def draw(spec: dict, t: float) -> Canvas:
             x, back = pingpong(v if walking else p["phase"], p["lo"], p["hi"])
             top = draw_person(wc, p, x, t, walking, flip=back)
         heads[p["name"]] = (x, top)
+
+    # the "granted today" parade: they walk in from the right, one after another, and across
+    for pa in spec.get("parades", []):
+        if pa["t0"] <= t <= pa["t1"]:
+            n = len(pa["people"])
+            speed = (W + 24 + n * PARADE_GAP) / max(0.1, pa["t1"] - pa["t0"])
+            for i, p in enumerate(pa["people"]):
+                xs = W + 8 + i * PARADE_GAP - (t - pa["t0"]) * speed
+                if -12 < xs < W + 12:
+                    x = cam + xs
+                    heads[p["name"]] = (x, draw_person(wc, p, x, t, True, flip=True))
 
     count, bump = spec["count"], 0.0
     for a in spec.get("arrivals", []):

@@ -74,10 +74,6 @@
     },
     {
      "type": "slot",
-     "slot": "people"
-    },
-    {
-     "type": "slot",
      "slot": "build"
     },
     {
@@ -321,10 +317,6 @@
     {
      "type": "slot",
      "slot": "arrivals"
-    },
-    {
-     "type": "slot",
-     "slot": "people"
     },
     {
      "type": "slot",

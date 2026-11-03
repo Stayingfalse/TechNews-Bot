@@ -13,10 +13,10 @@ from pathlib import Path
 
 from ..config import settings
 from ..render.colony import kit
-from . import inbox, plan, rules, state
+from . import inbox, picks, plan, rules, state
 
 SO_FAR = 10  # episodes of the story so far handed to the routine
-MAX_PEOPLE = 30  # settlers with new comments handed over a day
+MAX_PEOPLE = 40  # settlers with new comments handed over a day (the grants first)
 MAX_COMMENTS = 3  # per settler
 CREW_NOTES = {
     "MAREN": "the commander, calm, the colony's voice of reason; white suit, white hair",
@@ -108,7 +108,11 @@ def context(day: date, now: datetime | None = None) -> dict:
     by_settler: dict[str, list[dict]] = {}
     for c in comments:
         by_settler.setdefault(c["settler"], []).append(c)
-    order = report["featured"] + [k for k in by_settler if k not in report["featured"]]
+    requests = [c for c in comments if c.get("kind") in ("request", None)]
+    choice = picks.choose(s, requests, set(report["arrived"]), day)
+    granted = [r["key"] for r in choice["grant"]]
+    order = granted + [k for k in report["featured"] if k not in granted]
+    order += [k for k in by_settler if k not in order]
     people = []
     for k in order[:MAX_PEOPLE]:
         st = s["settlers"].get(k)
@@ -136,6 +140,12 @@ def context(day: date, now: datetime | None = None) -> dict:
                                    "max_seconds": plan.MAX_SECONDS, "beats": plan.BEATS, "events": plan.EVENTS,
                                    "slots": plan.SLOTS},
         "unsorted": sum(1 for c in comments if not c.get("kind")),
+        # whose requests: three spotlights get a moment on screen, the rest of `grant` walk in the
+        # "granted today" parade, and `queue` is everyone else's place in line (for their reply)
+        "spotlights": [{"handle": r["handle"], "comment_id": r["comment_id"], "why": r["why"], "likes": r["likes"],
+                        "waited_days": r["waited"]} for r in choice["spotlights"]],
+        "grant": [{"handle": r["handle"], "comment_ids": r["comment_ids"]} for r in choice["grant"]],
+        "queue": choice["queue"],
     }
 
 
@@ -175,11 +185,24 @@ def episode_for(day: date) -> tuple[dict | None, str]:
     return planned(day)
 
 
-def commit(s: dict, ep: dict | None) -> dict:
-    """Keep what today's adaptation said about people (looks, traits, sheets) once it has posted."""
+def commit(s: dict, ep: dict | None, report: dict | None = None) -> dict:
+    """Keep what today's adaptation said about people (looks, traits, sheets) once it has posted,
+    and who had a moment on screen (so the spotlight moves on to others)."""
     if not ep:
         return s
     by = {st["handle"].lower(): k for k, st in s["settlers"].items()}
+    on = ep.get("date") or (report or {}).get("day")
+    for b in ep.get("beats") or []:
+        if b.get("type") in ("feature", "say", "decision") and on:
+            who = str(b.get("who", ""))
+            if who.startswith("$") and report:
+                i = int(who[1:]) - 1
+                k = report["featured"][i] if i < len(report["featured"]) else None
+            else:
+                k = by.get(who.lstrip("@").lower())
+            if k and k in s["settlers"]:
+                st = s["settlers"][k]
+                st["featured_on"] = sorted(set(st.get("featured_on") or []) | {on})[-10:]
     for h, info in (ep.get("settlers") or {}).items():
         k = by.get(h.lstrip("@").lower())
         if not k:

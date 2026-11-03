@@ -72,6 +72,19 @@ particular people and what they decided**:
 - **Order on screen:** the people (arrivals, answers, consequences) come first. Colony progress
   comes after, as the payoff.
 
+### Whose request gets done (`app/colony/picks.py`)
+
+Each open request is scored: **likes on the comment ×3**, **days waiting ×2**, streak (up to 7)
+and rank (up to 3), **−8 for anyone featured in the last 7 days**, and a seeded fraction to break
+ties. Each day:
+
+- **Three spotlights** get a moment on screen: the top score, **a newcomer by a fair draw** (seeded
+  by the date, so a re-run picks the same person), and **whoever has waited longest**.
+- **Up to 25 are granted**: their looks change and they walk past by name in the "granted today"
+  parade, which code adds to the episode.
+- **Everyone else gets their place in the queue** as a reply ("you're on the list, number 12").
+  Requests wait until they're granted; waiting raises their score each day.
+
 ### The setting
 
 A small moon with violet grass, glass-shelled plants, two suns setting at different times, and

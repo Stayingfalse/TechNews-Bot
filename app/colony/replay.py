@@ -62,57 +62,86 @@ def fake_sorter(items: list[dict]) -> dict[str, str]:
     return out
 
 
-GRANTS = [  # what the stand-in Claude can do with a request
+GRANTS = [  # what the stand-in Claude can do with a request: (word, look, trait, line, feature caption)
     ("barrel", {"body": "old", "beard": "white", "carrier": "barrel", "hair": "none", "back": "none", "suit": "orange"},
-     "old", "AN *OLD MAN*|IN A *BARREL*", "GOT HIS *BARREL*"),
+     "old", "IT'S PERFECT.", "GOT HIS *BARREL*"),
     ("leak", {"held": "mug"}, "leaky barrel", "IT LEAKS.|I LOVE IT.", None),
     ("wizard", {"hat": "wizard"}, "wizard", "BEHOLD.|A HAT.", "GOT A *WIZARD HAT*"),
     ("cat", {"pet": "cat"}, "cat person", "SAY HI TO|MITTENS.", "BROUGHT A *CAT*"),
+    ("dog", {"pet": "dog"}, "dog person", "GOOD BOY.", "BROUGHT A *DOG*"),
+    ("chef", {"hat": "chef", "held": "mug"}, "cook", "SOUP'S ON.", "IS THE *CHEF*"),
+    ("crate", {"carrier": "crate"}, "crate dweller", "IT'S COSY.", "MOVED INTO A *CRATE*"),
+    ("crown", {"hat": "crown"}, "royalty", "BOW, PLEASE.", "GOT A *CROWN*"),
+    ("jetpack", {"back": "jetpack"}, "flyer", "WHEEE!", "GOT A *JETPACK*"),
+    ("pirate", {"hat": "tophat", "held": "toysword"}, "pirate", "ARR.", "IS A *PIRATE*"),
     ("fixed", {"held": "wrench"}, None, "FIXED IT|MYSELF.", None),
 ]
+WANTED = {"dragon": "a dragon (body or pet)", "ghost": "a ghost settler", "pirate": "a pirate hat and eyepatch"}
 
 
 def fake_claude(ctx: dict) -> dict:
-    """Stands in for the daily routine: start from the plan, grant what the kit can draw, give each
-    granted person a moment, reply, and leave out anything not OK (it never sees those)."""
+    """Stands in for the daily routine: start from the plan; grant every request in `grant` the
+    kit can draw; give the three `spotlights` a moment on screen; reply to everyone it granted, and
+    tell everyone in `queue` their place; never act on anything not OK."""
     ep = copy.deepcopy(ctx["planned"]) or {"beats": [{"type": "slot", "slot": s} for s in ("arrivals", "people", "build", "next", "ask")],
                                            "caption": "Farside tonight."}
     ep["date"] = ctx["date"]
     ep["settlers"], ep["replies"], ep["wanted"] = {}, [], []
+    people = {p["handle"]: p for p in ctx["people"]}
+    spot = {r["handle"] for r in ctx.get("spotlights", [])}
     moments = []
-    for p in ctx["people"]:
-        for c in p["comments"]:
+    for g in ctx.get("grant", []):
+        p = people.get(g["handle"])
+        for c in [c for c in (p or {}).get("comments", []) if c["id"] in g["comment_ids"]]:
             if c["kind"] == "not_ok" or "instructions" in c["text"].lower():
                 continue  # declined: no moment, no reply
-            for word, look, trait, line, feature in GRANTS:
-                if word in c["text"].lower():
-                    h = p["handle"]
-                    if all(p["look"].get(k) == v for k, v in look.items()):
-                        continue  # they already have it
-                    info = ep["settlers"].setdefault(h, {"look": dict(p["look"]), "traits": list(p["traits"]), "sheet": p["sheet"]})
-                    info["look"].update(look)
-                    if trait and trait not in info["traits"]:
-                        info["traits"] = (info["traits"] + [trait])[-3:]
-                    info["sheet"] = (info["sheet"] + f" Asked: {c['text'][:60]}.").strip()[-300:]
-                    if feature:
-                        moments.append({"type": "feature", "who": h, "lines": [f"*{h.upper()}*", feature], "secs": 2.6})
-                    moments.append({"type": "say", "who": h, "text": line.replace("*", ""), "secs": 2.4})
-                    ep["replies"].append({"comment_id": c["id"], "text": f"Done, {h}. See you on Farside tonight."})
-                    break
-            else:
-                if "dragon" in c["text"].lower():
-                    ep["wanted"].append("a pet dragon")
+            _grant(ep, p, c, g["handle"] in spot, moments)
+    for q in ctx.get("queue", [])[:60]:
+        ep["replies"].append({"comment_id": q["comment_id"], "text": f"You're on the list, number {q['position']}."})
+    return _finish(ep, moments)
+
+
+def _grant(ep: dict, p: dict, c: dict, spotlit: bool, moments: list) -> None:
+    h, text = p["handle"], c["text"].lower()
+    for word, want in WANTED.items():
+        if word in text:
+            ep["wanted"].append(want)
+    for word, look, trait, line, feature in GRANTS:
+        if word in text and not all(p["look"].get(k) == v for k, v in look.items()):
+            info = ep["settlers"].setdefault(h, {"look": dict(p["look"]), "traits": list(p["traits"]), "sheet": p["sheet"]})
+            info["look"].update(look)
+            if trait and trait not in info["traits"]:
+                info["traits"] = (info["traits"] + [trait])[-3:]
+            info["sheet"] = (info["sheet"] + f" Asked: {c['text'][:60]}.").strip()[-300:]
+            if spotlit:
+                if feature:
+                    moments.append({"type": "feature", "who": h, "lines": [f"*{h.upper()}*", feature], "secs": 2.6})
+                moments.append({"type": "say", "who": h, "text": line, "secs": 2.4})
+            ep["replies"].append({"comment_id": c["id"], "text": f"Done, {h}. See you on Farside tonight."})
+            break
+    else:
+        if any(w in text for w in WANTED):
+            ep["replies"].append({"comment_id": c["id"], "text": "We can't build that yet, but it's on the list."})
+
+
+def _finish(ep: dict, moments: list) -> dict:
+    ep["wanted"] = sorted(set(ep["wanted"]))
     if moments:
         at = next((i + 1 for i, b in enumerate(ep["beats"]) if b.get("slot") == "arrivals"), 0)
-        ep["beats"][at:at] = moments[:3]
-        # keep it short: drop plain captions and the crew's lines until it fits
-        from . import plan
-        while plan.estimate(ep) > plan.MAX_SECONDS:
-            drop = next((i for i, b in enumerate(ep["beats"]) if b["type"] in ("caption", "event")
-                         or (b["type"] == "say" and b["who"] in today.CREW_NOTES)), None)
-            if drop is None:
+        ep["beats"][at:at] = moments[:4]
+    from . import plan
+    while plan.estimate(ep) + (plan.SLOT_SECS["granted"] if ep["settlers"] else 0) > plan.MAX_SECONDS:
+        drop = None
+        for test in (lambda b: b["type"] in ("caption", "event") or (b["type"] == "say" and b["who"] in today.CREW_NOTES),
+                     lambda b: b.get("slot") in ("people", "next"),
+                     lambda b: b["type"] == "say",
+                     lambda b: b["type"] == "feature"):
+            drop = next((i for i, b in enumerate(ep["beats"]) if test(b)), None)
+            if drop is not None:
                 break
-            ep["beats"].pop(drop)
+        if drop is None:
+            break
+        ep["beats"].pop(drop)
     ep["summary"] = (ep.get("summary") or "")[:200]
     return ep
 
@@ -152,7 +181,7 @@ def run(mode: str, out: Path | None = None, video: bool = False, claude_days: se
         s, report = rules.apply_day(s, day, todays, followers, yesterday)
         ep, source = today.episode_for(day)
         video_spec = episode.build(s, report, ep)
-        s = today.commit(s, ep if source == "adapted" else None)
+        s = today.commit(s, ep if source == "adapted" else None, report)
         state.save(s)
         rec = {"day": day.isoformat(), "source": source, "problems": sent_problems, "episode": ep,
                "video": video_spec, "report": report}
