@@ -26,8 +26,13 @@ def test_policy_page_is_public_and_complete(monkeypatch):
     for must in ("privacy@example.com", "Legitimate interests", "Your rights", "ico.org.uk", "ElevenLabs",
                  "Anthropic", "90 days", 'id="deletion"', "Children", "YouTube API Services",
                  "policies.google.com/privacy", "how-we-use-comments.mp4", "how-we-use-votes.mp4", "/privacy/request", "/terms",
-                 "@dungeoncrawlergram", "Story videos: votes", "One opt-out covers every account we run", "any account we add later"):
+                 "@dungeoncrawlergram", "Story videos: votes", "One opt-out covers every account we run", "any account we add later",
+                 "DeepSeek", "@farside.colony", "@sixelspeedway", "race.onlydan.uk"):
         assert must in page, must
+    # one section per account, each saying an opt-out there covers all of them
+    for anchor in ("quiz", "story", "racing", "farside"):
+        assert f'id="{anchor}"' in page and f'href="#{anchor}"' in page, anchor
+    assert page.count("Opting out here opts you out of every account we run") == 4
     assert TestClient(app).get("/data-deletion", follow_redirects=False).headers["location"] == "/privacy#deletion"
 
 

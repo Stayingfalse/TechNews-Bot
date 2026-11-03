@@ -31,7 +31,7 @@ from string import Template
 from . import channels, notify, privacy, store
 from .config import settings
 
-UPDATED = "1 November 2026"
+UPDATED = "3 November 2026"
 REQUEST_LOG_DAYS = 365  # deletion/opt-out records kept to show we honoured them (Art. 5(2) accountability)
 OPTOUT_WORDS = re.compile(r"(?i)(#\s*opt\s*-?\s*out\b|\bopt\s*-?\s*out\b|#\s*nodata\b)")
 TEMPLATES = Path(__file__).with_name("legal")
@@ -284,7 +284,10 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 # What each kind of channel does with comments, as the policy's account list describes it
 FORMATS = {"quiz": "Quiz videos: answers in comments, shout-outs, viewer-picked themes",
            "adventure": "Story videos: votes in comments decide what happens next; comment join to be in the story",
-           "racing": "Race videos: play-money bets in comments, balances and a league table"}
+           "racing": "Race videos: play-money bets in comments, balances and a league table",
+           "colony": "Daily colony story: comment to move in and your settler is shaped by what you write"}
+# Each kind's section of the privacy policy (the anchors in privacy.html)
+SECTIONS = {"quiz": "quiz", "adventure": "story", "racing": "racing", "colony": "farside"}
 PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}
 
 
@@ -296,12 +299,29 @@ def accounts_table() -> str:
     """Every account we run, from the channel registry, so a new channel is listed (and covered) by itself."""
     from . import channels
 
+    def details(ch) -> str:
+        what = html.escape(FORMATS.get(ch.kind, ch.kind))
+        return f'{what} (<a href="#{SECTIONS[ch.kind]}">details</a>)' if ch.kind in SECTIONS else what
+
     rows = "".join(
         f"<tr><td>{html.escape(ch.name)}</td><td><strong>{html.escape(_at(ch.brand_handle) or '(not set)')}</strong></td>"
         f"<td>{html.escape(', '.join(PLATFORM_NAMES.get(p, p.title()) for p in ch.platforms))}</td>"
-        f"<td>{html.escape(FORMATS.get(ch.kind, ch.kind))}</td></tr>"
+        f"<td>{details(ch)}</td></tr>"
         for ch in channels.registry().values())
     return f'<div class="wrap"><table><tr><th>Channel</th><th>Account</th><th>Where</th><th>What it does with comments</th></tr>{rows}</table></div>'
+
+
+def _account_names() -> dict[str, str]:
+    """Placeholders naming each channel's account in its policy section, e.g. $racing_account:
+    "<strong>@sixelspeedway</strong> on Instagram"."""
+    from . import channels
+
+    out = {}
+    for ch in channels.registry().values():
+        where = " and ".join(PLATFORM_NAMES.get(p, p.title()) for p in ch.platforms) or "our accounts"
+        handle = html.escape(_at(ch.brand_handle) or "(account not set)")
+        out[f"{SECTIONS.get(ch.kind, ch.kind)}_account"] = f"<strong>{handle}</strong> on {html.escape(where)}"
+    return out
 
 
 def _page(name: str, **values) -> str:
@@ -423,7 +443,7 @@ def chronicle_page() -> str:
 
 
 def privacy_page() -> str:
-    return _page("privacy", title="Privacy policy")
+    return _page("privacy", title="Privacy policy", racing_domain=html.escape(settings.racing_domain), **_account_names())
 
 
 def terms_page() -> str:
