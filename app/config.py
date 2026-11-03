@@ -109,6 +109,22 @@ class Settings:
         self.colony_poll_minutes = int(os.environ.get("COLONY_POLL_MINUTES", "15"))
         self.colony_reply_gap = float(os.environ.get("COLONY_REPLY_GAP", "20"))
         self.colony_reply_per_hour = int(os.environ.get("COLONY_REPLY_PER_HOUR", "60"))
+        # Voices (docs/COLONY_PLAN.md §5d): a narrator, the crew's own, and a pool for settlers
+        # (name=id,...; "old" and "young" go to old and kid settlers). Characters a month: the budget.
+        self.colony_voice = _bool("COLONY_VOICE", True)
+        self.colony_voice_budget = int(os.environ.get("COLONY_VOICE_BUDGET", "15000"))
+        self.colony_voice_model = os.environ.get("COLONY_VOICE_MODEL", "eleven_multilingual_v2")
+        self.colony_narrator_voice = os.environ.get("COLONY_NARRATOR_VOICE", "b6T2IrWoTx7ZIb3BHJSg")  # Penelope
+        # said in this built-in voice when ElevenLabs refuses one of the above (a library voice not on the account)
+        self.colony_fallback_voice = os.environ.get("COLONY_FALLBACK_VOICE", "TX3LPaxmHKxFdv7VOQHJ")
+        crew = os.environ.get("COLONY_CREW_VOICES", "MAREN=eiNgkRczHJmif3gxSoyz,TOLU=S0ypc51SmsvcKXTWvjqJ,"
+                                                    "BASK=l6InWdYdHO8DZG6WDDpT,IKO=vGfq3y2g8QTWjuUhrNYc")
+        self.colony_crew_voices = {k.strip().upper(): v.strip() for k, v in (x.split("=", 1) for x in crew.split(",") if "=" in x)}
+        pool = os.environ.get("COLONY_SETTLER_VOICES", "old=qkG6pQFWpZTnYnoQZGFs,young=nuNMqNdrDex14QQRI9Jq,"
+                                                       "cormac=tEo3d4j7gzVojBL5Z4Pt,lyra=ofWwoMxOYgLntvYlQLiB,"
+                                                       "horhey=JS8l7lQwh35gDnA8DTXd,jonah=vveagfomyMCJLZsOPRP2,"
+                                                       "callum=N2lVS1w4EtoT3dr4eOWO")
+        self.colony_settler_voices = {k.strip().lower(): v.strip() for k, v in (x.split("=", 1) for x in pool.split(",") if "=" in x)}
 
         # The racing channel, Sixel Speedway (docs/RACING_PLAN.md): its own accounts, connected with
         # /oauth/{platform}/start?channel=racing. Bets close RACING_CLOSE_MINUTES before each post.

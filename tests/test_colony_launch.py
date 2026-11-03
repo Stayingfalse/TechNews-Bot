@@ -31,7 +31,7 @@ def ig(monkeypatch, discord):
     monkeypatch.setattr(instagram, "publish_reel", lambda url, cap, cover=None: calls["posts"].append((url, cap))
                         or {"media_id": f"m{len(calls['posts'])}", "url": "https://instagram.com/p/x"})
     monkeypatch.setattr(instagram, "reply", lambda cid, text: calls["replies"].append((cid, text)) or "r")
-    monkeypatch.setattr(video, "render", lambda spec, path, audio=None: path.write_bytes(b"mp4"))
+    monkeypatch.setattr(video, "render", lambda spec, path, audio=None, voice=None: path.write_bytes(b"mp4"))
     monkeypatch.setattr(jobs, "_spawn", lambda target, job: target(job))  # run steps in this thread
     store.set_tokens("instagram", {"access_token": "t", "user_id": "9", "expires_at": 9e12}, channel=channels.COLONY)
     calls["discord"] = discord

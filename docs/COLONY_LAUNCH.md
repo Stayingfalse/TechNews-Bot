@@ -25,6 +25,8 @@ Merge this branch and deploy. Then set, and restart:
 | `COLONY_RENDER_LEAD_MINUTES` | `60` | renders after the cut-off (default) |
 | `ADVENTURE_VOICE_BUDGET` | `10000` | the new split of the 30,000 credits (COLONY_PLAN §5d) |
 | `RACING_ENABLED` | leave unset (off) | Sixel Speedway stays switched off |
+| `COLONY_VOICE_BUDGET` | `15000` (default) | characters a month for Farside's narrator and characters |
+| `COLONY_NARRATOR_VOICE`, `COLONY_CREW_VOICES`, `COLONY_SETTLER_VOICES` | defaults: Penelope; Cherine, Kai, Angus, Yuria; a pool of 7 | swap any voice by its ElevenLabs id |
 
 `DEEPSEEK_API_KEY` is already set for the dungeon crawl; Farside's comment sorter uses it too
 (`COLONY_SORTER=off` to turn just that off).
