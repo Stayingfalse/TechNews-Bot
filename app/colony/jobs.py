@@ -506,6 +506,9 @@ def _loop() -> None:
                 if time.time() - last_poll > settings.colony_poll_minutes * 60:
                     last_poll = time.time()
                     poll()
+                    from . import rollcall
+
+                    rollcall.tick()
                 with channels.use(channels.COLONY):
                     replies.send_due()
         except Exception:

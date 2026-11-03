@@ -5,6 +5,7 @@ Docs: https://developers.facebook.com/docs/instagram-platform/content-publishing
 from __future__ import annotations
 
 import logging
+import json
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -219,6 +220,36 @@ def publish_carousel(image_urls: list[str], caption: str) -> dict:
     for c in children:
         _wait(c, tok["access_token"])
     return _publish_container(_create({"media_type": "CAROUSEL", "children": ",".join(children), "caption": caption}))
+
+
+def publish_tagged(slides: list[tuple[str, list[dict]]], caption: str) -> dict:
+    """A single image (one slide) or a carousel (2-10), each image carrying user tags:
+    [{"username": ..., "x": 0-1, "y": 0-1}], at most 20 an image. An image whose tags Instagram
+    refuses goes up without them (`untagged` lists those slides), so the post still goes out."""
+    untagged = []
+
+    def make(url, tags, extra):
+        if tags:
+            try:
+                return _create({"image_url": url, **extra, "user_tags": json.dumps(tags[:20])})
+            except RuntimeError as e:
+                log.warning("Instagram refused the tags on %s: %s", url, e)
+                untagged.append(url)
+        return _create({"image_url": url, **extra})
+
+    if len(slides) == 1:
+        url, tags = slides[0]
+        out = _publish_container(make(url, tags, {"caption": caption}))
+    else:
+        children = []
+        for url, tags in slides[:10]:
+            children.append(make(url, tags, {"is_carousel_item": "true"}))
+            time.sleep(2)
+        tok = store.get_tokens("instagram")
+        for c in children:
+            _wait(c, tok["access_token"])
+        out = _publish_container(_create({"media_type": "CAROUSEL", "children": ",".join(children), "caption": caption}))
+    return {**out, "untagged": [u for u, _ in slides if u in untagged]}
 
 
 def _get(path: str, fields: str) -> dict:

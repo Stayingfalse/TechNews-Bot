@@ -152,6 +152,19 @@ def colony_block(user: str = "", part: str = "", date_: str = Query(default="", 
     return {"blocked": done, "day": day, "status": (job or {}).get("status")}
 
 
+@router.post("/rollcall")
+def colony_rollcall(dry_run: bool = True):
+    """The roll call: everyone's settler in a grid, each tagged where they stand. dry_run (the
+    default) only sends it to Discord; dry_run=false posts it now. It also posts by itself every
+    COLONY_ROLLCALL_DAYS at COLONY_ROLLCALL_TIME."""
+    from . import rollcall
+
+    try:
+        return rollcall.run(dry_run=dry_run)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
 @router.post("/preview", status_code=202)
 def colony_preview(date_: str = Query(default="", alias="date")):
     """Render a day's episode as it stands now and send it to Discord. Nothing is posted or saved."""
