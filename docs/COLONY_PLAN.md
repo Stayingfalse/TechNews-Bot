@@ -28,6 +28,7 @@ followers" title card, a flash-forward montage, or their wording.
 | Platforms | **Instagram only** at launch, on a **new account: @farside.colony** |
 | AI | **The most AI of any channel.** A writer reads the comments every day, settler by settler, and changes the people and the story to match, the way "an old man in a barrel" was taken in on the dungeon crawl (§5a). |
 | Models | **Claude for the heavy work** (the week's plan, the daily story, deciding what to accommodate); **DeepSeek for the easy work** (sorting comments, wording replies, captions, condensing settler sheets) (§5b) |
+| How Claude runs | **Claude Code Routines call the server**, as the quiz batch does: a weekly one and a daily one. The server never calls Claude and holds no Anthropic key, so it all runs on the existing Claude usage, not paid API usage. |
 | Week ahead | Claude plans the **whole week as complete, playable episodes**. If the AI can't run on a day (out of credits, API down), that day plays as planned; if it can, it builds in what people asked for (§5b). |
 | Moderation | A Discord preview before each post with Block buttons. **Not blocked means it goes out**, as the dungeon crawl's party names do. |
 
@@ -125,11 +126,16 @@ every 15 min   read new comments on the channel's posts → store them by settle
                (joins, job words and streaks are counted by code, as in §3)
 every 15 min   DeepSeek sorts each new comment: join / job / request / reply-to-story /
                chatter / not OK (code rules first; see §5b)
-T-90 min       Claude is given today's planned episode (from the week plan), the colony
-               (buildings, resources, today's milestone), the story so far, and each active
-               settler's sheet plus their sorted new comments
-               → it answers with today's episode adapted (the schema below), checked by code;
-                 problems sent back at most twice. If it can't, the planned episode stands.
+T-3 h          the daily Claude routine fires: GET /colony/today gives it today's planned
+               episode (from the week plan), the colony (buildings, resources, today's
+               milestone), the story so far, and each active settler's sheet plus their
+               sorted new comments
+               → it sends today's episode adapted (the schema below) to POST /colony/today;
+                 the server checks it and answers 422 with every problem; the routine fixes
+                 and resends
+T-90 min       the cut-off: whatever has been accepted by now is used. Nothing accepted
+               means the planned episode stands. Comments after the routine read them go
+               into tomorrow.
 T-80 min       DeepSeek words the replies and the caption, and condenses each featured
                settler's sheet
 T-75 min       Discord preview of the plan: every look change, quote and reply, each with a
@@ -195,7 +201,7 @@ short as the colony grows.
 | Job | Who | When | Why |
 |---|---|---|---|
 | **The week plan**: 7 complete episodes plus 2 spare ones | **Claude**, a Claude Code Routine (as the quiz batch) | Sunday 20:05 | The big creative and story call, once a week |
-| **The daily adaptation**: fit today's episode to what people asked for, decide what to accommodate or decline, keep characters consistent | **Claude** (Sonnet 5.5), from the server (`ANTHROPIC_API_KEY`) | T-90 min | Judgment and a voice, and it needs the retry-and-check loop the server runs |
+| **The daily adaptation**: fit today's episode to what people asked for, decide what to accommodate or decline, keep characters consistent | **Claude**, a daily Claude Code Routine calling `GET`/`POST /colony/today` | T-3 h (cut-off T-90 min) | Judgment and a voice. It runs on Claude usage, so the server needs no Anthropic key. |
 | **Sorting comments**: join / job / request / reply-to-story / chatter / not OK | **DeepSeek** (already wired up), after code rules (job words, `JOIN`, links, @mentions) | every 15 min | Many small calls; easy |
 | **Wording**: replies, caption, condensing settler sheets | **DeepSeek** | T-80 min | Short, low-stakes writing |
 | **Counts**: population, streaks, ranks, milestones, resources | **Code** | always | Never an AI call |
@@ -222,7 +228,7 @@ Each planned episode is **complete and renderable without any viewer input**:
 | What's up | That day |
 |---|---|
 | Claude and DeepSeek | Planned episode, with what people asked for built in (looks, lines, small plot turns), sorted comments and worded replies |
-| DeepSeek, but not Claude (no credits, outage) | **Planned episode as written.** Code fills the newcomer and job slots, and DeepSeek words the replies. Requests wait in a queue for the next day Claude runs, so none are lost. |
+| DeepSeek, but not Claude (out of usage, outage, the routine didn't fire or missed the cut-off) | **Planned episode as written.** Code fills the newcomer and job slots, and DeepSeek words the replies. Requests wait in a queue for the next day Claude runs, so none are lost. |
 | Claude, but not DeepSeek | Claude sorts the comments itself within its daily call, and replies come from fixed templates |
 | Neither | Planned episode, code-filled slots, template replies ("Welcome to the colony, @name") |
 | No week plan (the routine failed) | The spare episodes, then a Discord alert to re-run the routine |
@@ -232,12 +238,12 @@ counts`), so the weekly review can see whether the adapted days do better than t
 
 ### Cost and limits
 
-- Claude: one daily call (a few thousand words in, with the colony capped as in "Scale"), plus
-  the weekly routine. DeepSeek: a small call per batch of comments. Measure both at M2.5.
-- `COLONY_CLAUDE_DAILY_MAX` caps tokens a day. Past it, the day falls back to the plan, like
-  running out of credits.
-- Each writer sits behind one function, like `app/adventure/writer.py`, so either provider can be
-  swapped by a setting.
+- Claude: one daily routine run plus the weekly one, on the existing Claude usage (no API
+  billing). `GET /colony/today` caps what it hands over (featured settlers, comments per person;
+  see "Scale"), so a run stays small as the colony grows. DeepSeek: a small call per batch of
+  comments. Measure both at M2.5.
+- If routine runs ever need cutting back, the daily one can drop to every other day: the plan
+  covers the days in between.
 
 ## 6. Build: what's reused, what's new
 
@@ -264,9 +270,9 @@ New:
 - Dashboard tags: `beat` (build/event/vote), `milestone`, `ask`, `length`.
 
 Also new: the week plan (`POST /colony/week`, its checks, the spare episodes), the daily writer
-(§5a/5b: `app/colony/writer.py`, Claude, schema, checks), the comment sorter (DeepSeek), the
+(§5a/5b: `GET`/`POST /colony/today`, the schema and checks, the cut-off), the comment sorter (DeepSeek), the
 sprite kit with its ids, the comment store by settler, the Discord moderation preview, and the
-weekly routine prompt (`docs/COLONY_ROUTINE_PROMPT.md`).
+weekly and daily routine prompts (`docs/COLONY_ROUTINE_PROMPT.md`, `docs/COLONY_DAILY_PROMPT.md`).
 
 ## 7. Milestones
 
@@ -274,7 +280,7 @@ weekly routine prompt (`docs/COLONY_ROUTINE_PROMPT.md`).
 |---|---|---|
 | M1 Look test | Pixel renderer on the moon: the landing pod's first night, a dome going up, the founding crew plus 30 named settlers, a progress bar. Three stills and a 25 s video in Discord. | Owner picks the look |
 | M2 Counts | `followers()`, the colony and roster store, the comment rules of §3, milestone and resource rules of §4, tests | A dry run over a fake week posts nothing and renders 7 correct videos |
-| M2.5 Writer | §5a-b: sprite kit v1 (≈ 40 parts, barrel included), `POST /colony/week` and the spare episodes, the Claude daily writer and DeepSeek sorter with their checks, the moderation preview, a replay test over a fake week of comments (requests, a troll, a prompt injection, a returning settler) run four times: full AI, no Claude, no DeepSeek, neither | Every run gives 7 good videos and every bad comment is handled |
+| M2.5 Writer | §5a-b: sprite kit v1 (≈ 40 parts, barrel included), `POST /colony/week` and the spare episodes, `GET`/`POST /colony/today` and the DeepSeek sorter with their checks, the moderation preview, a replay test over a fake week of comments (requests, a troll, a prompt injection, a returning settler) run four times: full AI, no Claude, no DeepSeek, neither | Every run gives 7 good videos and every bad comment is handled |
 | M3 Launch | New account connected; "Day 0" (an empty world: the first follower is the first settler); daily posts at a slot clear of the others (09:00 / 12:00; 19:00 is free now racing is off) | First automatic post |
 | M4 Story | The weekly routine live, occasional votes, the `wanted` → new sprites loop; weekly review covers the channel | Two weeks of posts |
 | M5 Decide | 14 posts in, against the dungeon crawl's numbers | below |
@@ -286,8 +292,6 @@ one thing (length, hook, ask) for a week, then decide.
 ## 8. Open questions for the owner
 
 1. Posting time: 19:00 (free now racing is off) or another slot?
-2. An `ANTHROPIC_API_KEY` for the server (the daily Claude call), with a monthly budget to set
-   `COLONY_CLAUDE_DAILY_MAX` from.
 
 ## 9. Handle ideas (decided: **@farside.colony**)
 
