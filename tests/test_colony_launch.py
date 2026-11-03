@@ -137,3 +137,35 @@ def test_a_failed_post_can_be_retried_and_a_missed_slot_is_reported(ig, monkeypa
     d2 = DAY + timedelta(days=1)
     jobs.tick(at(d2, 19, 0) + timedelta(hours=7))  # the server was down all evening
     assert jobs.get(d2.isoformat())["status"] == "missed"
+
+
+def test_the_first_post_can_go_out_this_afternoon_and_the_cutoffs_follow_it(ig, monkeypatch):
+    monkeypatch.setattr(jobs, "now", lambda: at(DAY, 9, 0))
+    jobs.start(DAY + timedelta(days=1))  # booked for tomorrow at 19:00 first...
+    with pytest.raises(ValueError):
+        jobs.start(at=at(DAY, 15, 30))  # ...already started
+    st = jobs.start(at=at(DAY, 15, 30), restart=True)  # ...then moved to this afternoon
+    assert st["first_post"] == at(DAY, 15, 30).isoformat() and st["start_date"] == DAY.isoformat()
+    assert jobs.get((DAY + timedelta(days=1)).isoformat()) is None
+    assert today.deadline(DAY) == at(DAY, 14, 0)  # 90 min before its own post
+    assert today.deadline(DAY + timedelta(days=1)) == at(DAY + timedelta(days=1), 17, 30)
+    jobs.tick(at(DAY, 14, 31))  # under an hour to go: renders now
+    assert jobs.get(DAY.isoformat())["status"] == "scheduled"
+    jobs.tick(at(DAY, 15, 30))
+    assert jobs.get(DAY.isoformat())["status"] == "done"
+    # a comment just after the post counts towards tomorrow
+    inbox.add([comment("x", "early.bird", "hello!", at(DAY, 15, 45))])
+    jobs.tick(at(DAY + timedelta(days=1), 18, 0))
+    assert state.load()["days"][(DAY + timedelta(days=1)).isoformat()]["arrived"] == ["instagram:u-early.bird"]
+    with pytest.raises(ValueError):
+        jobs.start(at=at(DAY, 20, 0), restart=True)  # posted: no restarting
+
+
+def test_start_takes_a_time_from_the_api(ig, monkeypatch):
+    monkeypatch.setattr(jobs, "now", lambda: datetime.now(timezone.utc))
+    soon = (datetime.now(settings.tz) + timedelta(minutes=30)).strftime("%H:%M")
+    r = TestClient(app).post(f"/colony/start?at={soon}", headers=AUTH)
+    if datetime.now(settings.tz).hour < 23:  # not across midnight
+        assert r.status_code == 202, r.text
+        first = datetime.fromisoformat(r.json()["first_post"])
+        assert timedelta(minutes=29) < first - datetime.now(timezone.utc) < timedelta(minutes=31)
