@@ -22,6 +22,7 @@ from pathlib import Path
 from .. import channels, lease, notify, privacy, store
 from ..config import settings
 from ..publish import instagram
+from ..render import priority, remote
 from . import campaign, party, votes, voice
 
 log = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def recent(limit: int = 20) -> list[dict]:
 def _node(*args: str, timeout: int = 900) -> dict:
     """Run the renderer CLI; it prints a one-line JSON summary on stdout."""
     env = {**os.environ, "ADVENTURE_CACHE": str(settings.data_dir / "adventure" / "maps")}
-    cmd = ["node", "--import", "tsx", "packages/renderer/src/cli.ts", *args]
+    cmd = priority.cmd(["node", "--import", "tsx", "packages/renderer/src/cli.ts", *args])
     r = subprocess.run(cmd, cwd=settings.adventure_dir, env=env, capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
         raise RuntimeError((r.stderr.strip().splitlines() or ["renderer failed"])[-1][:500])
@@ -438,13 +439,15 @@ def _render(job: dict) -> None:
     save(job)
     settings.videos_dir.mkdir(parents=True, exist_ok=True)
     out = settings.videos_dir / f"{job['id']}-{secrets.token_urlsafe(8)}.mp4"
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-        json.dump(spec, fh)
-    try:
-        workers = str(max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4")))))
-        summary = _node(fh.name, "--out", str(out), "--workers", workers, *audio)
-    finally:
-        os.unlink(fh.name)
+    summary = remote.adventure(spec, out, audio)
+    if summary is None:  # no render worker, or it failed: render here
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(spec, fh)
+        try:
+            workers = str(max(1, min(os.cpu_count() or 1, int(os.environ.get("RENDER_WORKERS", "4")))))
+            summary = _node(fh.name, "--out", str(out), "--workers", workers, *audio)
+        finally:
+            os.unlink(fh.name)
     # which opening the renderer drew, for comparing in GET /metrics?channel=adventure (tag `hook`)
     job["hook_style"] = HOOK_STYLE if spec.get("kind") == "story" else "episode0"
     job.update(video=out.name, video_url=f"{settings.public_base_url}/media/{out.name}", render=summary)

@@ -50,10 +50,49 @@ Environment variables:
 | `MUSIC_GAIN` | default `0.32`: library music level under the sound effects |
 | `LOUDNESS_LUFS` | default `-15`: loudness of the final mix |
 | `RENDER_WORKERS` | default `4` |
+| `RENDER_NICE` | default `10`: renders run at this lower CPU priority (0–19), so other apps on the server stay responsive while a video is made. `0` = normal priority |
+| `RENDER_URL`, `RENDER_TOKEN` | optional: a render worker to make the videos on (see "Render worker" below). Unset: videos render here |
+| `RENDER_TIMEOUT` | default `900`: seconds to wait for the worker before rendering here instead |
 | `RENDER_LEAD_MINUTES` | default `45`: how long before its slot each video is rendered |
 | `KEEP_VIDEOS_DAYS` | default `3`: leftovers (failed posts, dry runs) are deleted after this; posted videos go straight away |
 
 Check: `curl APP_URL/health` → `{"ok":true}`, and `APP_URL/status?token=API_TOKEN` in a browser.
+
+### Render worker (optional): make the videos on another host
+
+Rendering is the only heavy work, and it can run elsewhere. The worker is **this same repo and
+Dockerfile**, deployed from `main` to a second host with one extra variable, `APP=app.render_worker:app`.
+This server sends it each video's spec (plus the host's voice lines, the narration and any uploaded
+music track, which only live on `/data` here) and gets the finished video back; publishing,
+scheduling and everything else stay here.
+
+If the worker is down, busy, slow (`RENDER_TIMEOUT`) or fails for any reason, this server renders
+that video itself, exactly as before, and Discord gets a warning (at most one an hour). Videos are
+rendered 45–60 minutes before their slot, so there's plenty of time for the fallback. To stop using
+the worker, remove `RENDER_URL`.
+
+**Worker host.** It needs to run a Docker image built from this repo, for several minutes per video,
+and send back a ~15–30 MB file. Vercel Hobby can't: functions there don't run Dockerfiles (no ffmpeg
+or Node renderer), get 1 vCPU, stop after 300 s, return at most 4.5 MB, and the plan is for
+non-commercial use only. Google Cloud Run fits and has a monthly free allowance that covers a few
+videos a day:
+
+1. Cloud Run → Create service → *Continuously deploy from a repository* → GitHub
+   `Stayingfalse/TechNews-Bot`, branch `^main$`, build type **Dockerfile**. Every push to `main`
+   rebuilds both Easypanel and the worker, so they always run the same code.
+2. Container: port 8080 (Cloud Run sets `PORT`; the image reads it). CPU **2–4**, memory **2–4 GiB**,
+   request timeout **900 s**, max concurrent requests per instance **1**, min instances **0**,
+   max instances **1**. CPU only allocated during requests (the cheapest setting).
+3. Variables: `APP=app.render_worker:app`, `RENDER_TOKEN` = a long random string
+   (`openssl rand -hex 32`), `RENDER_WORKERS` = the CPU count from step 2. Nothing else: the worker
+   has no accounts and no ElevenLabs key, and keeps nothing between videos.
+4. Authentication: allow unauthenticated invocations (the worker checks `RENDER_TOKEN` itself).
+5. Check: `curl https://<service-url>/health` → `{"ok":true,"worker":true,"busy":false}`.
+6. In Easypanel set `RENDER_URL=https://<service-url>` and the same `RENDER_TOKEN`, and redeploy.
+
+Any other host that builds a Dockerfile from GitHub works the same way (give it `APP`,
+`RENDER_TOKEN` and, if it picks the port, `PORT`). A job's render summary (`/jobs/{id}`, the job
+files) says `"rendered_by": "worker"` when it came from the worker.
 
 ## 2. Discord notifications
 

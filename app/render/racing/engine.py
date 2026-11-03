@@ -28,6 +28,7 @@ import numpy as np
 from PIL import Image
 
 from ..audio import write_wav
+from .. import priority
 from . import sound
 from .themes import get as get_theme
 from .themes.base import FPS, H, W
@@ -169,6 +170,11 @@ def _init(spec_json: str) -> None:
     _WORKER = Video(json.loads(spec_json))
 
 
+def _init_pool(spec_json: str) -> None:
+    priority.lower()
+    _init(spec_json)
+
+
 def _frame(idx: int) -> bytes:
     assert _WORKER is not None
     return _WORKER.frame(idx).convert("RGB").tobytes()
@@ -195,7 +201,7 @@ def render(spec: dict, out_path: str | Path, workers: int | None = None, cover_p
                "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1", "-g", str(FPS * 2),
                "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
                "-t", f"{video.duration:.3f}", "-movflags", "+faststart", str(out_path)]
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        proc = subprocess.Popen(priority.cmd(cmd), stdin=subprocess.PIPE)
         assert proc.stdin
         try:
             if workers == 1:
@@ -203,7 +209,7 @@ def render(spec: dict, out_path: str | Path, workers: int | None = None, cover_p
                 for i in range(video.n_frames):
                     proc.stdin.write(_frame(i))
             else:
-                with mp.get_context("spawn").Pool(workers, _init, (json.dumps(spec),)) as pool:
+                with mp.get_context("spawn").Pool(workers, _init_pool, (json.dumps(spec),)) as pool:
                     for buf in pool.imap(_frame, range(video.n_frames), chunksize=6):
                         proc.stdin.write(buf)
         finally:

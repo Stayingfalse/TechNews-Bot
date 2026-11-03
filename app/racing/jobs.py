@@ -344,6 +344,7 @@ def build(job: dict) -> dict:
 
 
 def _render(job: dict, spec: dict) -> None:
+    from ..render import remote
     from ..render.racing.engine import render
 
     job["status"] = "rendering"
@@ -351,7 +352,7 @@ def _render(job: dict, spec: dict) -> None:
     settings.videos_dir.mkdir(parents=True, exist_ok=True)
     out = settings.videos_dir / f"{job['id']}-{secrets.token_urlsafe(8)}.mp4"
     cover = out.with_suffix(".jpg")
-    job["render"] = render(spec, out, cover_path=cover)
+    job["render"] = remote.racing(spec, out, cover) or render(spec, out, cover_path=cover)  # worker, else here
     job.update(video=out.name, video_url=f"{settings.public_base_url}/media/{out.name}",
                cover_url=f"{settings.public_base_url}/media/{cover.name}")
     save(job)

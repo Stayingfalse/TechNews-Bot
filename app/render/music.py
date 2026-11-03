@@ -17,6 +17,7 @@ from .audio import SR
 
 EXTS = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac"}
 BUNDLED = Path(__file__).resolve().parents[2] / "assets" / "music"
+PICK = object()  # render_video(track=PICK): choose from the library (the default)
 
 
 def _tracks(folder: Path) -> list[Path]:
