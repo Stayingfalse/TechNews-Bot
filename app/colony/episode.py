@@ -91,6 +91,18 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
         buildings.append({"kind": bid, "from": s["building"]["paid"] / rules.BY_ID[bid]["cost"]})
     named = [k for k in report["arrived"] if k in people][:3]
     decision = None
+    big = rules.surge(report, s["followers"])
+    if big:  # the planet shot comes first: make room for it, keeping people's moments
+        beats = list(beats)
+        budget = planmod.MAX_SECONDS - SURGE_SECS - 2
+        for kind in ("caption", "crew", "event", "people", "next"):
+            while planmod.estimate({"beats": beats}) > budget:
+                i = next((i for i, b in enumerate(beats) if (b.get("type") == kind) or
+                          (kind == "crew" and b.get("type") == "say" and b.get("who") in planmod.CREW) or
+                          (b.get("type") == "slot" and b.get("slot") == kind)), None)
+                if i is None:
+                    break
+                beats.pop(i)
 
     def cam_to(x):
         cam.extend([(t, cam[-1][1]), (t + 0.9, x)])
@@ -111,10 +123,11 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
             if named:
                 n = len(report["arrived"])
                 end = t + 1.6 + len(named) * 1.1 + 1.6
-                caps.append({"lines": ["*1* SIGNAL" if n == 1 else f"*{n}* SIGNALS", "*ANSWERED*"], "t0": t, "t1": end})
+                lines = ["THE FIRST", "*OF THEM*"] if big else ["*1* SIGNAL" if n == 1 else f"*{n}* SIGNALS", "*ANSWERED*"]
+                caps.append({"lines": lines, "t0": t, "t1": end})
                 t = end
                 extra = n - len(named)
-                if extra > 0:
+                if extra > 0 and not big:
                     caps.append({"lines": [f"+{extra} MORE", "MOVED IN"], "t0": t, "t1": t + BEAT})
                     t += BEAT
             elif t == 0:
@@ -138,6 +151,11 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
                 sfx.append((t, "blip"))
                 t += BEAT
         elif kind == "slot" and b["slot"] == "build":
+            if len(report.get("unlocked") or []) >= 2:  # a jump in followers unlocks several at once
+                n = len(report["unlocked"])
+                caps.append({"lines": [f"*{n}* BUILDINGS", "*UNLOCKED*"], "t0": t, "t1": t + 2.6})
+                sfx.append((t, "chime"))
+                t += 2.6
             prog = report.get("progress")
             if not prog:
                 continue
@@ -234,8 +252,30 @@ def build(s: dict, report: dict, ep: dict | None = None, seed: int = 7) -> dict:
         shots.append({"view": "inside", "spec": inside_spec(s, report, ep, b, r), "dur": 6.0})
         sfx.append((t, "chime"))
         t += 6.0
+    if big:  # open on the planet: every new settler's light coming on
+        planet = surge_spec(s, report, seed)
+        shots.insert(0, {"view": "planet", "spec": planet, "dur": SURGE_SECS})
+        sfx = planet["sfx"] + [(a + SURGE_SECS, k) for a, k in sfx]
+        t += SURGE_SECS
     return {"shots": shots, "duration": round(t, 2), "sfx": sfx,
             "caption": (ep or {}).get("caption") or default_caption(s, report, decision)}
+
+
+SURGE_SECS = 7.0
+MAX_LIGHTS = 4000  # past this, each light stands for several settlers
+
+
+def surge_spec(s: dict, report: dict, seed: int = 7) -> dict:
+    """The planet turning while the day's new followers come on as lights, in a random order."""
+    after = s["followers"]
+    before = max(0, after - report["joined"])
+    scale = max(1.0, after / MAX_LIGHTS)
+    lights, lights_from = int(after / scale), int(before / scale)
+    n = report["joined"]
+    sfx = [(0.6, "chime")] + [(1.0 + i * 0.32, "blip") for i in range(14)] + [(5.6, "chime")]
+    return {"seed": seed, "count": after, "count_from": before, "lights": lights, "lights_from": lights_from,
+            "surge": (0.9, 5.4), "lon0": -0.2, "spin": -0.03, "title": True, "scale": scale, "sfx": sfx,
+            "captions": [{"lines": [f"*+{n:,}*", "NEW SETTLERS", "IN ONE DAY"], "t0": 1.2, "t1": SURGE_SECS}]}
 
 
 def inside_spec(s: dict, report: dict, ep: dict | None, b: dict, r) -> dict:

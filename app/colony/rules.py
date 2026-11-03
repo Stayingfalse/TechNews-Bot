@@ -31,7 +31,17 @@ BUILDINGS = [
     {"id": "market", "name": "MARKET", "followers": 250, "cost": 260, "job": "farm"},
     {"id": "district2", "name": "DISTRICT TWO", "followers": 500, "cost": 400, "job": "build"},
     {"id": "spaceport", "name": "SPACEPORT", "followers": 1000, "cost": 650, "job": "scout"},
+    {"id": "skydock", "name": "SKY DOCK", "followers": 2500, "cost": 1000, "job": "build"},
+    {"id": "moonrail", "name": "MOON RAIL", "followers": 5000, "cost": 1600, "job": "tinker"},
+    {"id": "secondmoon", "name": "SECOND MOON", "followers": 10000, "cost": 2500, "job": "scout"},
 ]
+SURGE_MIN = 200  # this many new followers in a day (or doubling, from 50 up) opens on the planet
+
+
+def surge(report: dict, followers: int) -> bool:
+    """A day big enough to show from space: the lights coming on across the planet."""
+    j = report.get("joined", 0)
+    return j >= SURGE_MIN or (j >= 50 and j >= followers - j)
 BY_ID = {b["id"]: b for b in BUILDINGS}
 SLOW_WORK = 2  # materials a day the colony makes by itself: nothing ever stalls completely
 STOCK_CAP = 10  # materials kept while nothing is being built, so a new unlock isn't finished at once

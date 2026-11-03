@@ -313,6 +313,19 @@ def _lights_on_globe(n: int, seed: int):
     return np.array(pts, dtype=np.float32)
 
 
+@lru_cache(maxsize=4)
+def _surge_times(n: int, n0: int, span: tuple, seed: int) -> np.ndarray:
+    """When each light comes on: the first n0 were already on; the rest come on in a random order
+    over `span`, slowly at first and then faster and faster."""
+    at = np.zeros(n, dtype=np.float32)
+    k = n - n0
+    if k > 0 and span[1] > span[0]:
+        order = np.random.default_rng(seed + n).permutation(k)
+        frac = (np.arange(k) / max(1, k - 1)) ** 0.55  # accelerating
+        at[n0:] = span[0] + (span[1] - span[0]) * frac[np.argsort(order)]
+    return at
+
+
 def draw_planet(spec: dict, t: float) -> Canvas:
     c = Canvas()
     c.rgb[:] = P["sky0"]
@@ -322,13 +335,13 @@ def draw_planet(spec: dict, t: float) -> Canvas:
         if 0.5 + 0.5 * math.sin(t * 2 + x * 0.3 + y) > 0.3:
             c.px(x, y, P["star"] if (x + y) % 3 else P["star2"], world=False)
     # the gas giant far behind
-    gm, gx, gy = c.disc(146, 100, 11)
+    gm, gx, gy = c.disc(150, 96, 9)
     c.mask(gm, gx, gy, P["planet1"], world=False)
     c.mask(gm & (np.arange(gm.shape[0])[:, None] % 6 < 2), gx, gy, P["planet2"], world=False)
     c.dither_mask(gm & (np.arange(gm.shape[1])[None, :] < 9), gx, gy, P["sky0"], 0.55, world=False)
-    c.rect(128, 100, 37, 1, P["ring"] * 0.8, world=False)
+    c.rect(134, 96, 33, 1, P["ring"] * 0.8, world=False)
     # the moon
-    cx, cy, r = 90, 168, 64
+    cx, cy, r = 84, 150, 58
     yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
     nx, ny = (xx - cx) / r, (yy - cy) / r
     rr = nx ** 2 + ny ** 2
@@ -351,8 +364,11 @@ def draw_planet(spec: dict, t: float) -> Canvas:
     c.dither_mask(dusk, 0, 0, P["sky2"], 0.5)
     rim = disc & (rr > 0.93)
     c.mask(rim & ~night, 0, 0, P["rim"] * 0.6)
-    # settlers' homes: lights on the night side, roofs on the day side
-    pts = _lights_on_globe(spec.get("lights", 1200), spec.get("seed", 7))
+    # settlers' homes: lights on the night side, roofs on the day side. In a surge, the new ones
+    # (from `lights_from` up to `lights`) come on one by one in a random order, each with a flash.
+    n = spec.get("lights", 1200)
+    pts = _lights_on_globe(n, spec.get("seed", 7))
+    on_at = _surge_times(n, spec.get("lights_from", n), tuple(spec.get("surge", (0.0, 0.0))), spec.get("seed", 7))
     plon, plat = pts[:, 0] - rot, pts[:, 1]
     px_ = np.cos(plat) * np.sin(plon)
     pz = np.cos(plat) * np.cos(plon)
@@ -360,15 +376,29 @@ def draw_planet(spec: dict, t: float) -> Canvas:
     vis = pz > 0.08
     sx = (cx + px_ * r).astype(int)
     sy = (cy + py_ * r).astype(int)
-    for x, y, v, lz in zip(sx, sy, vis, pz):
-        if not v or not (0 <= x < W and 0 <= y < H):
+    flashes = []
+    for x, y, v, at in zip(sx, sy, vis, on_at):
+        if t < at or not v or not (0 <= x < W and 0 <= y < H):
             continue
         if night[y, x] or dusk[y, x]:
             c.px(x, y, P["warm0"] if (x * 7 + y) % 5 else P["warm1"], world=False)
         else:
             c.px(x, y, P["grass2"] * 0.8, world=False)
+        if t - at < 0.35:
+            flashes.append((x, y, t - at))
+    for x, y, age in flashes:  # a little star where a light has just come on
+        col = P["hi"] if age < 0.15 else P["gold"]
+        c.px(x, y, col, world=False)
+        if age < 0.25:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                c.px(x + dx, y + dy, P["gold"], world=False)
+    if "surge" in spec:  # the count follows the lights (each standing for `scale` settlers)
+        lit = int((on_at <= t).sum()) - spec.get("lights_from", n)
+        count = min(spec["count"], spec.get("count_from", 0) + int(round(lit * spec.get("scale", 1.0))))
+    else:
+        count = spec["count"]
     if spec.get("title", True):
-        title(c, spec["count"], 0)
+        title(c, count, 0)
     for cap in spec.get("captions", []):
         if cap["t0"] <= t <= cap["t1"]:
             caption(c, cap["lines"], t, cap["t0"])

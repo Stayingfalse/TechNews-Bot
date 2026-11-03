@@ -104,3 +104,27 @@ def test_episode_shows_people_first():
     texts = [" ".join(c["lines"]) for c in ep["shots"][0]["spec"]["captions"]]
     assert "SIGNALS" in texts[0] and any("IS NOW" in t for t in texts[1:4])
     assert texts[-1] == "COMMENT TO *MOVE IN*"
+
+
+def test_a_surge_opens_on_the_planet_and_the_count_follows_the_lights():
+    from app.render.colony import views
+
+    s, reports = dryrun.simulate()
+    s2, r = rules.apply_day(s, D + timedelta(days=7), [c(f"v{i}", "hi", 7, i % 50) for i in range(120)], 1033)
+    assert rules.surge(r, s2["followers"]) and r["joined"] == 1000
+    ep = episode.build(s2, r)
+    assert ep["shots"][0]["view"] == "planet" and ep["duration"] <= 34
+    planet = ep["shots"][0]["spec"]
+    assert views.draw_planet(planet, 3.0).frame().shape == (1920, 1080, 3)
+    on = views._surge_times(planet["lights"], planet["lights_from"], tuple(planet["surge"]), planet["seed"])
+    assert (on[: planet["lights_from"]] == 0).all() and on[planet["lights_from"]:].min() >= 0.9
+    assert on.max() <= 5.4 + 1e-3  # all on by the end of the surge
+    assert len(set(on[planet["lights_from"]:].round(3))) > 900  # one at a time, not in a block
+    assert "UNLOCKED" in " ".join(" ".join(c["lines"]) for c in ep["shots"][1]["spec"]["captions"])
+    assert r["next"]["id"] == "skydock"  # the tree goes on past 1,000
+
+
+def test_an_ordinary_day_doesnt_surge():
+    s, reports = dryrun.simulate()
+    assert not any(rules.surge(r, 33) for r in reports[2:])
+    assert all(episode.build(s, r)["shots"][0]["view"] == "side" for r in reports[2:])

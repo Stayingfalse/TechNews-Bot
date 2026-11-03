@@ -236,6 +236,13 @@ picks one to suit what's happening:
 All four use the same palette, font, sprite kit and settler sheets, so a settler looks the same
 in each. One episode can cut between them: planet → top-down push in → side-on → inside.
 
+**Surge days** (`rules.surge`: 200+ new followers in a day, or the count doubling from 50 up)
+open on the planet for 7 s: every new follower's light comes on at a random moment across the
+night side, slowly and then in a flood, with the count racing up beside it ("+1,000 new settlers
+in one day"). Past 4,000 each light stands for several settlers. The side-on part that follows
+is trimmed to fit (crew lines and captions go first, people's moments stay) and says how many
+buildings the jump unlocked. The build tree goes on past 1,000 (sky dock, moon rail, second moon).
+
 **As it grows:** in the first weeks it's mostly side-on and inside. Top-down becomes the overview
 once the colony spreads beyond a couple of screens (around 100 people). The planet view is for
 milestones from the start, and becomes the overview past a few thousand. Every view keeps the

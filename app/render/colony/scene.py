@@ -380,8 +380,16 @@ def caption(c: Canvas, lines: list[str], t: float, t0: float):
 def title(c: Canvas, count: int, bump: float):
     mid = (SAFE[0] + SAFE[2]) // 2
     c.text("FARSIDE", mid, 40, P["gold"], scale=3, center=True)
+    y = 66 - int(bump * 2)
     line = f"{count:,} LIVE HERE"
-    c.text(line, mid, 66 - int(bump * 2), P["ui"], scale=fit_scale(line), center=True)
+    if fit_scale(line) == 2:
+        c.text(line, mid, y, P["ui"], scale=2, center=True)
+    else:  # a big number: keep it big, with the words small beside it
+        num, rest = f"{count:,}", " LIVE HERE"
+        w = pixfont.width(num, 2) + pixfont.width(rest)
+        x = mid - w // 2
+        x += c.text(num, x, y, P["ui"], scale=2)
+        c.text(rest, x, y + 7, P["ui"])
 
 
 class Tags:
