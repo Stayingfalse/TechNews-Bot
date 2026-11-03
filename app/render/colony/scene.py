@@ -292,7 +292,8 @@ def caption(c: Canvas, lines: list[str], t: float, t0: float):
 def title(c: Canvas, count: int, bump: float):
     mid = (SAFE[0] + SAFE[2]) // 2
     c.text("FARSIDE", mid, 40, P["gold"], scale=3, center=True)
-    c.text(f"{count} LIVE HERE", mid, 66 - int(bump * 2), P["ui"], scale=2, center=True)
+    line = f"{count:,} LIVE HERE"
+    c.text(line, mid, 66 - int(bump * 2), P["ui"], scale=fit_scale(line), center=True)
 
 
 class Tags:
@@ -309,6 +310,7 @@ class Tags:
         def clamp(x):
             return int(min(max(x, SAFE[0]), SAFE[2] - w))
 
+        y0 = min(y0, 212 - h)  # clear of the captions
         best = (clamp(x0), y0)
         for dy in range(0, 4 * (h + 1), h + 1):  # sideways first, then up a row
             for dx in (0, w // 2 + 2, -(w // 2 + 2), w + 2, -(w + 2)):
@@ -319,12 +321,17 @@ class Tags:
             else:
                 continue
             break
+        if best[1] < 80:  # would sit on the title: leave it out
+            return None
         self.boxes.append((best[0], best[1], w, h))
         return best
 
     def tag(self, name: str, x: float, y: float, col=None):
         w = pixfont.width(name) + 4
-        x0, y0 = self._place(x - w // 2, y - 10, w, 9)
+        spot = self._place(x - w // 2, y - 10, w, 9)
+        if spot is None:
+            return
+        x0, y0 = spot
         self.c.rect(x0, y0, w, 9, P["ink"], world=False)
         self.c.text(name, x0 + 2, y0 + 1, P["ui"] if col is None else col, outline=False)
 
@@ -332,7 +339,10 @@ class Tags:
         lines = text.split("|")
         w = max(pixfont.width(l) for l in lines) + 6
         h = len(lines) * 9 + 3
-        x0, y0 = self._place(x - w // 2, y - h - 4, w, h)
+        spot = self._place(x - w // 2, y - h - 4, w, h)
+        if spot is None:
+            return
+        x0, y0 = spot
         c = self.c
         c.rect(x0 - 1, y0 - 1, w + 2, h + 2, P["ink"], world=False)
         c.rect(x0, y0, w, h, P["ui"], world=False)

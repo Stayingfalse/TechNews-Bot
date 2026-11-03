@@ -77,6 +77,52 @@ def day0_spec() -> dict:
             "captions": [{"lines": ["FOUR OF US.", "*FOR NOW.*"], "t0": 0, "t1": 99}], "duration": 1}
 
 
+def view_specs() -> dict:
+    """The other three views, at the size the colony might reach in a few months."""
+    return {
+        "5-topdown": ("topdown", 4.0, {
+            "seed": 7, "count": 1284, "walkers": 160, "named": ["astra_lou", "kestrel88"],
+            "camera": [(0, (120, 70))], "site": (262, 222, 11), "labels": {"NEW DOME?": (262, 206)},
+            "captions": [{"lines": ["WHERE'S THE", "*NEW* *DOME?*"], "t0": 0, "t1": 99}]}),
+        "6-inside": ("inside", 3.0, {
+            "people": [("mossbyte", 30, True, SUITS[2], SKINS[2]), ("MAREN", 64, True, "e8e2d0", SKINS[1])],
+            "elder": "oldbarrel", "tags": ["mossbyte"],
+            "bubbles": [{"who": "oldbarrel", "text": "DON'T.|TRUST ME.", "t0": 0, "t1": 99}],
+            "question": {"t0": 0, "lines": ["*@MOSSBYTE*", "FOUND A", "SEALED DOOR"], "choices": [("A", "OPEN IT"), ("B", "LEAVE IT")]}}),
+        "7-planet": ("planet", 6.0, {
+            "seed": 7, "count": 1284, "lights": 1284, "spin": 0.12, "lon0": -0.4,
+            "captions": [{"lines": ["EVERY LIGHT", "IS *SOMEONE*"], "t0": 0, "t1": 99}]}),
+    }
+
+
+def cuts_video(path: Path) -> None:
+    """One episode cutting between the views: planet → top-down → side-on → inside, ~14 s."""
+    from app.render.colony import views
+    vs = view_specs()
+    day = day_spec()
+    shots = [(views.draw_planet, vs["7-planet"][2], 0.0, 3.5),
+             (views.draw_topdown, {**vs["5-topdown"][2], "camera": [(0, (150, 20)), (3.5, (110, 80))]}, 0.0, 3.5),
+             (scene.draw, day, 3.0, 3.5),
+             (views.draw_inside, vs["6-inside"][2], 0.0, 3.5)]
+    total = sum(d for *_, d in shots)
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "1080x1920",
+           "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
+           "-movflags", "+faststart", str(path)]
+    ff = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    for draw, spec, t0, dur in shots:
+        n = int(dur * FPS)
+        for i in range(n):
+            f = draw(spec, t0 + i / FPS).frame()
+            edge = min(i, n - 1 - i) / (0.25 * FPS)  # a quick pixel iris at each cut
+            if edge < 1:
+                blk = int((1 - edge) * 40) * 6 + 6
+                small = f[::blk, ::blk]
+                f = small.repeat(blk, 0).repeat(blk, 1)[:1920, :1080]
+            ff.stdin.write(np.ascontiguousarray(f).tobytes())
+    ff.stdin.close()
+    ff.wait()
+
+
 def still(spec: dict, t: float, path: Path) -> None:
     Image.fromarray(scene.draw(spec, t).frame()).save(path)
 
@@ -111,7 +157,12 @@ def main() -> None:
     still(day, 7.0, out / "2-arrivals.png")
     still(day, 13.5, out / "3-building.png")
     still(day, 20.0, out / "4-next-goal.png")
+    from app.render.colony import views
+    for name, (kind, t, spec) in view_specs().items():
+        draw = {"topdown": views.draw_topdown, "inside": views.draw_inside, "planet": views.draw_planet}[kind]
+        Image.fromarray(draw(spec, t).frame()).save(out / f"{name}.png")
     if "--stills" not in sys.argv:
+        cuts_video(out / "colony-views.mp4")
         video(day, out / "colony-look-test.mp4")
     print(json.dumps(sorted(p.name for p in out.iterdir())))
 

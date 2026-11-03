@@ -23,3 +23,12 @@ def test_every_caption_fits_the_safe_area():
 
 def test_every_glyph_is_5x7():
     assert all(g.shape == (7, 5) for g in pixfont.GLYPHS.values())
+
+
+def test_the_other_views_render_at_full_size():
+    from app.render.colony import views
+
+    vs = render_colony.view_specs()
+    for name, (kind, t, spec) in vs.items():
+        draw = {"topdown": views.draw_topdown, "inside": views.draw_inside, "planet": views.draw_planet}[kind]
+        assert draw(spec, t).frame().shape == (1920, 1080, 3), name
