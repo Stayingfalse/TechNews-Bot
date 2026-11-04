@@ -18,6 +18,7 @@ code from the episode you send; you make no video and need no repository.
 App: APP_URL = https://quiz.cezz.co.uk
 Auth: send `Authorization: Bearer $SHORTS_API_TOKEN` on every request (if it's empty, try without; on 401 stop and report "SHORTS_API_TOKEN is not available").
 Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-type: application/json'`.
+If GET APP_URL/colony/today returns 404, Farside isn't deployed yet: stop and report that.
 
 1. GET APP_URL/colony/today. It gives you:
    - `planned`: today's episode from the week plan (or a spare). Start from it.
@@ -43,11 +44,24 @@ Use curl from Bash. Write JSON to a file and send it with `-d @file -H 'content-
    - A `feature` beat ("*@OLDBARREL* GOT" / "HIS *BARREL*") shows what someone got. A `say` beat ("IT LEAKS.|I LOVE IT.") gives them a line in their voice. Put people's moments early, right after `arrivals`.
    - Keep the plan's thread and its decision. Cut crew lines or captions to make room, never the `arrivals` slot.
    - The limits are in `limits`: caption lines at most 24 characters, speech lines at most 18 (split with `|`), only the font's characters. Aim for about 30 s; up to 40 s is allowed on a big day (lots of newcomers, a decision, many granted), since people who just arrived are likely to come back. The POST's `note` says when you're over 30. Name only people who live here.
-   - `replies`: a short in-story reply (at most 150 characters) to each comment you acted on, by its `id` ("Pull up a barrel, the east row has room."). One reply per comment, none to anything you declined.
+   - `replies`: a list of `{"comment_id": "<the comment's id>", "text": "<reply>"}`, a short in-story reply (at most 150 characters) to each comment you acted on ("Pull up a barrel, the east row has room."). One reply per comment, none to anything you declined.
    - `summary`: today in one line of the story so far (at most 200 characters). `caption`: the post's caption, 1-3 lines naming who got what, ending with an invitation to comment.
    - `settlers`: `{"@handle": {"look": {...}, "traits": [...], "sheet": "..."}}` for everyone you changed.
    - `parts`: anything you drew today, e.g. `{"slot": "pet", "id": "dragon", "colors": {"g": "crys2", ...}, "rows": [...], "frames": [[...]]}`. A 422 says exactly what to fix (too big, a colour missing, an id taken).
 
-4. POST APP_URL/colony/today with the episode (`{"date", "beats", "caption", "summary", "settlers", "replies", "parts", "wanted"}`). On 422 it lists every problem: fix them all and send it again (up to 4 times). On 409 it's past the cut-off: stop, the plan plays.
+4. POST APP_URL/colony/today with the episode, a JSON object exactly in this shape (GET APP_URL/colony/schema has it too, as `request`):
+   ```
+   {
+     "date": "YYYY-MM-DD",
+     "beats": [{"type": "slot", "slot": "arrivals"}, {"type": "say", "who": "@handle", "text": "LINE ONE|LINE TWO", "secs": 2.5}, ...],
+     "caption": "the post's caption",
+     "summary": "today in one line of the story so far",
+     "settlers": {"@handle": {"look": {"hat": "crown"}, "traits": ["word"], "sheet": "..."}},
+     "replies": [{"comment_id": "18118414847047149", "text": "Meet your wolf."}],
+     "parts": [{"slot": "pet", "id": "wolf", "rows": ["..."], "frames": [["..."]], "colors": {"g": "metal1"}}],
+     "wanted": ["a thing that isn't a part"]
+   }
+   ```
+   Every beat is an object; `replies` is a list of objects (not an object keyed by id); `settlers` is an object keyed by @handle. On 422 the response's `detail.problems` lists every problem: fix them all and send it again (up to 4 times). On 409 it's past the cut-off: stop, the plan plays.
 
 5. Report in one short message: who got what (handle → what changed), the parts you drew, what you declined and why, and the beats as sent.

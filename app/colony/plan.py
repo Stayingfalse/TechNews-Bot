@@ -58,15 +58,173 @@ def _who_ok(who: str, handles: set[str]) -> bool:
     return who in CREW or re.fullmatch(r"\$[1-4]", who or "") is not None or who.lstrip("@").lower() in handles
 
 
+# ------------------------------------------------------------------ the shape (JSON types)
+
+REQUEST_SCHEMA = """POST /colony/today body (JSON object):
+  date      "YYYY-MM-DD" (optional; today if left out, or ?date=)
+  beats     [beat, ...]  1 or more; each an object, see the beat types above
+  caption   "..."        the post's caption, 1-600 characters
+  summary   "..."        optional, the story so far in one line, at most 200 characters
+  settlers  {"@handle": {"look": {slot: part, ...}, "traits": ["word", ...], "sheet": "..."}, ...}
+  replies   [{"comment_id": "...", "text": "..."}, ...]   ({"<comment_id>": "<text>"} is accepted too)
+  parts     [{"slot": "...", "id": "...", "rows": ["..."], "frames": [["..."]], "colors": {"x": "name"}}, ...]
+  wanted    ["...", ...]  things the kit can't draw (not parts), each at most 80 characters"""
+
+_BEAT_TYPES = {"type": str, "slot": str, "who": str, "text": str, "event": str}
+
+
+def _is_num(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def shape(ep, adapted: bool = False) -> tuple[dict, list[str], list[str]]:
+    """Check the JSON types of an episode before anything reads it. Returns (a copy with the bad
+    items left out, so the other checks can still look at the rest; the problems; notes on
+    anything converted). Never raises on any JSON value."""
+    if not isinstance(ep, dict):
+        return {}, [f"the episode must be a JSON object, not {type(ep).__name__}"], []
+    probs, notes, out = [], [], dict(ep)
+    beats = ep.get("beats")
+    if beats is not None and not isinstance(beats, list):
+        probs.append("beats: a list of beat objects is needed")
+        out["beats"] = []
+    else:
+        good = []
+        for i, b in enumerate(beats or []):
+            w = f"beats[{i}]"
+            if not isinstance(b, dict):
+                probs.append(f"{w}: must be an object, like {{\"type\": \"slot\", \"slot\": \"arrivals\"}}")
+                good.append(None)  # a gap, so the other checks still name beats by their place in the list
+                continue
+            bad = [k for k, t in _BEAT_TYPES.items() if k in b and not isinstance(b[k], t)]
+            if "secs" in b and not _is_num(b["secs"]):
+                bad.append("secs")
+            if "lines" in b and not (isinstance(b["lines"], list) and all(isinstance(x, str) for x in b["lines"])):
+                bad.append("lines")
+            if "choices" in b and not (isinstance(b["choices"], list) and all(
+                    isinstance(c, list) and len(c) == 2 and all(isinstance(x, str) for x in c) for c in b["choices"])):
+                bad.append("choices")
+            if bad:
+                for k in bad:
+                    want = {"secs": "a number", "lines": "a list of strings",
+                            "choices": 'a list of pairs like ["A", "OPEN IT"]'}.get(k, "a string")
+                    probs.append(f"{w}.{k}: {want} is needed")
+                good.append(None)
+                continue
+            good.append(b)
+        out["beats"] = good
+    for key, limit in (("caption", None), ("summary", None)):
+        if key in ep and ep[key] is not None and not isinstance(ep[key], str):
+            probs.append(f"{key}: a string is needed")
+            out[key] = ""
+    if "date" in ep and ep["date"] is not None:
+        if not isinstance(ep["date"], str):
+            probs.append("date: a string, YYYY-MM-DD")
+            out.pop("date")
+        else:
+            try:
+                date.fromisoformat(ep["date"])
+            except ValueError:
+                probs.append("date: a date, YYYY-MM-DD")
+                out.pop("date")
+    if not adapted:
+        return out, probs, notes
+    # settlers: {"@handle": {"look": {...}, "traits": [...], "sheet": "..."}}
+    st = ep.get("settlers")
+    if st is not None and not isinstance(st, dict):
+        probs.append('settlers: an object is needed, {"@handle": {"look": {...}, "traits": [...], "sheet": "..."}}')
+        out["settlers"] = {}
+    else:
+        good = {}
+        for h, info in (st or {}).items():
+            w = f"settlers.{h}"
+            if not isinstance(info, dict):
+                probs.append(f'{w}: an object is needed, {{"look": {{...}}, "traits": [...], "sheet": "..."}}')
+                continue
+            bad = False
+            look = info.get("look")
+            if look is not None and not (isinstance(look, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in look.items())):
+                probs.append(f'{w}.look: an object of slot to part, like {{"hat": "crown"}}')
+                bad = True
+            tr = info.get("traits")
+            if tr is not None and not (isinstance(tr, list) and all(isinstance(x, str) for x in tr)):
+                probs.append(f"{w}.traits: a list of strings is needed")
+                bad = True
+            if info.get("sheet") is not None and not isinstance(info["sheet"], str):
+                probs.append(f"{w}.sheet: a string is needed")
+                bad = True
+            if not bad:
+                good[h] = info
+        out["settlers"] = good
+    # replies: [{"comment_id": "...", "text": "..."}]; {"<comment_id>": "<text>"} is converted
+    rp = ep.get("replies")
+    if isinstance(rp, dict):
+        if all(isinstance(k, str) and isinstance(v, str) for k, v in rp.items()):
+            rp = [{"comment_id": k, "text": v} for k, v in rp.items()]
+            notes.append('replies: converted from {comment_id: text} to [{"comment_id", "text"}]')
+        else:
+            probs.append('replies: a list of {comment_id, text} is needed (or {"<comment_id>": "<text>"})')
+            rp = []
+    if rp is not None and not isinstance(rp, list):
+        probs.append("replies: a list of {comment_id, text} is needed")
+        rp = []
+    good = []
+    for i, r in enumerate(rp or []):
+        if not (isinstance(r, dict) and isinstance(r.get("comment_id"), (str, int)) and not isinstance(r.get("comment_id"), bool)
+                and isinstance(r.get("text"), str)):
+            probs.append(f'replies[{i}]: an object {{"comment_id": "...", "text": "..."}} is needed')
+            continue
+        good.append({**r, "comment_id": str(r["comment_id"])})
+    out["replies"] = good
+    # parts: [{"slot", "id", "rows", "frames", "colors"}]
+    pt = ep.get("parts")
+    if pt is not None and not isinstance(pt, list):
+        probs.append("parts: a list of part objects is needed")
+        pt = []
+    good = []
+    for i, part in enumerate(pt or []):
+        w = f"parts[{i}]"
+        if not isinstance(part, dict):
+            probs.append(f'{w}: an object is needed, {{"slot", "id", "rows", "colors"}}')
+            continue
+        bad = [k for k in ("slot", "id") if not isinstance(part.get(k), str)]
+        if not (isinstance(part.get("rows"), list) and all(isinstance(r, str) for r in part["rows"])):
+            bad.append("rows")
+        if "frames" in part and not (isinstance(part["frames"], list) and all(
+                isinstance(f, list) and all(isinstance(r, str) for r in f) for f in part["frames"])):
+            bad.append("frames")
+        if not (isinstance(part.get("colors"), dict) and all(isinstance(k, str) and isinstance(v, str)
+                                                              for k, v in part["colors"].items())):
+            bad.append("colors")
+        if bad:
+            probs += [f"{w}.{k}: " + {"rows": "a list of strings", "frames": "a list of lists of strings",
+                                       "colors": "an object of character to colour name"}.get(k, "a string") + " is needed"
+                      for k in bad]
+            continue
+        good.append(part)
+    out["parts"] = good
+    wt = ep.get("wanted")
+    if wt is not None and not (isinstance(wt, list) and all(isinstance(x, str) for x in wt)):
+        probs.append("wanted: a list of strings is needed")
+        out["wanted"] = []
+    return out, probs, notes
+
+
 def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[str]:
-    """Every problem with an episode, as short sentences (empty list = fine)."""
-    probs = []
+    """Every problem with an episode, as short sentences (empty list = fine). Wrong JSON types
+    are reported first; the other checks run on the rest."""
+    ep, probs, _ = shape(ep, adapted)
+    if not isinstance(ep, dict) or not ep and probs:
+        return probs
     beats = ep.get("beats")
     if not isinstance(beats, list) or not beats:
-        return ["beats: a non-empty list is needed"]
+        return probs + (["beats: a non-empty list is needed"] if not any(p.startswith("beats") for p in probs) else [])
+    ep = {**ep, "beats": [b for b in beats if b is not None]}  # for the length estimate
     secs = 0.0
     decisions = 0
     for i, b in enumerate(beats):
+        if b is None:  # wrong shape, reported above
+            continue
         w = f"beats[{i}]"
         t = b.get("type")
         if t not in BEATS:
@@ -114,8 +272,10 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
     secs = estimate(ep)
     if secs > MAX_SECONDS:
         probs.append(f"about {secs:.0f} s long, at most {MAX_SECONDS} s (aim for {TARGET_SECONDS}): cut a beat or shorten secs")
-    cap = str(ep.get("caption", ""))
-    if not cap or len(cap) > 600:
+    cap = str(ep.get("caption") or "")
+    if any(p.startswith("caption") for p in probs):
+        pass
+    elif not cap or len(cap) > 600:
         probs.append("caption: the post's caption, 1-600 characters")
     elif LINK.search(cap) or BLOCKLIST.search(cap):
         probs.append("caption: no links, teen-friendly")
@@ -164,21 +324,23 @@ def check_episode(ep: dict, handles: set[str], adapted: bool = False) -> list[st
 def estimate(ep: dict) -> float:
     """The longest the episode can run, in seconds (slots at their fullest; a decision is 6 s)."""
     t = 0.0
-    beats = ep.get("beats") or []
+    beats = [b for b in (ep.get("beats") if isinstance(ep.get("beats"), list) else []) if isinstance(b, dict)]
     if ep.get("settlers") and not any(b.get("slot") == "granted" for b in beats):
         t += SLOT_SECS["granted"]  # the parade is added for everyone whose look changed
     for b in beats:
         if b.get("type") == "slot":
-            t += SLOT_SECS.get(b.get("slot"), 0)
+            t += SLOT_SECS.get(b.get("slot"), 0) if isinstance(b.get("slot"), str) else 0
         elif b.get("type") == "decision":
             t += 6.0
         else:
-            t += float(b.get("secs", 2.6))
+            t += float(b["secs"]) if _is_num(b.get("secs")) else 2.6
     return t
 
 
 def length_note(ep: dict) -> str | None:
     """A nudge (not a problem) when an episode is over the target."""
+    if not isinstance(ep, dict):
+        return None
     secs = estimate(ep)
     if secs > TARGET_SECONDS:
         return (f"about {secs:.0f} s at its longest: fine for a big day, but aim for {TARGET_SECONDS} s "
@@ -189,23 +351,36 @@ def length_note(ep: dict) -> str | None:
 def check_week(week: dict, handles: set[str]) -> list[str]:
     """The weekly plan: 7 dated episodes from week_start, and 2 spares that fit any day."""
     probs = []
+    if not isinstance(week, dict):
+        return ["the week must be a JSON object"]
     try:
         start = date.fromisoformat(str(week.get("week_start")))
     except ValueError:
         return ["week_start: a date, YYYY-MM-DD"]
+    for key in ("episodes", "spares"):
+        if not isinstance(week.get(key) or [], list):
+            probs.append(f"{key}: a list of episodes is needed")
+            week = {**week, key: []}
     eps = week.get("episodes") or []
     if len(eps) != 7:
         probs.append(f"episodes: 7 needed, {len(eps)} given")
     for i, ep in enumerate(eps):
         want = date.fromordinal(start.toordinal() + i).isoformat()
+        if not isinstance(ep, dict):
+            probs.append(f"episodes[{i}]: must be an object")
+            continue
         if ep.get("date") != want:
             probs.append(f"episodes[{i}].date: should be {want}")
-        if not any(b.get("type") == "slot" and b.get("slot") == "arrivals" for b in ep.get("beats") or []):
+        if not any(isinstance(b, dict) and b.get("type") == "slot" and b.get("slot") == "arrivals"
+                   for b in (ep.get("beats") if isinstance(ep.get("beats"), list) else [])):
             probs.append(f"episodes[{i}]: needs an arrivals slot (newcomers come first)")
         probs += [f"episodes[{i}]: {p}" for p in check_episode(ep, handles)]
     spares = week.get("spares") or []
     if len(spares) != 2:
         probs.append(f"spares: 2 needed, {len(spares)} given")
     for i, ep in enumerate(spares):
+        if not isinstance(ep, dict):
+            probs.append(f"spares[{i}]: must be an object")
+            continue
         probs += [f"spares[{i}]: {p}" for p in check_episode(ep, handles)]
     return probs

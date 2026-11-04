@@ -2,7 +2,9 @@
 docs/COLONY_DAILY_PROMPT.md). Mounted by main.py behind the API token."""
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
@@ -11,6 +13,7 @@ from ..render.colony import kit
 from . import plan, today
 
 router = APIRouter(prefix="/colony", tags=["colony"])
+log = logging.getLogger(__name__)
 
 
 def _day(d: str) -> date:
@@ -25,19 +28,25 @@ def _day(d: str) -> date:
 @router.get("/schema")
 def colony_schema():
     """The episode format, the kit, and the limits, for writing a plan or a day."""
-    return {"episode": plan.__doc__, "kit": kit.current(), "draw": today.draw_guide(), "crew": today.CREW_NOTES, "events": plan.EVENTS,
+    return {"episode": plan.__doc__, "request": plan.REQUEST_SCHEMA, "kit": kit.current(), "draw": today.draw_guide(), "crew": today.CREW_NOTES, "events": plan.EVENTS,
             "slots": plan.SLOTS, "caption_line": plan.LINE_CHARS, "say_line": plan.SAY_CHARS,
             "target_seconds": plan.TARGET_SECONDS, "max_seconds": plan.MAX_SECONDS}
 
 
 @router.post("/week")
-def colony_week(week: dict = Body(...), replace: bool = False):
+def colony_week(week: Any = Body(None), replace: bool = False):
     """The weekly plan: {"week_start": "YYYY-MM-DD", "episodes": [7 episodes], "spares": [2]}.
     422 lists every problem; fix them all and send it again."""
-    probs = today.save_week(week, replace=replace)
+    if not isinstance(week, dict):
+        raise HTTPException(422, {"problems": ["the week must be a JSON object"]})
+    try:
+        probs = today.save_week(week, replace=replace)
+    except Exception as e:
+        log.exception("POST /colony/week: checking the plan failed")
+        raise HTTPException(422, {"problems": [f"the plan couldn't be checked ({type(e).__name__}: {str(e)[:160]})"]})
     if probs:
         raise HTTPException(422, {"problems": probs})
-    notes = {ep.get("date"): n for ep in week.get("episodes", []) if (n := plan.length_note(ep))}
+    notes = {ep.get("date"): n for ep in week.get("episodes", []) if isinstance(ep, dict) and (n := plan.length_note(ep))}
     return {"ok": True, "week_start": week["week_start"], "notes": notes}
 
 
@@ -55,19 +64,28 @@ def colony_today(date_: str = Query(default="", alias="date")):
     return today.context(_day(date_))
 
 
-@router.post("/today")
-def colony_today_post(ep: dict = Body(...), date_: str = Query(default="", alias="date")):
-    """Today's episode, adapted to what people asked for. 422 lists every problem; 409 after the
-    cut-off (the plan stands)."""
-    day = _day(date_ or ep.get("date", ""))
+@router.post("/today", description="Today's episode, adapted to what people asked for. 422 lists every "
+             "problem as {\"detail\": {\"problems\": [...]}}; 409 after the cut-off (the plan stands).\n\n```\n"
+             + plan.REQUEST_SCHEMA + "\n```")
+def colony_today_post(ep: Any = Body(None), date_: str = Query(default="", alias="date")):
+    body_date = ep.get("date") if isinstance(ep, dict) and isinstance(ep.get("date"), str) else ""
     try:
-        probs = today.accept(day, ep)
+        day = _day(date_ or body_date)
+    except HTTPException:
+        raise HTTPException(422, {"problems": ["date: a date, YYYY-MM-DD"]})
+    try:
+        probs, kept, notes = today.accept_full(day, ep)
     except today.TooLate as e:
         raise HTTPException(409, str(e))
+    except Exception as e:  # bad data the checks didn't foresee: a 422 with what went wrong, never a 500
+        log.exception("POST /colony/today: checking the episode failed")
+        raise HTTPException(422, {"problems": [f"the episode couldn't be checked ({type(e).__name__}: {str(e)[:160]}); "
+                                               "compare it with the schema at GET /colony/schema"]})
     if probs:
         raise HTTPException(422, {"problems": probs})
     return {"ok": True, "date": day.isoformat(), "deadline": today.deadline(day).isoformat(),
-            "note": plan.length_note(ep), "new_parts": [f"{p['slot']}/{p['id']}" for p in ep.get("parts") or []]}
+            "note": plan.length_note(kept), "notes": notes,
+            "new_parts": [f"{p['slot']}/{p['id']}" for p in kept.get("parts") or []]}
 
 
 # ------------------------------------------------------------------ running the channel
