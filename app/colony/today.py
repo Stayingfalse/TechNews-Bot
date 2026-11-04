@@ -190,15 +190,24 @@ def context(day: date, now: datetime | None = None, followers: int | None = None
 
 def accept(day: date, ep: dict, now: datetime | None = None) -> list[str]:
     """Check and keep today's adapted episode (POST /colony/today); returns the problems."""
+    return accept_full(day, ep, now)[0]
+
+
+def accept_full(day: date, ep, now: datetime | None = None) -> tuple[list[str], dict, list[str]]:
+    """(problems, the episode as kept, notes). The episode is kept only with no problems; what's
+    kept is the checked copy (`replies` as a list, whatever form it came in)."""
     now = now or datetime.now(timezone.utc)
     if now >= deadline(day):
         raise TooLate(f"too late: the cut-off for {day} was {deadline(day).isoformat()}; the plan stands")
     s, report, _ = _preview(day)
     handles = {st["handle"].lower() for st in s["settlers"].values()}
     probs = plan.check_episode(ep, handles, adapted=True)
+    ep, _, notes = plan.shape(ep, adapted=True)
+    if not isinstance(ep, dict) or not ep:
+        return probs, {}, notes
     if ep.get("date") not in (None, day.isoformat()):
         probs.append(f"date: should be {day.isoformat()}")
-    if len(str(ep.get("summary", ""))) > 200:
+    if len(ep.get("summary") or "") > 200:
         probs.append("summary: one line of the story so far, at most 200 characters")
     if not probs:
         _write(_dir("days") / f"{day.isoformat()}.json", {**ep, "date": day.isoformat(), "accepted_at": now.isoformat()})
@@ -214,7 +223,7 @@ def accept(day: date, ep: dict, now: datetime | None = None) -> list[str]:
         ids = {r["comment_id"] for r in ep.get("replies") or []}
         ids |= {c["id"] for c in comments if c["user"].lstrip("@").lower() in changed}
         inbox.mark_answered(ids, day.isoformat())
-    return probs
+    return probs, ep, notes
 
 
 def adapted(day: date) -> dict | None:
