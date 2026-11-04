@@ -64,6 +64,19 @@ def colony_today(date_: str = Query(default="", alias="date")):
     return today.context(_day(date_))
 
 
+@router.delete("/today")
+def colony_today_delete(date_: str = Query(..., alias="date")):
+    """Take back the adaptation sent for `date`, before it renders: the plan plays that day instead."""
+    day = _day(date_)
+    try:
+        gone = today.withdraw(day)
+    except today.TooLate as e:
+        raise HTTPException(409, str(e))
+    if not gone:
+        raise HTTPException(404, f"no adaptation for {day}")
+    return {"ok": True, "date": day.isoformat(), "plays": today.planned(day)[1]}
+
+
 @router.post("/today", description="Today's episode, adapted to what people asked for. 422 lists every "
              "problem as {\"detail\": {\"problems\": [...]}}; 409 after the cut-off (the plan stands).\n\n```\n"
              + plan.REQUEST_SCHEMA + "\n```")
