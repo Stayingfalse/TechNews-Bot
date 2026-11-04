@@ -209,6 +209,10 @@ def accept_full(day: date, ep, now: datetime | None = None) -> tuple[list[str], 
         probs.append(f"date: should be {day.isoformat()}")
     if len(ep.get("summary") or "") > 200:
         probs.append("summary: one line of the story so far, at most 200 characters")
+    known = {c["id"] for c in inbox.load()["comments"].values()}
+    for i, r in enumerate(ep.get("replies") or []):  # a reply to a comment we never read can't be sent
+        if r["comment_id"] not in known:
+            probs.append(f"replies[{i}]: {r['comment_id']!r} isn't one of the comments given in GET /colony/today")
     if not probs:
         _write(_dir("days") / f"{day.isoformat()}.json", {**ep, "date": day.isoformat(), "accepted_at": now.isoformat()})
         from ..render.colony import custom
@@ -224,6 +228,20 @@ def accept_full(day: date, ep, now: datetime | None = None) -> tuple[list[str], 
         ids |= {c["id"] for c in comments if c["user"].lstrip("@").lower() in changed}
         inbox.mark_answered(ids, day.isoformat())
     return probs, ep, notes
+
+
+def withdraw(day: date) -> bool:
+    """Take back a day's adaptation before it renders (the plan plays instead)."""
+    from . import jobs
+
+    job = jobs.get(day.isoformat())
+    if job and job["status"] not in ("booked", "cancelled"):
+        raise TooLate(f"{day} has already been rendered or posted ({job['status']})")
+    p = _dir("days") / f"{day.isoformat()}.json"
+    if not p.exists():
+        return False
+    p.unlink()
+    return True
 
 
 def adapted(day: date) -> dict | None:

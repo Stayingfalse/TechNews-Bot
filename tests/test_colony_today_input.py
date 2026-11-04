@@ -104,3 +104,24 @@ def test_the_week_endpoint_is_hardened_too(c):
         r = c.post("/colony/week", headers=AUTH, content=json.dumps(body))
         assert r.status_code == 422, (body, r.text)
         assert r.json()["detail"]["problems"]
+
+
+def test_a_reply_to_a_comment_we_never_read_is_a_422(c):
+    probs = problems(post(c, {"beats": [{"type": "slot", "slot": "people"}], "caption": "x", "replies": {"1": "a"}}))
+    assert any("replies[0]" in p and "'1'" in p for p in probs)
+    assert today.adapted(__import__("datetime").date.fromisoformat(DAY)) is None
+
+
+def test_an_adaptation_can_be_taken_back_before_it_renders(c):
+    from datetime import date
+
+    from app.colony import jobs
+
+    r = post(c, {"beats": GOOD_BEATS, "caption": "x"})
+    assert r.status_code == 200 and today.adapted(date.fromisoformat(DAY))
+    r = c.delete(f"/colony/today?date={DAY}", headers=AUTH)
+    assert r.status_code == 200 and today.adapted(date.fromisoformat(DAY)) is None
+    assert c.delete(f"/colony/today?date={DAY}", headers=AUTH).status_code == 404
+    post(c, {"beats": GOOD_BEATS, "caption": "x"})
+    jobs.save({"id": "farside-x", "date": DAY, "publish_at": f"{DAY}T19:00:00+00:00", "status": "scheduled", "results": {}})
+    assert c.delete(f"/colony/today?date={DAY}", headers=AUTH).status_code == 409  # rendered: too late
