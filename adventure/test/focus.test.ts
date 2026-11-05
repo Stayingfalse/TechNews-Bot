@@ -94,3 +94,26 @@ describe("frames", () => {
       expect(outside(seen.filter((b) => !b.t.startsWith("@")))).toEqual([]);
     }, 120_000);
 });
+
+describe("pinned choice labels", () => {
+  it("keep clear of each other and of every seal, even when the seals crowd together", async () => {
+    const { placeLabels } = await import("../packages/engine/src/story.ts");
+    loadFonts();
+    const cv = makeCanvas(360, 640), F = { c: cv.getContext("2d") as unknown as CanvasRenderingContext2D, dpr: 1, T: 0 };
+    const cases = [
+      [{ sx: 150, sy: 300 }, { sx: 170, sy: 302 }, { sx: 160, sy: 330 }], // three seals almost on top of each other
+      [{ sx: 110, sy: 290 }, { sx: 160, sy: 280 }], // the root stair's pair, by the hero
+      [{ sx: 40, sy: 300 }, { sx: 280, sy: 300 }, { sx: 160, sy: 160 }],
+    ];
+    for (const at of cases) {
+      const boxes = placeLabels(F as never, at, ["Climb the root stair", "Wade the flooded way", "Follow the cold spring"].slice(0, at.length), [160, 260]);
+      const hit = (a: typeof boxes[0], b: typeof boxes[0]) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      for (let i = 0; i < boxes.length; i++) {
+        expect(boxes[i].x).toBeGreaterThanOrEqual(18);
+        expect(boxes[i].x + boxes[i].w).toBeLessThanOrEqual(306);
+        for (let j = i + 1; j < boxes.length; j++) expect(hit(boxes[i], boxes[j]), `labels ${i} and ${j}`).toBe(false);
+        for (const p of at) expect(hit(boxes[i], { x: p.sx - 14, y: p.sy - 14, w: 28, h: 28 }), `label ${i} on a seal`).toBe(false);
+      }
+    }
+  });
+});
