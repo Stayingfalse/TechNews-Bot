@@ -278,9 +278,9 @@ export function drawStory(F: Frame, s: StorySpec, S: SceneStory, P: StoryPlan) {
   }
 
   // the companions' handle tags, over the lighting so they stay readable
-  if (!onStage) toks.forEach((o) => {
+  if (!onStage && pv < 1) toks.forEach((o) => {
     if (!o.tag) return;
-    c.globalAlpha = o.a;
+    c.globalAlpha = o.a * (1 - pv);
     const X = sx(o.x), Y = sy(o.y) + 14;
     c.font = font(700, 9);
     const w = Math.min(90, c.measureText(`@${o.tag}`).width + 12);
@@ -565,9 +565,81 @@ function cta(F: Frame, s: StorySpec, P: StoryPlan, map?: { pins: Pin[]; hero: nu
 
 /** The question on the map: a dashed ink path from the hero to each choice's place, a wax seal
  *  there and its label beside it, then how to vote along the bottom. */
+type Box = { x: number; y: number; w: number; h: number };
+const overlap = (a: Box, b: Box) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+const SEAL_GAP = 34;
+
+/** Seals that would land on each other are pushed apart (the paths still end at the places). */
+function spreadSeals<P extends { sx: number; sy: number }>(at: P[]): P[] {
+  const q = at.map((p) => ({ ...p }));
+  for (let it = 0; it < 12; it++) {
+    let moved = false;
+    for (let i = 0; i < q.length; i++) for (let j = i + 1; j < q.length; j++) {
+      const dx = q[j].sx - q[i].sx, dy = q[j].sy - q[i].sy, d = Math.hypot(dx, dy);
+      if (d >= SEAL_GAP) continue;
+      const ux = d > 0.1 ? dx / d : 1, uy = d > 0.1 ? dy / d : 0, push = (SEAL_GAP - d) / 2 + 0.5;
+      q[i].sx = cl(q[i].sx - ux * push, 34, 290);
+      q[i].sy = cl(q[i].sy - uy * push, 150, 410);
+      q[j].sx = cl(q[j].sx + ux * push, 34, 290);
+      q[j].sy = cl(q[j].sy + uy * push, 150, 410);
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return q;
+}
+
+/** Where each choice's label goes: of eight spots round its seal, the one that covers least of
+ *  the other labels, every seal, the hero, the question and the bottom bar (in the safe zone). */
+export function placeLabels(F: Frame, at: { sx: number; sy: number }[], labels: string[], hero: number[]): Box[] {
+  const { c } = F, [hx, hy] = hero, H22 = 22;
+  c.save();
+  c.font = font(700, 12);
+  const widths = labels.map((l) => Math.min(150, c.measureText(l).width + 18));
+  c.restore();
+  const fixed: Box[] = [
+    { x: hx - 22, y: hy - 56, w: 44, h: 68 },
+    ...at.map((p) => ({ x: p.sx - 16, y: p.sy - 16, w: 32, h: 32 })),
+  ];
+  const placed: Box[] = [];
+  // the most crowded seals choose first
+  const order = at.map((_, i) => i).sort((a, b) => {
+    const near = (k: number) => at.reduce((n, q) => n + (Math.hypot(q.sx - at[k].sx, q.sy - at[k].sy) < 90 ? 1 : 0), 0);
+    return near(b) - near(a) || a - b;
+  });
+  const out: Box[] = new Array(at.length);
+  for (const i of order) {
+    const p = at[i], w = widths[i];
+    const away = Math.abs(p.sx - hx) < 20 ? (p.sx < 160 ? 1 : -1) : p.sx > hx ? 1 : -1;
+    const cands: [number, number, number][] = [ // x, y, preference (lower first)
+      [away > 0 ? p.sx + 18 : p.sx - 18 - w, p.sy - 11, 0],
+      [away > 0 ? p.sx - 18 - w : p.sx + 18, p.sy - 11, 1],
+      [p.sx - w / 2, p.sy - 44, 2],
+      [p.sx - w / 2, p.sy + 20, 2],
+      [p.sx + 12, p.sy - 38, 3], [p.sx - 12 - w, p.sy - 38, 3],
+      [p.sx + 12, p.sy + 16, 3], [p.sx - 12 - w, p.sy + 16, 3],
+    ];
+    let best: Box | null = null, score = Infinity;
+    for (const [x0, y0, pref] of cands) {
+      const b = { x: cl(x0, 18, 305 - w), y: cl(y0, 140, 404), w, h: H22 };
+      const moved = Math.abs(b.x - x0) + Math.abs(b.y - y0); // clamped away from its seal
+      const hits = [...fixed.filter((_, k) => k !== i + 1), ...placed].reduce((n, o) => n + overlap(b, o), 0) + overlap(b, fixed[i + 1]) * 2;
+      const sc = hits * 10 + moved * 4 + pref * 30;
+      if (sc < score) {
+        score = sc;
+        best = b;
+      }
+    }
+    out[i] = best!;
+    placed.push(best!);
+  }
+  return out;
+}
+
 function pinned(F: Frame, s: StorySpec, t: number, m: { pins: Pin[]; hero: number[]; z: number; open: boolean }) {
   const { c, T } = F, [hx, hy] = m.hero;
-  const at = m.pins.map((p) => ({ ...p, sx: cl(p.x, 34, 290), sy: cl(p.y - 16, 150, 410) }));
+  const at = spreadSeals(m.pins.map((p) => ({ ...p, sx: cl(p.x, 34, 290), sy: cl(p.y - 16, 150, 410) })));
+  const spots = placeLabels(F, at, s.choices.map((ch) => ch.label), [hx, hy]);
   // paths and openings first, then the labels, then the seals on top of everything
   at.forEach((p, i) => {
     const a = ez(seg(t, 0.5 + i * 0.3, 1.1 + i * 0.3));
@@ -597,18 +669,7 @@ function pinned(F: Frame, s: StorySpec, t: number, m: { pins: Pin[]; hero: numbe
     if (a <= 0) return;
     c.save();
     c.globalAlpha = a;
-    c.font = font(700, 12);
-    const label = s.choices[i].label, w = Math.min(150, c.measureText(label).width + 18);
-    // away from the hero, unless there's no room on that side
-    let right = Math.abs(p.x - hx) < 20 ? p.sx < 160 : p.x > hx;
-    if (right && p.sx + 18 + w > 305) right = false;
-    else if (!right && p.sx - 18 - w < 18) right = true;
-    let lx = cl(right ? p.sx + 18 : p.sx - 18 - w, 18, 305 - w), ly = cl(p.sy - 11, 140, 404);
-    if (lx < hx + 22 && lx + w > hx - 22 && ly < hy + 12 && ly + 22 > hy - 56) {
-      // it would sit on the hero: above or below the seal instead
-      lx = cl(p.sx - w / 2, 18, 305 - w);
-      ly = cl(p.sy < hy - 20 ? p.sy - 42 : p.sy + 20, 140, 404);
-    }
+    const { x: lx, y: ly, w } = spots[i], label = s.choices[i].label;
     parch(F, lx, ly, w, 22, i === s.default ? "#f5e6b8" : undefined);
     fit(F, label, lx + w / 2, ly + 15, 12, w - 10, INK, "center", 700);
     c.restore();
