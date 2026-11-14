@@ -226,3 +226,65 @@ def colony_cancel(day: str):
     jobs.save(job)
     jobs.book(date.fromisoformat(day) + timedelta(days=1))
     return job
+
+
+# ------------------------------------------------------------------ extras
+
+
+@router.post("/extra", status_code=202, description="A standalone video outside the daily cycle (a catch-up, a "
+             "teaser): the same beats and caption as POST /colony/today, but no `settlers`, `replies` or `parts`. "
+             "It renders straight away from the colony as it stands, sends a Discord preview, and posts as soon as "
+             "it's ready, or at `at` (HH:MM today, local, or an ISO date-time). The colony is untouched and the "
+             "day's own episode still posts at its slot. 422 lists every problem.")
+def colony_extra(ep: Any = Body(None), at: str = ""):
+    from . import extras, jobs
+
+    if not settings.colony_enabled:
+        raise HTTPException(409, "Farside is switched off: set COLONY_ENABLED=true")
+    if why := jobs.can_publish():
+        raise HTTPException(409, why)
+    try:
+        when = extras.parse_at(at)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    try:
+        job = extras.create(ep, when)
+    except ValueError as e:
+        probs = e.args[0] if e.args and isinstance(e.args[0], list) else [str(e)]
+        raise HTTPException(422, {"problems": probs})
+    except Exception as e:
+        log.exception("POST /colony/extra: checking the episode failed")
+        raise HTTPException(422, {"problems": [f"the episode couldn't be checked ({type(e).__name__}: {str(e)[:160]})"]})
+    return {k: v for k, v in job.items() if k != "ep"} | {"note": plan.length_note(job["ep"])}
+
+
+@router.get("/extras")
+def colony_extras(limit: int = 20):
+    from . import extras
+
+    return {"extras": [{k: v for k, v in j.items() if k != "ep"} for j in extras.recent(limit)]}
+
+
+@router.post("/extras/{job_id}/retry", status_code=202)
+def colony_extra_retry(job_id: str):
+    from . import extras
+
+    try:
+        return extras.retry(job_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.delete("/extras/{job_id}")
+def colony_extra_cancel(job_id: str):
+    """Don't post an extra (before it starts posting)."""
+    from . import extras
+
+    try:
+        return extras.cancel(job_id)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
