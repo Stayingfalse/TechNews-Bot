@@ -78,4 +78,6 @@ plan, and check the server accepted it (`GET /colony/week?date=<first day>` show
 | Stop today's post | `DELETE /colony/jobs/<date>` |
 | Post a failed or missed day | `POST /colony/jobs/<date>/retry` |
 | Look at a day without posting | `POST /colony/preview?date=<date>` |
+| Post a standalone extra (a catch-up, a teaser) | `POST /colony/extra[?at=HH:MM]` with beats and a caption, no settlers/replies/parts |
+| List, retry or cancel extras | `GET /colony/extras`, `POST /colony/extras/<id>/retry`, `DELETE /colony/extras/<id>` |
 | Numbers | dashboard → Farside, or `GET /metrics?channel=colony` (tag `ai`: full / plan / spare / counts) |

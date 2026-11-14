@@ -197,6 +197,15 @@ def poll() -> dict:
                 n += len(inbox.add(cs, post=job["id"]))
             except Exception as e:
                 errors.append(f"{job['id']}: {str(e)[:160]}")
+        from . import extras
+
+        for xid, media in extras.posted_media():
+            try:
+                cs = [{**c, "platform": "instagram"} for c in instagram.comments(media, limit=5000)
+                      if c["user"].lower() != own]
+                n += len(inbox.add(cs, post=xid))
+            except Exception as e:
+                errors.append(f"{xid}: {str(e)[:160]}")
     sorted_ = inbox.sort_pending()
     acks = acknowledge()
     return {"new": n, "errors": errors, "acks": acks, **sorted_}
@@ -454,6 +463,7 @@ def post(job: dict) -> None:
         job.update(status="done" if ok else "failed", finished_at=store.now_iso())
         if not ok:
             job["error"] = job["results"]["instagram"]["error"]
+            book(date.fromisoformat(job["date"]) + timedelta(days=1))  # a retry can still post this one
         else:
             _after_post(job)
         save(job)
@@ -470,6 +480,7 @@ def _fail(job: dict, e: Exception, step: str) -> None:
     log.exception("farside %s failed during %s", job["id"], step)
     job.update(status="failed", error=f"{step}: {e}"[:1000])
     save(job)
+    book(date.fromisoformat(job["date"]) + timedelta(days=1))  # tomorrow still goes out
     notify.send(f":warning: **Farside** `{job['date']}` failed during {step}: {e}\n"
                 f"Retry with POST /colony/jobs/{job['date']}/retry")
 
@@ -573,6 +584,9 @@ def _loop() -> None:
                     last_tick = time.time()
                     recover()
                     tick()
+                    from . import extras
+
+                    extras.tick()
                 if time.time() - last_poll > settings.colony_poll_minutes * 60:
                     last_poll = time.time()
                     poll()
