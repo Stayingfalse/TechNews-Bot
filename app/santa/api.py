@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from .. import channels, slots
 from ..config import settings
-from . import previews, schedule, source, spec as promo
+from . import jobs, previews, schedule, source, spec as promo
 
 router = APIRouter(tags=["santa"])
 
@@ -35,7 +35,13 @@ def santa_slots(count: int = Query(default=14, ge=1, le=60)):
     """The next `count` posting slots, each checked against every other channel's posts and renders:
     `at`/`local` (when it would post), `planned` (where the 22-hour pattern put it), `nudged` (minutes
     moved, with what it `avoided`) or `skipped` (with the `reason`)."""
-    return {"slots": schedule.upcoming(count)}
+    booked = {j["planned"]: j for j in jobs.active()}
+    rows = schedule.upcoming(count)
+    for r in rows:
+        if (j := booked.get(r["planned"])):
+            r["booked"] = {"job": j["id"], "spec": j["spec"]["id"], "format": j["spec"]["format"], "status": j["status"],
+                           "posts_at": j["publish_at"]}
+    return {"slots": rows}
 
 
 @router.put("/santa/anchor")
@@ -106,3 +112,66 @@ def santa_stats():
     stats = source.fetch()
     return {"connected": bool(settings.raosanta_api_token), "source": settings.raosanta_api_url,
             "values": source.values(stats), "stats": stats}
+
+
+def _job_row(j: dict) -> dict:
+    return {k: j.get(k) for k in ("id", "status", "publish_at", "planned", "published_at", "voice", "error", "results",
+                                  "left_out", "moved_for")} | {
+        "spec_id": j["spec"]["id"], "format": j["spec"]["format"], "audience": j["spec"].get("audience"),
+        "local": jobs._local(j["publish_at"])}
+
+
+@router.post("/santa/week")
+def santa_week(body: dict = Body(...)):
+    """Book a batch of promos: {"items": [spec, ...], "replace": false}. Each takes the next free
+    slot of the pattern, in order. All or nothing: 409 lists every problem. `replace` first
+    cancels everything still only booked. Each is made SANTA_RENDER_LEAD_MINUTES before its slot
+    (live figures, voice, render, a Discord preview) and posted at the slot."""
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(422, "items: a list of promo specs (GET /santa/schema)")
+    try:
+        booked = jobs.book(items, bool(body.get("replace")))
+    except ValueError as e:
+        raise HTTPException(409, e.args[0])
+    return {"booked": [_job_row(j) for j in booked], "can_publish": jobs.can_publish()}
+
+
+@router.get("/santa/jobs")
+def santa_jobs(status: str = "", limit: int = Query(default=50, ge=1, le=500)):
+    """Bookings and posts, newest slot first; `status` filters (booked, scheduled, done, failed...)."""
+    rows = [j for j in reversed(jobs.all_jobs()) if not status or j["status"] == status][:limit]
+    return {"jobs": [_job_row(j) for j in rows], "can_publish": jobs.can_publish(),
+            "enabled": settings.santa_enabled}
+
+
+@router.get("/santa/jobs/{job_id}")
+def santa_job(job_id: str):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "no such booking")
+    return job
+
+
+@router.delete("/santa/jobs/{job_id}")
+def santa_cancel(job_id: str):
+    """Cancel a booking (booked, or made and waiting for its slot)."""
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "no such booking")
+    try:
+        return _job_row(jobs.cancel(job))
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.post("/santa/jobs/{job_id}/retry")
+def santa_retry(job_id: str):
+    """Post a failed or missed promo now, to the platforms that don't have it yet."""
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "no such booking")
+    try:
+        return _job_row(jobs.retry(job))
+    except ValueError as e:
+        raise HTTPException(409, str(e))

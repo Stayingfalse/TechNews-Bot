@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 FORMATS = ("tutorial", "pitch", "quiz", "update", "kudos")
 VOICED = ("tutorial", "pitch")  # voiced by default; the rest are music and on-screen text
 AUDIENCES = ("workplace", "community", "friends", "everyone")
+HASHTAGS = ("#christmas", "#christmasgifts", "#randomactsofkindness", "#raosanta")
 MAX_SECONDS = 45.0  # longer is refused; aim for 20-35 (CHANNEL_REVIEW_AND_NEXT.md)
 TARGET_SECONDS = 35.0
 
@@ -181,6 +182,25 @@ class PromoSpec(BaseModel):
     music: str = Field(default="carol", pattern=r"^(carol|carol:(jingle-bells|deck-the-halls|we-wish-you)|none)$",
                        description='"carol" (a public-domain carol made in code, picked by the id), "carol:<name>", or "none"')
     caption: str = Field(default="", max_length=2000)
+    title: str | None = Field(default=None, max_length=90, description="YouTube title; default the hook (the first title card)")
+    hashtags: list[str] = Field(default_factory=lambda: list(HASHTAGS), max_length=12)
+
+    @field_validator("hashtags")
+    @classmethod
+    def _tags(cls, v):
+        bad = [t for t in v if not re.fullmatch(r"#\w{2,40}", t)]
+        if bad:
+            raise ValueError(f"hashtags look like #christmas: {bad}")
+        return v
+
+    def youtube_title(self) -> str:
+        if self.title:
+            return self.title.replace("*", "")
+        hook = next((s.text for s in self.segments if s.type == "title"), None)
+        return (hook.replace("*", "") if hook else "Random Acts of Santa") + " | raosanta.uk"
+
+    def full_caption(self) -> str:
+        return f"{self.caption}\n\nraosanta.uk\n\n{' '.join(self.hashtags)}".strip()
 
     @property
     def voiced(self) -> bool:

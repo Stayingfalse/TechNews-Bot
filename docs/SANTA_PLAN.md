@@ -122,9 +122,24 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
    - **Previews:** `POST /santa/preview` (a spec) renders in the background and sends the video to
      Discord; nothing is posted. `GET /santa/previews[/{id}]`. Locally:
      `python render_santa.py examples/santa/quiz-christmas.json out/q.mp4`.
-3. **Booking.** `POST /santa/week` takes the routine's posts and places them into the next free slots;
-   preview, cancel and retry as Farside does; the scheduler renders `SANTA_RENDER_LEAD_MINUTES`
-   before each post and posts at the slot. Metrics tags: `format`, `audience`, `voice`.
+3. ✅ **Booking and posting** (`app/santa/jobs.py`):
+   - `POST /santa/week` takes the routine's batch (all or nothing; ids never reused) and books
+     each promo into the next free slot, in order.
+   - `SANTA_RENDER_LEAD_MINUTES` (45) before a slot, the post is checked again against the other
+     channels (nudged if something has appeared near it). Then the figures are filled, the voice
+     made, the video rendered and the preview sent to Discord.
+   - At the slot it posts an Instagram Reel and a YouTube Short (title: the hook +
+     " | raosanta.uk"). A post more than 2 hours late is marked missed instead.
+   - One platform failing keeps the video for `POST /santa/jobs/{id}/retry`, which posts only to
+     the platforms that don't have it.
+   - A server restart mid-post marks it failed rather than risk posting twice.
+   - Discord gets a warning, once a day, when fewer than 3 posts are booked ahead.
+   - Posts reach the metrics and dashboard tagged by format, audience, voice, music, hour and
+     length.
+   - Endpoints: `GET /santa/jobs[/{id}]`, `DELETE /santa/jobs/{id}`. `GET /santa/slots` shows
+     what's booked in each slot.
+   - The weekly routine: [SANTA_ROUTINE_PROMPT.md](SANTA_ROUTINE_PROMPT.md). Switching on:
+     [SANTA_LAUNCH.md](SANTA_LAUNCH.md).
 4. ✅ **Live figures** (`app/santa/source.py`):
    - A spec quotes the site's figures with placeholders such as `{allTime.gifts}`,
      `{season.opensOn}` or `{season.daysToClose}`; the full list is in `GET /santa/schema` →
@@ -136,8 +151,8 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      leaves out that figure, its segment, or a caption sentence; the Discord preview lists what was
      left out.
    - `GET /santa/stats` shows what the next video would quote.
-5. **Tutorial clips**: uploaded from rast3's recording script (`PUT /santa/clips/{name}`).
-6. **The weekly routine** (`docs/SANTA_ROUTINE_PROMPT.md`): picks the week's mix for the season
+5. **Tutorial clips** (still to do): uploaded from rast3's recording script (`PUT /santa/clips/{name}`).
+6. **The weekly routine** (prompt written: `docs/SANTA_ROUTINE_PROMPT.md`; the routine itself isn't created yet): picks the week's mix for the season
    phase and last week's numbers, writes the scripts and quizzes, and checks quiz facts. The weekly
    review covers this channel too.
 

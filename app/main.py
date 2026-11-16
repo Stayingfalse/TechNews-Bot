@@ -51,6 +51,9 @@ async def lifespan(_: FastAPI):
     from .colony import jobs as colony_jobs
 
     colony_jobs.start_background()
+    from .santa import jobs as santa_jobs
+
+    santa_jobs.start_background()
     yield
 
 
