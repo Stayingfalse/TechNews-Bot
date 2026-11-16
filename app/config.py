@@ -195,6 +195,10 @@ class Settings:
         self.santa_voices = {k.strip().lower(): v.strip() for k, v in (x.split("=", 1) for x in voices.split(",") if "=" in x)}
         self.santa_voice_model = os.environ.get("SANTA_VOICE_MODEL", "eleven_multilingual_v2")
         self.santa_voice_budget = int(os.environ.get("SANTA_VOICE_BUDGET", "7000"))
+        # raosanta.uk's figures (rast3: GET /api/promo/stats), quoted in videos with {placeholders}.
+        # The token is the site's PROMO_API_TOKEN; without it, segments that quote figures are left out.
+        self.raosanta_api_url = os.environ.get("RAOSANTA_API_URL", "https://raosanta.uk").rstrip("/")
+        self.raosanta_api_token = os.environ.get("RAOSANTA_API_TOKEN", "")
         # How long a render is assumed to take when checking that two channels' renders don't overlap
         self.slot_render_minutes = int(os.environ.get("SLOT_RENDER_MINUTES", "20"))
 

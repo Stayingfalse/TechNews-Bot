@@ -2,7 +2,8 @@
 
 Plan agreed with the owner on 16 Nov 2026. The channel promotes [raosanta.uk](https://raosanta.uk)
 (Random Acts of Santa: anonymous Christmas gifting from Amazon wishlists, for workplaces, communities
-and friends groups) during the season, which runs from 15 Nov to 6 Jan. The site's own repo is
+and friends groups) through the season: the wishlist drive from 15 Nov, gifting from 27 Nov (the last
+Friday in November), closing on 6 Jan. The site's figures give the current dates. The site's own repo is
 `Stayingfalse/rast3`.
 
 ## 0. Decisions
@@ -124,9 +125,17 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
 3. **Booking.** `POST /santa/week` takes the routine's posts and places them into the next free slots;
    preview, cancel and retry as Farside does; the scheduler renders `SANTA_RENDER_LEAD_MINUTES`
    before each post and posts at the slot. Metrics tags: `format`, `audience`, `voice`.
-4. **Live data** (`app/santa/source.py`): figures and approved kudos come from raosanta's promo API at
-   render time. If the site can't be reached, or a figure is hidden, that card is left out and the
-   video still goes out.
+4. ✅ **Live figures** (`app/santa/source.py`):
+   - A spec quotes the site's figures with placeholders such as `{allTime.gifts}`,
+     `{season.opensOn}` or `{season.daysToClose}`; the full list is in `GET /santa/schema` →
+     `placeholders`, and an unknown name is refused.
+   - They're fetched from rast3's `GET /api/promo/stats` (`RAOSANTA_API_URL`, token
+     `RAOSANTA_API_TOKEN` = the site's `PROMO_API_TOKEN`) when the video renders.
+   - On screen a figure shows as given ("1,200+"); a narrator line reads "over 1,200".
+   - A figure with no value (under 10, or the site unreachable with no copy from the last 12 hours)
+     leaves out that figure, its segment, or a caption sentence; the Discord preview lists what was
+     left out.
+   - `GET /santa/stats` shows what the next video would quote.
 5. **Tutorial clips**: uploaded from rast3's recording script (`PUT /santa/clips/{name}`).
 6. **The weekly routine** (`docs/SANTA_ROUTINE_PROMPT.md`): picks the week's mix for the season
    phase and last week's numbers, writes the scripts and quizzes, and checks quiz facts. The weekly
@@ -136,7 +145,7 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
 
 Branch → `dev` → test on dev.raosanta.uk → PR into `main`; one fundamental change a day.
 
-1. **`GET /api/promo/stats`** (server-to-server token `PROMO_API_TOKEN`):
+1. ✅ **`GET /api/promo/stats`** (server-to-server token `PROMO_API_TOKEN`; built 17 Nov, on `dev`):
    - totals rounded with `roundForPublic`, and groups by type, also rounded;
    - gifts this week;
    - season dates and days to the last order date.

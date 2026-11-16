@@ -276,14 +276,19 @@ Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas
   - `GET /santa/state`, `GET /santa/slots?count=`, `PUT /santa/anchor?at=YYYY-MM-DDTHH:MM`;
   - `GET /slots/busy?hours=&channel=` (every channel's busy times);
   - `POST /santa/preview` (render a spec and send it to Discord, never posted),
-    `GET /santa/previews[/{id}]`.
+    `GET /santa/previews[/{id}]`;
+  - `GET /santa/stats` (the site's live figures, as the next video would quote them).
+- **Live figures:** a spec can quote raosanta.uk's rounded figures with placeholders
+  (`{allTime.gifts}`, `{season.opensOn}`, ...). They're fetched from the site's
+  `/api/promo/stats` at render time; a figure the site hides (under 10) leaves out what quotes it.
 - **Settings:** `SANTA_ENABLED` (off), `SANTA_HANDLE` (raosanta.uk),
   `SANTA_PLATFORMS` (instagram,youtube), `SANTA_CADENCE_HOURS` (22), `SANTA_WINDOW` (07:00-22:30),
   `SANTA_ANCHOR` (21:30), `SANTA_BUFFER_MINUTES` (60), `SANTA_NUDGE_MAX_MINUTES` (180),
   `SANTA_RENDER_LEAD_MINUTES` (45), `SLOT_RENDER_MINUTES` (20, how long another channel's render
   is assumed to take), `SANTA_VOICES` (lily=…,archie=…), `SANTA_VOICE_MODEL`
-  (eleven_multilingual_v2), `SANTA_VOICE_BUDGET` (7000 characters a month).
-- **Nothing posts yet:** booking and the live data from the site come next (plan §4).
+  (eleven_multilingual_v2), `SANTA_VOICE_BUDGET` (7000 characters a month), `RAOSANTA_API_URL`
+  (https://raosanta.uk), `RAOSANTA_API_TOKEN` (the site's `PROMO_API_TOKEN`).
+- **Nothing posts yet:** booking the week into the slots comes next (plan §4).
 
 ## Channels
 

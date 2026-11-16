@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from .. import channels, slots
 from ..config import settings
-from . import previews, schedule, spec as promo
+from . import previews, schedule, source, spec as promo
 
 router = APIRouter(tags=["santa"])
 
@@ -68,7 +68,8 @@ def santa_schema():
     """The promo format: the spec's JSON schema, which formats are voiced, the narrators and the
     length to aim for."""
     return {"spec": promo.PromoSpec.model_json_schema(), "about": promo.__doc__, "voiced": list(promo.VOICED),
-            "voices": list(settings.santa_voices), "target_seconds": promo.TARGET_SECONDS,
+            "voices": list(settings.santa_voices), "placeholders": promo.PLACEHOLDERS,
+            "target_seconds": promo.TARGET_SECONDS,
             "max_seconds": promo.MAX_SECONDS}
 
 
@@ -96,3 +97,12 @@ def santa_preview_job(job_id: str):
     if not job:
         raise HTTPException(404, "no such preview")
     return job
+
+
+@router.get("/santa/stats")
+def santa_stats():
+    """raosanta.uk's figures as the next video would quote them (each placeholder and its text), and
+    the site's answer. Placeholders missing from `values` have no figure right now."""
+    stats = source.fetch()
+    return {"connected": bool(settings.raosanta_api_token), "source": settings.raosanta_api_url,
+            "values": source.values(stats), "stats": stats}

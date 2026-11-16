@@ -19,7 +19,7 @@ from pathlib import Path
 from .. import notify, store
 from ..config import settings
 from ..render.santa.video import render_promo
-from . import voice
+from . import source, voice
 from .spec import MAX_SECONDS, PromoSpec
 
 log = logging.getLogger(__name__)
@@ -72,6 +72,9 @@ def run(job: dict) -> dict:
         with _render_lock:
             job["status"] = "rendering"
             save(job)
+            if source.uses_figures(spec):  # the site's figures as they are now
+                spec, job["left_out"] = source.fill(spec, source.fetch())
+                job["filled"] = spec.model_dump()
             lines, job["voice"] = voice.lines(spec)
             name = f"{job['id']}-{secrets.token_hex(6)}"  # unguessable, as the quiz's
             out = settings.videos_dir / f"{name}.mp4"
@@ -95,6 +98,8 @@ def _notify(job: dict, spec: PromoSpec, video: Path) -> None:
     lines = [f":santa: **raosanta.uk** preview `{spec.id}` ({what}), not posted",
              f"{r['duration']} s · music: {r['music']} · voice: {job['voice']} · "
              f"{voice.spent()}/{settings.santa_voice_budget} voice characters used this month"]
+    if job.get("left_out"):
+        lines.append("Left out (no figure): " + "; ".join(job["left_out"])[:500])
     if spec.caption:
         lines.append(f"> {spec.caption[:600]}")
     if video.stat().st_size > notify.MAX_ATTACH:
