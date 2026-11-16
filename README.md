@@ -256,6 +256,28 @@ every 15 min   read new comments on the open race's post → reply to each bet (
 
 Fonts for the race videos: Inter (OFL) and JetBrains Mono, in `assets/fonts/racing`.
 
+## raosanta.uk channel (promo videos)
+
+A fifth channel, being built: short promo videos for [raosanta.uk](https://raosanta.uk) (Random
+Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas season. Plan:
+[docs/SANTA_PLAN.md](docs/SANTA_PLAN.md).
+
+- **When:** one post every 22 hours inside 07:00-22:30, so each lands two hours earlier in the day
+  than the last; one that would land before 07:00 goes to 21:30 that evening.
+- **Clear of the other channels:** `app/slots.py` reads every running channel's posts and render
+  windows. A Santa post stays 60 minutes clear of their posts, and its render doesn't overlap
+  theirs; a clash is nudged, or the slot is skipped with the reason.
+- **Endpoints (token):** `GET /santa/state`, `GET /santa/slots?count=`,
+  `PUT /santa/anchor?at=YYYY-MM-DDTHH:MM`, and `GET /slots/busy?hours=&channel=` (every channel's
+  busy times).
+- **Settings:** `SANTA_ENABLED` (off), `SANTA_HANDLE` (raosanta.uk),
+  `SANTA_PLATFORMS` (instagram,youtube), `SANTA_CADENCE_HOURS` (22), `SANTA_WINDOW` (07:00-22:30),
+  `SANTA_ANCHOR` (21:30), `SANTA_BUFFER_MINUTES` (60), `SANTA_NUDGE_MAX_MINUTES` (180),
+  `SANTA_RENDER_LEAD_MINUTES` (45), `SLOT_RENDER_MINUTES` (20, how long another channel's render
+  is assumed to take).
+- **Nothing renders or posts yet:** the renderer, booking and the live data from the site come next
+  (plan §4).
+
 ## Channels
 
 Built for one channel today (the quiz account) with the seams for several: jobs record their channel,

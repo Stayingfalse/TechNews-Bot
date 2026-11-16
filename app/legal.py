@@ -285,7 +285,8 @@ def meta_user_removed(user_id: str, kind: str) -> str:
 FORMATS = {"quiz": "Quiz videos: answers in comments, shout-outs, viewer-picked themes",
            "adventure": "Story videos: votes in comments decide what happens next; comment join to be in the story",
            "racing": "Race videos: play-money bets in comments, balances and a league table",
-           "colony": "Daily colony story: comment to move in and your settler is shaped by what you write"}
+           "colony": "Daily colony story: comment to move in and your settler is shaped by what you write",
+           "promo": "Videos about Random Acts of Santa (raosanta.uk): comments aren't used for anything"}
 # Each kind's section of the privacy policy (the anchors in privacy.html)
 SECTIONS = {"quiz": "quiz", "adventure": "story", "racing": "racing", "colony": "farside"}
 PLATFORM_NAMES = {"instagram": "Instagram", "youtube": "YouTube"}

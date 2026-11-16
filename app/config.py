@@ -13,6 +13,17 @@ def _bool(name: str, default: bool = False) -> bool:
     return default if v is None else v.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _hhmm(name: str, value: str) -> str:
+    """A local time as zero-padded HH:MM (so times compare as strings)."""
+    try:
+        h, m = (int(x) for x in value.strip().split(":"))
+    except ValueError:
+        raise ValueError(f"{name} must be HH:MM")
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ValueError(f"{name} must be HH:MM")
+    return f"{h:02d}:{m:02d}"
+
+
 class Settings:
     def __init__(self) -> None:
         self.api_token = os.environ.get("API_TOKEN", "")
@@ -157,6 +168,28 @@ class Settings:
                                 (pair.split("=", 1) for pair in cal.split(",") if "=" in pair)}
         # The weekly bonus is doubled for this many weeks after launch
         self.racing_launch_weeks = int(os.environ.get("RACING_LAUNCH_WEEKS", "4"))
+
+        # raosanta.uk (docs/SANTA_PLAN.md): promo videos for Random Acts of Santa, one every
+        # SANTA_CADENCE_HOURS, only inside SANTA_WINDOW (local). A post that would land before the window
+        # moves to SANTA_ANCHOR that evening, so the times walk round the day. Every slot keeps
+        # SANTA_BUFFER_MINUTES clear of any other channel's post, and its render clear of theirs
+        # (app/slots.py); a clash is nudged by up to SANTA_NUDGE_MAX_MINUTES, else that slot is skipped.
+        self.santa_enabled = _bool("SANTA_ENABLED", False)
+        self.santa_handle = os.environ.get("SANTA_HANDLE", "raosanta.uk")
+        self.santa_platforms = [p.strip().lower() for p in os.environ.get("SANTA_PLATFORMS", "instagram,youtube").split(",") if p.strip()]
+        self.santa_cadence_hours = float(os.environ.get("SANTA_CADENCE_HOURS", "22"))
+        window = os.environ.get("SANTA_WINDOW", "07:00-22:30").split("-")
+        if len(window) != 2:
+            raise ValueError("SANTA_WINDOW must be HH:MM-HH:MM")
+        self.santa_window = (_hhmm("SANTA_WINDOW", window[0]), _hhmm("SANTA_WINDOW", window[1]))
+        self.santa_anchor = _hhmm("SANTA_ANCHOR", os.environ.get("SANTA_ANCHOR", "21:30"))
+        if not self.santa_window[0] <= self.santa_anchor <= self.santa_window[1]:
+            raise ValueError("SANTA_ANCHOR must be inside SANTA_WINDOW")
+        self.santa_buffer_minutes = int(os.environ.get("SANTA_BUFFER_MINUTES", "60"))
+        self.santa_nudge_max_minutes = int(os.environ.get("SANTA_NUDGE_MAX_MINUTES", "180"))
+        self.santa_render_lead_minutes = int(os.environ.get("SANTA_RENDER_LEAD_MINUTES", "45"))
+        # How long a render is assumed to take when checking that two channels' renders don't overlap
+        self.slot_render_minutes = int(os.environ.get("SLOT_RENDER_MINUTES", "20"))
 
         # healthchecks.io: with an API key the server creates its own checks (see app/health.py)
         self.healthchecks_api_key = os.environ.get("HEALTHCHECKS_API_KEY", "")
