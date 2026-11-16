@@ -95,11 +95,32 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
 1. ✅ **The clash guard and the channel**: the `santa` channel (kind `promo`, off unless
    `SANTA_ENABLED`), its settings, `app/slots.py`, `app/santa/schedule.py`, the endpoints above,
    and tests (`tests/test_santa_slots.py`).
-2. **Renderer and look.** A `promo` spec made of segments: hook card, screen clip, figures card,
-   kudos postcard, quiz rounds (reusing `QuizSpec`), and an end card with the link. The look comes
-   from rast3's `DESIGN.md`: night/postbox/gold colours, Archivo, the stamp and ornament art.
-   Music: public-domain carols arranged by the synth, or CC0 tracks. Discord previews; voice through
-   `app/render/voice.py` with `SANTA_VOICES` and `SANTA_VOICE_BUDGET`.
+2. ✅ **Renderer and look, previews to Discord.**
+   - **Spec** (`app/santa/spec.py`, `GET /santa/schema`): a promo is 2-10 segments: `title`,
+     `points`, `steps`, `figures`, `question`, `kudos` and a closing `end` card. Each segment can
+     have a narrator line (`say`). *Asterisks* make words gold. Emoji are refused, because Archivo
+     has none.
+   - **Look** (`app/render/santa/`): rast3's `DESIGN.md`, meaning a night-blue sky with snow and gold
+     stars, cream postcards with an airmail edge, the 2026 stamp (rasterised from rast3's
+     `public/brand/stamps/2026.svg` into `assets/santa/`), Archivo copied from rast3
+     (`assets/fonts/Archivo-*.ttf`, OFL), postbox red and gold.
+   - **Music** (`app/render/santa/carols.py`): Jingle Bells (1857), Deck the Halls and We Wish You a
+     Merry Christmas (traditional), played on a glockenspiel over sleigh bells, made in code, so
+     there's nothing to license.
+   - **Narrator** (`app/santa/voice.py`):
+     - `SANTA_VOICES`: Lily (a built-in voice, works on any plan) by default, or Archie (a young
+       British library voice) by `voice_name`;
+     - `SANTA_VOICE_MODEL`: `eleven_multilingual_v2`;
+     - `SANTA_VOICE_BUDGET`: 7,000 characters a month, recorded in `DATA_DIR/santa/credits.json`;
+     - only tutorials and pitches are voiced unless the spec sets `voice`;
+     - lines are cached, so a re-render costs nothing;
+     - with no key, an exhausted budget or an ElevenLabs error, the video goes out with music and
+       text only.
+   - **Timing:** a segment stays on screen until its line has been said; a read-out question starts
+     its countdown once it's been asked; anything over 45 s is refused before rendering.
+   - **Previews:** `POST /santa/preview` (a spec) renders in the background and sends the video to
+     Discord; nothing is posted. `GET /santa/previews[/{id}]`. Locally:
+     `python render_santa.py examples/santa/quiz-christmas.json out/q.mp4`.
 3. **Booking.** `POST /santa/week` takes the routine's posts and places them into the next free slots;
    preview, cancel and retry as Farside does; the scheduler renders `SANTA_RENDER_LEAD_MINUTES`
    before each post and posts at the slot. Metrics tags: `format`, `audience`, `voice`.

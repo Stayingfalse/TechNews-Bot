@@ -1,0 +1,11 @@
+{
+  "id": "tutorial-wishlist-example",
+  "format": "tutorial",
+  "segments": [
+    {"type": "title", "text": "Get gifts *without* giving out your address", "say": "Want a Christmas gift without giving out your address? Here's how."},
+    {"type": "steps", "heading": "Takes two minutes", "steps": [
+      "Sign in at raosanta.uk", "Add your Amazon wishlist link", "Join your work, server or friends group", "Check in for the 2026 season"],
+     "say": "Sign in, add your Amazon wishlist, join your group, and check in for this season. That's it."},
+    {"type": "end", "say": "Random Acts of Santa. Free at raosanta dot UK."}
+  ]
+}

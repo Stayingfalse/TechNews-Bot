@@ -1,14 +1,15 @@
 """raosanta.uk endpoints (docs/SANTA_PLAN.md), and the all-channel busy list. Mounted by main.py
-behind the API token. Nothing here renders or posts yet: this is the channel's schedule."""
+behind the API token. Nothing here posts yet: the channel's schedule, and previews to Discord."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
+from pydantic import ValidationError
 
 from .. import channels, slots
 from ..config import settings
-from . import schedule
+from . import previews, schedule, spec as promo
 
 router = APIRouter(tags=["santa"])
 
@@ -60,3 +61,38 @@ def busy_slots(hours: int = Query(default=48, ge=1, le=24 * 14), channel: str = 
         raise HTTPException(422, f"unknown channel {channel!r}")
     start = datetime.now(timezone.utc)
     return {"busy": [b.as_dict() for b in slots.busy(start, start + timedelta(hours=hours), exclude=channel or None)]}
+
+
+@router.get("/santa/schema")
+def santa_schema():
+    """The promo format: the spec's JSON schema, which formats are voiced, the narrators and the
+    length to aim for."""
+    return {"spec": promo.PromoSpec.model_json_schema(), "about": promo.__doc__, "voiced": list(promo.VOICED),
+            "voices": list(settings.santa_voices), "target_seconds": promo.TARGET_SECONDS,
+            "max_seconds": promo.MAX_SECONDS}
+
+
+@router.post("/santa/preview", status_code=202)
+def santa_preview(body: dict = Body(...)):
+    """Render a promo spec (GET /santa/schema) and send it to Discord. Nothing is posted.
+    422 lists every problem with the spec. Poll GET /santa/previews/{id}."""
+    try:
+        spec = promo.PromoSpec.model_validate(body)
+    except ValidationError as e:
+        raise HTTPException(422, [f"{'.'.join(map(str, err['loc']))}: {err['msg']}" for err in e.errors()])
+    job = previews.create(spec)
+    return {"id": job["id"], "status": job["status"]}
+
+
+@router.get("/santa/previews")
+def santa_previews(limit: int = Query(default=20, ge=1, le=100)):
+    return {"previews": [{k: j.get(k) for k in ("id", "status", "created_at", "voice", "render", "video_url", "error")}
+                         | {"spec_id": j["spec"]["id"], "format": j["spec"]["format"]} for j in previews.recent(limit)]}
+
+
+@router.get("/santa/previews/{job_id}")
+def santa_preview_job(job_id: str):
+    job = previews.get(job_id)
+    if not job:
+        raise HTTPException(404, "no such preview")
+    return job

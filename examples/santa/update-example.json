@@ -1,0 +1,10 @@
+{
+  "id": "update-example",
+  "format": "update",
+  "segments": [
+    {"type": "title", "text": "Season 2026 is *open*", "sub": "Gifting runs until 6 January"},
+    {"type": "figures", "heading": "Example figures", "figures": [
+      {"value": "1,200+", "label": "gifts sent so far"}, {"value": "300+", "label": "thank-you postcards"}, {"value": "38", "label": "days of gifting left"}]},
+    {"type": "end", "line": "Pick up a wishlist today"}
+  ]
+}

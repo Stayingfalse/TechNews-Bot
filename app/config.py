@@ -188,6 +188,13 @@ class Settings:
         self.santa_buffer_minutes = int(os.environ.get("SANTA_BUFFER_MINUTES", "60"))
         self.santa_nudge_max_minutes = int(os.environ.get("SANTA_NUDGE_MAX_MINUTES", "180"))
         self.santa_render_lead_minutes = int(os.environ.get("SANTA_RENDER_LEAD_MINUTES", "45"))
+        # Narrators (name=id,...; the first is the default): Lily is a built-in voice (any plan),
+        # Archie a library voice for the community pitches. Characters a month: SANTA_VOICE_BUDGET;
+        # past it, videos go out with music and text only.
+        voices = os.environ.get("SANTA_VOICES", "lily=pFZP5JQG7iQjIQuC4Bku,archie=kmSVBPu7loj4ayNinwWM")
+        self.santa_voices = {k.strip().lower(): v.strip() for k, v in (x.split("=", 1) for x in voices.split(",") if "=" in x)}
+        self.santa_voice_model = os.environ.get("SANTA_VOICE_MODEL", "eleven_multilingual_v2")
+        self.santa_voice_budget = int(os.environ.get("SANTA_VOICE_BUDGET", "7000"))
         # How long a render is assumed to take when checking that two channels' renders don't overlap
         self.slot_render_minutes = int(os.environ.get("SLOT_RENDER_MINUTES", "20"))
 

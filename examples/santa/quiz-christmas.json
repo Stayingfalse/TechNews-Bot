@@ -1,0 +1,13 @@
+{
+  "id": "quiz-christmas-example",
+  "format": "quiz",
+  "segments": [
+    {"type": "title", "text": "Only real Christmas fans get *2 out of 2*"},
+    {"type": "question", "question": "Which country is usually credited with bringing the Christmas tree indoors?",
+     "options": ["England", "Germany", "Norway", "USA"], "correct": 1, "note": "Usually traced to 16th-century *Germany*"},
+    {"type": "question", "question": "How many gifts are given in total in The Twelve Days of Christmas?",
+     "options": ["78", "144", "364", "12"], "correct": 2, "note": "One a day for a year, almost: *364*"},
+    {"type": "end", "line": "Give a gift, any day this season"}
+  ],
+  "caption": "How many did you get? Then go and make someone's Christmas. Link in bio."
+}

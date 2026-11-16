@@ -267,16 +267,23 @@ Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas
 - **Clear of the other channels:** `app/slots.py` reads every running channel's posts and render
   windows. A Santa post stays 60 minutes clear of their posts, and its render doesn't overlap
   theirs; a clash is nudged, or the slot is skipped with the reason.
-- **Endpoints (token):** `GET /santa/state`, `GET /santa/slots?count=`,
-  `PUT /santa/anchor?at=YYYY-MM-DDTHH:MM`, and `GET /slots/busy?hours=&channel=` (every channel's
-  busy times).
+- **Videos:** a promo is a list of segments (`title`, `points`, `steps`, `figures`, `question`,
+  `kudos`, `end`; `GET /santa/schema`). They're drawn in the site's own look (night sky and snow,
+  airmail postcards, the 2026 stamp, Archivo), over a carol made in code. Tutorials and pitches get
+  a narrator (ElevenLabs, within `SANTA_VOICE_BUDGET`); the rest are music and text. Examples in
+  `examples/santa/`; `python render_santa.py <spec.json> <out.mp4>` renders one locally.
+- **Endpoints (token):**
+  - `GET /santa/state`, `GET /santa/slots?count=`, `PUT /santa/anchor?at=YYYY-MM-DDTHH:MM`;
+  - `GET /slots/busy?hours=&channel=` (every channel's busy times);
+  - `POST /santa/preview` (render a spec and send it to Discord, never posted),
+    `GET /santa/previews[/{id}]`.
 - **Settings:** `SANTA_ENABLED` (off), `SANTA_HANDLE` (raosanta.uk),
   `SANTA_PLATFORMS` (instagram,youtube), `SANTA_CADENCE_HOURS` (22), `SANTA_WINDOW` (07:00-22:30),
   `SANTA_ANCHOR` (21:30), `SANTA_BUFFER_MINUTES` (60), `SANTA_NUDGE_MAX_MINUTES` (180),
   `SANTA_RENDER_LEAD_MINUTES` (45), `SLOT_RENDER_MINUTES` (20, how long another channel's render
-  is assumed to take).
-- **Nothing renders or posts yet:** the renderer, booking and the live data from the site come next
-  (plan §4).
+  is assumed to take), `SANTA_VOICES` (lily=…,archie=…), `SANTA_VOICE_MODEL`
+  (eleven_multilingual_v2), `SANTA_VOICE_BUDGET` (7000 characters a month).
+- **Nothing posts yet:** booking and the live data from the site come next (plan §4).
 
 ## Channels
 
