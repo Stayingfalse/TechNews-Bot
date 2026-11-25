@@ -340,7 +340,7 @@ def tick(t: datetime | None = None) -> None:
 def _warn_if_low(t: datetime) -> None:
     from . import season
 
-    if any(t < datetime.fromisoformat(j["publish_at"]) <= t + LOW_AHEAD for j in active()):
+    if any(t < datetime.fromisoformat(j["publish_at"]) <= t + LOW_AHEAD for j in active() if j.get("booked_by") != "countdown"):
         return
     if season.finished(t):  # the plan has nothing left to give: the season is over, not stuck
         return
@@ -379,6 +379,9 @@ def _loop() -> None:
                 if time.time() - last_sync > 15 * 60:
                     last_sync = time.time()
                     season.sync()
+                    from . import countdown
+
+                    countdown.sync()
                 tick()
         except Exception:
             log.exception("raosanta.uk tick failed")

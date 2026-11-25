@@ -197,6 +197,9 @@ class Settings:
         self.santa_voice_budget = int(os.environ.get("SANTA_VOICE_BUDGET", "7000"))
         # The season plan (app/santa/season.py): booked this many days ahead, so edits to the file
         # still reach later posts. SANTA_SEASON_FILE replaces santa_season/<year>.json.
+        # The midnight countdown to Christmas (app/santa/countdown.py): a second short video a day
+        self.santa_countdown = _bool("SANTA_COUNTDOWN", True)
+        self.santa_countdown_time = _hhmm("SANTA_COUNTDOWN_TIME", os.environ.get("SANTA_COUNTDOWN_TIME", "00:00"))  # UTC
         self.santa_book_ahead_days = float(os.environ.get("SANTA_BOOK_AHEAD_DAYS", "3"))
         self.santa_season_file = os.environ.get("SANTA_SEASON_FILE", "")
         # raosanta.uk's figures (rast3: GET /api/promo/stats), quoted in videos with {placeholders}.

@@ -3,6 +3,7 @@
 The whole season is planned in [`santa_season/2026.json`](../santa_season/2026.json) (calendar:
 [SANTA_SEASON_2026.md](SANTA_SEASON_2026.md)). There's no routine: once it's switched on, the
 server books the plan 3 days ahead and makes and posts each video itself, until 7 January.
+A second short video, the countdown to Christmas, posts every night at 00:00 UTC until 25 December.
 
 ## 1. The accounts (owner)
 

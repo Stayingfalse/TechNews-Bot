@@ -13,7 +13,7 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-FORMATS = ("tutorial", "pitch", "quiz", "update", "kudos")
+FORMATS = ("tutorial", "pitch", "quiz", "update", "kudos", "countdown")
 VOICED = ("tutorial", "pitch")  # voiced by default; the rest are music and on-screen text
 AUDIENCES = ("workplace", "community", "friends", "everyone")
 HASHTAGS = ("#christmas", "#christmasgifts", "#randomactsofkindness", "#raosanta")
@@ -163,18 +163,29 @@ class Kudos(_Seg):
     image: str | None = Field(default=None, pattern=r"^[\w.-]+\.(jpg|jpeg|png|webp)$")
 
 
+class Countdown(_Seg):
+    """The advent calendar on `date`: a wide shot of the whole board (earlier doors open with their
+    treasures), a pan past two of them, then a zoom into the day's door, which opens and its
+    treasure flies out, with the sleeps left until Christmas (0: Christmas Day) and the day's line.
+    Before December, door 1 rattles but stays shut. Made by app/santa/countdown.py."""
+    type: Literal["countdown"] = "countdown"
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    days: int = Field(ge=0, le=60)
+    line: str = Field(max_length=90)
+
+
 class End(_Seg):
     """The sign-off: the stamp, raosanta.uk and one line."""
     type: Literal["end"] = "end"
     line: str = Field(default="Random Acts, not Secret Santa", max_length=70)
 
 
-Segment = Annotated[Union[Title, Points, Steps, Figures, Question, Kudos, End], Field(discriminator="type")]
+Segment = Annotated[Union[Title, Points, Steps, Figures, Question, Kudos, Countdown, End], Field(discriminator="type")]
 
 
 class PromoSpec(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,60}$")
-    format: Literal["tutorial", "pitch", "quiz", "update", "kudos"]
+    format: Literal["tutorial", "pitch", "quiz", "update", "kudos", "countdown"]
     audience: Literal["workplace", "community", "friends", "everyone"] = "everyone"
     segments: list[Segment] = Field(min_length=2, max_length=10)
     voice: bool | None = Field(default=None, description="Default: on for tutorials and pitches only")
@@ -216,6 +227,8 @@ class PromoSpec(BaseModel):
             raise ValueError("the last segment must be the `end` card")
         if self.format == "quiz" and not any(s.type == "question" for s in self.segments):
             raise ValueError("a quiz needs at least one `question` segment")
+        if self.format == "countdown" and not any(s.type == "countdown" for s in self.segments):
+            raise ValueError("a countdown needs a `countdown` segment")
         if self.format == "kudos" and not any(s.type == "kudos" for s in self.segments):
             raise ValueError("a kudos spotlight needs a `kudos` segment")
         return self

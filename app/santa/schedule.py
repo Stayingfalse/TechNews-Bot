@@ -13,6 +13,7 @@ whole pattern. A slot with no free time near it is skipped, with the reason.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, time, timedelta, timezone
 
 from .. import channels, slots, store
@@ -64,8 +65,30 @@ def default_anchor(t: datetime | None = None) -> datetime:
 
 
 def anchor() -> datetime:
+    """The pattern's first slot. Saved the first time it's needed, so the pattern stays put: unsaved,
+    "the next 21:30" would move on every evening and start a second pattern beside the first. With
+    bookings already made, it's the earliest one's planned slot, so they stay on the pattern."""
     a = state().get("anchor")
-    return datetime.fromisoformat(a) if a else default_anchor()
+    if a:
+        return datetime.fromisoformat(a)
+    first = _earliest_booking()
+    at = first or default_anchor()
+    s = state() | {"anchor": at.astimezone(timezone.utc).isoformat(), "anchor_set_at": store.now_iso(),
+                   "anchor_from": "first booking" if first else "default"}
+    (settings.data_dir / "santa").mkdir(parents=True, exist_ok=True)
+    store._write(STATE, s)
+    return at
+
+
+def _earliest_booking() -> datetime | None:
+    d = settings.data_dir / "santa" / "jobs"
+    planned = []
+    for p in d.glob("*.json") if d.exists() else []:
+        try:
+            planned.append(datetime.fromisoformat(json.loads(p.read_text())["planned"]))
+        except (ValueError, KeyError):
+            continue
+    return min(planned) if planned else None
 
 
 def _next_nominal(prev: datetime) -> datetime:

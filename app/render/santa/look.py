@@ -35,6 +35,7 @@ class C:
     paper = hex_rgb("#fffdf8")
     gold = hex_rgb("#caa24c")
     gold_soft = hex_rgb("#e5cf98")
+    gold_ink = hex_rgb("#9c7a2a")
     pine = hex_rgb("#1f5c47")
     pine_tint = hex_rgb("#d9e9df")
 
@@ -131,7 +132,10 @@ def rich(text: str, style: str, size: int, color: tuple, hi: tuple, max_w: int, 
 def fit(text: str, style: str, start: int, max_w: int, max_lines: int, min_size: int = 34) -> int:
     size = start
     while size > min_size:
-        if len(wrap_words(text, style, size, max_w)) <= max_lines:
+        lines = wrap_words(text, style, size, max_w)
+        f = font(style, size)
+        widest = max((f.getlength(" ".join(w.replace("*", "") for w in ln)) for ln in lines), default=0)
+        if len(lines) <= max_lines and widest <= max_w:  # a single long word can't overflow either
             return size
         size -= 2
     return min_size

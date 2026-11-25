@@ -9,10 +9,10 @@ from __future__ import annotations
 import math
 import re
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
-from ..draw import blit, clamp, ease_out_back, ease_out_cubic, prog
-from ..theme import SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W
+from ..draw import blit, clamp, ease_in_out_cubic, ease_out_back, ease_out_cubic, prog
+from ..theme import H, W, SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W
 from . import look
 from .look import BODY, DISPLAY, SEMI, C
 
@@ -312,5 +312,145 @@ class EndScene(Scene):
         blit(fg, self.pill, SAFE_CX, y, anchor="mt", alpha=s, scale=beat)
 
 
-SCENES = {"title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
+class AdventScene(Scene):
+    """The countdown, filmed on the advent calendar (advent.py): wide on the whole board, a pan past
+    two doors, a zoom into the day's door, which opens, and its treasure flies out to the middle
+    with the sleeps left and the day's line. The doors visited on the pan are picked by the date,
+    so no two days move the same way. Before December, door 1 rattles but stays shut."""
+    WIDE, PAN1, PAN2, ARRIVE = 0.9, 1.7, 2.5, 3.5
+    OPEN, OPEN_FOR, FLY_FOR = 3.7, 0.7, 0.7
+
+    def __init__(self, seg, voice_len=None, **kw):
+        from datetime import date as _date
+
+        from . import advent
+
+        self.day = _date.fromisoformat(seg.date)
+        self.n = seg.days
+        self.december = self.day.month == 12
+        self.target = (25 if self.day.day == 25 else self.day.day) if self.december else 1
+        self.text_at = self.OPEN + self.OPEN_FOR + self.FLY_FOR
+        self.base = self.text_at + 2.4 + _read(seg.line) * 0.5
+        super().__init__(seg, voice_len)
+        self.cal = advent.calendar(self.day)
+        season = self.day.year if self.day.month >= 8 else self.day.year - 1
+        self.doors = advent.layout(season)
+        self.s0 = W / advent.CAL_W
+        opened = list(range(1, self.day.day)) if self.december else []
+        rng = __import__("random").Random(self.day.toordinal())
+        pool = opened if len(opened) >= 2 else [n for n in range(1, 25) if n != self.target]
+        self.visits = rng.sample(pool, 2)
+        x, y, w, h = self.doors[self.target]
+        self.keys = [(0.0, advent.CAL_W / 2, advent.CAL_H / 2, 1.0), (self.WIDE, advent.CAL_W / 2, advent.CAL_H / 2, 1.0)]
+        for t, n in ((self.PAN1, self.visits[0]), (self.PAN2, self.visits[1])):
+            vx, vy, vw, vh = self.doors[n]
+            self.keys.append((t, vx + vw / 2, vy + vh / 2, 2.1))
+        if self.target == 25:  # the wide door at the bottom: fill the width, board above it
+            zoom = 0.96 * W / (w * self.s0)
+            self.keys.append((self.ARRIVE, x + w / 2, y + h / 2 - 260 / (self.s0 * zoom), zoom))
+        else:
+            zoom = max(1.15, min(700 / (w * self.s0), 1100 / (h * self.s0)))
+            self.keys.append((self.ARRIVE, x + w / 2, y + h / 2 + h * 0.35, zoom))
+        self.face = advent.door_face(self.target, w, h)
+        self.hole = advent.recess(self.target, w, h, with_treasure=False)
+        # what comes out: the day's treasure, or in November a padlock (door 1 is locked: no peeking)
+        self.prize = advent.treasure(self.target if self.december else 0, 560)
+        if self.n == 0:
+            self.big = look.rich("It's *Christmas!*", DISPLAY, look.fit("It's Christmas!", DISPLAY, 130, SAFE_W, 2, 60),
+                                 C.label, C.gold, SAFE_W)
+            self.sub = None
+        else:
+            self.big = look.rich(str(self.n), DISPLAY, 230, C.gold, C.gold, SAFE_W)
+            self.sub = look.rich(f"{'sleep' if self.n == 1 else 'sleeps'} until *Christmas*", DISPLAY, 64, C.label, C.gold, SAFE_W)
+        self.line = look.rich(seg.line, SEMI, look.fit(seg.line, SEMI, 46, SAFE_W, 3, 34), C.frost, C.gold, SAFE_W)
+        when = f"{self.day.day} {self.day:%B}"
+        self.kicker = look.rich(when.upper() if self.december else "DOORS OPEN 1 DECEMBER",
+                                SEMI, 40, C.gold, C.gold, SAFE_W)
+
+    # -------------------------------------------------------- camera
+    def camera(self, t: float):
+        keys = self.keys
+        if t >= keys[-1][0]:
+            return keys[-1][1:]
+        for (t0, x0, y0, z0), (t1, x1, y1, z1) in zip(keys, keys[1:]):
+            if t0 <= t < t1:
+                e = ease_in_out_cubic((t - t0) / (t1 - t0))
+                return (x0 + (x1 - x0) * e, y0 + (y1 - y0) * e, math.exp(math.log(z0) + (math.log(z1) - math.log(z0)) * e))
+        return keys[0][1:]
+
+    def _to_screen(self, cam, x, y):
+        cx, cy, z = cam
+        s = self.s0 * z
+        return (x - cx) * s + W / 2, (y - cy) * s + H / 2, s
+
+    def sfx(self):
+        out = [(self.WIDE, "whoosh"), (self.PAN1, "swipe"), (self.PAN2 - 0.1, "whoosh"), (self.ARRIVE - 0.1, "swipe")]
+        if self.december:
+            out += [(self.OPEN - 0.25, "clock"), (self.OPEN, "swipe"), (self.OPEN + self.OPEN_FOR, "chime"),
+                    (self.OPEN + self.OPEN_FOR + 0.1, "shimmer"), (self.text_at, "ding")]
+        else:
+            out += [(self.OPEN + k * 0.22, "clock") for k in range(3)] + [(self.text_at, "ding")]
+        return out
+
+    def render(self, fg, t):
+        cam = self.camera(t)
+        cx, cy, z = cam
+        s = self.s0 * z
+        left, top = cx - W / 2 / s, cy - H / 2 / s
+        view = self.cal.transform((W, H), Image.AFFINE, (1 / s, 0, left, 0, 1 / s, top), resample=Image.BILINEAR)
+        fg.alpha_composite(view)
+        x, y, w, h = self.doors[self.target]
+        sx, sy, _ = self._to_screen(cam, x, y)
+        dw, dh = max(1, int(w * s)), max(1, int(h * s))
+        if self.december and t >= self.OPEN:
+            o = ease_out_cubic(prog(t, self.OPEN, self.OPEN_FOR))
+            fg.alpha_composite(self.hole.resize((dw, dh), Image.BILINEAR), (int(sx), int(sy)))
+            f = math.cos(o * math.pi / 2)
+            if f > 0.03:
+                flap = self.face.resize((max(1, int(dw * f)), dh), Image.BILINEAR)
+                if o > 0:
+                    shade = Image.new("RGBA", flap.size, (0, 0, 0, int(140 * o)))
+                    flap = Image.composite(Image.alpha_composite(flap, shade), flap, flap.getchannel("A"))
+                fg.alpha_composite(flap, (int(sx), int(sy)))
+        elif not self.december and self.OPEN <= t < self.OPEN + 0.7:  # it rattles but won't open
+            jig = int(10 * math.sin((t - self.OPEN) * 40) * (1 - (t - self.OPEN) / 0.7))
+            fg.alpha_composite(self.face.resize((dw, dh), Image.BILINEAR), (int(sx) + jig, int(sy)))
+        # dim the board, then the treasure flies out to the middle
+        reveal = prog(t, self.OPEN + self.OPEN_FOR * 0.5, 0.6)
+        if reveal > 0:
+            fg.alpha_composite(Image.new("RGBA", (W, H), C.night_deep + (int(218 * reveal),)))
+        if self.prize is not None and t >= self.OPEN + self.OPEN_FOR * 0.5:
+            f = ease_out_back(prog(t, self.OPEN + self.OPEN_FOR * 0.5, self.FLY_FOR))
+            fx = sx + dw / 2 + (SAFE_CX - sx - dw / 2) * clamp(f)
+            fy = sy + dh / 2 + (680 - sy - dh / 2) * clamp(f)
+            size = (min(dw, dh) * 0.78) / 560 + (1 - (min(dw, dh) * 0.78) / 560) * f
+            glow = Image.new("RGBA", (760, 760), (0, 0, 0, 0))
+            gd = ImageDraw.Draw(glow)
+            for k, r in enumerate((380, 300, 220)):  # soft rings of warm light
+                gd.ellipse((380 - r, 380 - r, 380 + r, 380 + r), fill=C.gold + (int((14 + 10 * k) * clamp(f)),))
+            blit(fg, glow, fx, fy, scale=0.4 + 0.6 * clamp(f))
+            for k in range(8):  # sparkles turning round it
+                a = t * 1.4 + k * math.pi / 4
+                r = 330 * clamp(f)
+                px, py = fx + r * math.cos(a), fy + r * math.sin(a)
+                rr = 10 + 6 * math.sin(t * 6 + k)
+                ImageDraw.Draw(fg).polygon([(px, py - rr * 2), (px + rr * 0.5, py), (px, py + rr * 2), (px - rr * 0.5, py)],
+                                           fill=C.gold_soft + (int(230 * clamp(f)),))
+            bob = 8 * math.sin(max(0.0, t - self.text_at) * 2.4)
+            blit(fg, self.prize, fx, fy + bob, scale=max(0.05, size))
+        if t >= self.text_at:
+            k = _enter(t, self.text_at)
+            blit(fg, self.kicker, SAFE_CX, TOP + 10, anchor="mt", alpha=k)
+            ytxt = 1090
+            blit(fg, self.big, SAFE_CX, ytxt + 40 * (1 - k), anchor="mt", alpha=k)
+            ytxt += self.big.height - 10
+            if self.sub:
+                q = _enter(t, self.text_at + 0.15)
+                blit(fg, self.sub, SAFE_CX, ytxt + 30 * (1 - q), anchor="mt", alpha=q)
+                ytxt += self.sub.height + 26
+            r = _enter(t, self.text_at + 0.45)
+            blit(fg, self.line, SAFE_CX, ytxt + 20 * (1 - r), anchor="mt", alpha=r)
+
+
+SCENES = {"countdown": AdventScene, "title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
           "question": QuestionScene, "kudos": KudosScene, "end": EndScene}
