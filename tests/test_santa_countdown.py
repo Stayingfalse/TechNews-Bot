@@ -21,13 +21,14 @@ def test_every_night_is_different_and_short():
     specs = [countdown.spec_for(d) for d in DAYS]
     assert [s.segments[0].days for s in specs] == list(range(29, -1, -1))
     assert len({s.segments[0].line for s in specs}) == len(specs)  # a different line every night
-    assert len({(s.segments[0].door, s.music, s.segments[-1].line) for s in specs}) > 10
+    assert len({(s.music, s.segments[-1].line) for s in specs}) >= 5
     assert specs[-1].segments[0].days == 0 and specs[-1].caption.startswith("It's Christmas!")
     assert specs[-2].caption.startswith("1 sleep until Christmas.")
-    assert [s.segments[0].label for s in specs[:2]] == ["26", "27"] and specs[-1].segments[0].label == "25"
+    assert specs[0].segments[0].date == "2026-11-26" and specs[-1].segments[0].date == "2026-12-25"
+    assert specs[5].caption.startswith("24 sleeps until Christmas. Door 1:")
     for s in specs:
         assert not s.voiced and "#christmascountdown" in s.hashtags
-        assert Promo(s).duration < 12
+        assert Promo(s).duration < 14
 
 
 @pytest.fixture
@@ -59,3 +60,19 @@ def test_it_stays_out_of_the_pattern_and_the_warning(clock, discord):
 def test_switched_off(clock, monkeypatch):
     monkeypatch.setattr(settings, "santa_countdown", False)
     assert countdown.sync() == []
+
+
+def test_the_calendar_fills_up_and_every_day_films_differently():
+    from app.render.santa import advent, scenes
+
+    assert sorted(advent.layout(2026)) == list(range(1, 26))
+    assert set(advent.TREASURES) == set(range(26))
+    paths = set()
+    for d in DAYS:
+        sc = scenes.AdventScene(countdown.spec_for(d).segments[0])
+        assert sc.target == (d.day if d.month == 12 else 1)
+        assert sc.target not in sc.visits
+        if d.month == 12 and d.day > 2:
+            assert all(v < d.day for v in sc.visits)  # the pan visits doors already open
+        paths.add(tuple(sc.visits))
+    assert len(paths) >= 25  # the camera takes a different route almost every day

@@ -169,13 +169,24 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      Archie voices the Discord pitches.
    - No kudos spotlights yet: they need the site's kudos opt-in and approval (§5.2).
 
-7. ✅ **The midnight countdown** (owner, 25 Nov): a second video every day at 00:00 UTC, in the
-   quiet hours the pattern never uses, counting down to Christmas Day (`app/santa/countdown.py`).
-   - An advent-calendar door with the date on it swings open on the sleeps left, then the day's
-     line, then the end card. About 9 s, music only (no voice credits).
-   - Every night differs: the number and date, the door's colour, the carol, one of 31 lines (facts
-     and nudges; none needs the site's figures) and the end card's line.
-   - Christmas Day opens on "It's Christmas!".
+7. ✅ **The midnight countdown: an advent calendar** (owner, 25 Nov: "a full advent calendar that
+   zooms in on the correct door, opens it, something special inside; each day slightly unique").
+   A second video every day at 00:00 UTC, in the quiet hours the pattern never uses, until
+   Christmas Day (`app/santa/countdown.py`, board and treasures in `app/render/santa/advent.py`).
+   - **One calendar for the season:** doors 1-24 in a shuffled grid (fixed for the year) and a big
+     door 25. Each day the doors before it stand open with their treasures, so it fills up.
+   - **Each video (about 12 s, music only):**
+     1. a wide shot of the whole board;
+     2. a pan past two earlier doors (picked by the date, so the route differs every day);
+     3. a zoom into the day's door, which swings open;
+     4. its treasure flies out with sparkles, then the sleeps left and a line that goes with it
+        (the robin: "Victorian postmen were nicknamed robins").
+   - **25 treasures drawn in code:** star, bauble, candy cane, snowman, mitten, robin, gingerbread
+     man, bell, holly, present, stocking, tree, Christingle, reindeer, cracker, mince pie, cocoa,
+     a thank-you postcard, pudding, wreath, sleigh, snowflake, the 2026 stamp, Santa's hat, and a
+     gold present for Christmas Day.
+   - **Before December:** door 1 rattles and a padlock pops out ("no peeking"), with a line for
+     each date.
    - Booked 3 days ahead through 25 Dec, made 45 minutes before and posted like any other promo;
      it never takes a pattern slot.
 

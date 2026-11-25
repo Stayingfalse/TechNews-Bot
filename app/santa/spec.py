@@ -164,13 +164,14 @@ class Kudos(_Seg):
 
 
 class Countdown(_Seg):
-    """An advent-calendar door that swings open on the sleeps left until Christmas (0: Christmas Day),
-    then the day's line. Made by app/santa/countdown.py for the midnight countdown."""
+    """The advent calendar on `date`: a wide shot of the whole board (earlier doors open with their
+    treasures), a pan past two of them, then a zoom into the day's door, which opens and its
+    treasure flies out, with the sleeps left until Christmas (0: Christmas Day) and the day's line.
+    Before December, door 1 rattles but stays shut. Made by app/santa/countdown.py."""
     type: Literal["countdown"] = "countdown"
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     days: int = Field(ge=0, le=60)
     line: str = Field(max_length=90)
-    door: Literal["post", "pine", "night", "gold"] = "post"
-    label: str | None = Field(default=None, max_length=3, description="Painted on the door: the date, like an advent calendar")
 
 
 class End(_Seg):
