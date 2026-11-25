@@ -169,6 +169,16 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      Archie voices the Discord pitches.
    - No kudos spotlights yet: they need the site's kudos opt-in and approval (§5.2).
 
+7. ✅ **The midnight countdown** (owner, 25 Nov): a second video every day at 00:00 UTC, in the
+   quiet hours the pattern never uses, counting down to Christmas Day (`app/santa/countdown.py`).
+   - An advent-calendar door with the date on it swings open on the sleeps left, then the day's
+     line, then the end card. About 9 s, music only (no voice credits).
+   - Every night differs: the number and date, the door's colour, the carol, one of 31 lines (facts
+     and nudges; none needs the site's figures) and the end card's line.
+   - Christmas Day opens on "It's Christmas!".
+   - Booked 3 days ahead through 25 Dec, made 45 minutes before and posted like any other promo;
+     it never takes a pattern slot.
+
 ## 5. rast3 (raosanta.uk)
 
 Branch → `dev` → test on dev.raosanta.uk → PR into `main`; one fundamental change a day.

@@ -283,6 +283,10 @@ Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas
     `DELETE /santa/jobs/{id}`, `POST /santa/jobs/{id}/retry`.
 - **Posting:** 45 minutes before each slot the video is made (live figures, voice, render) and
   previewed in Discord; at the slot it goes out as an Instagram Reel and a YouTube Short.
+- **The midnight countdown** (`app/santa/countdown.py`): a second short video every day at 00:00 UTC
+  until Christmas Day. An advent door with the date swings open on the sleeps left, then a
+  different line, door colour and carol each night. Music only. `SANTA_COUNTDOWN` (on),
+  `SANTA_COUNTDOWN_TIME` (00:00, UTC).
 - **The season plan:** every video for the season is in `santa_season/2026.json`, each with a
   date window; the server books it 3 days ahead, one a day, until the plan's `ends` (7 Jan).
   Calendar: [docs/SANTA_SEASON_2026.md](docs/SANTA_SEASON_2026.md). To switch it on:

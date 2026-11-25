@@ -9,10 +9,10 @@ from __future__ import annotations
 import math
 import re
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from ..draw import blit, clamp, ease_out_back, ease_out_cubic, prog
-from ..theme import SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W
+from ..theme import hex_rgb, SAFE_BOTTOM, SAFE_CX, SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_W
 from . import look
 from .look import BODY, DISPLAY, SEMI, C
 
@@ -312,5 +312,76 @@ class EndScene(Scene):
         blit(fg, self.pill, SAFE_CX, y, anchor="mt", alpha=s, scale=beat)
 
 
-SCENES = {"title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
+class CountdownScene(Scene):
+    """An advent-calendar door, numbered with the sleeps left, swings open to show the number big,
+    then the day's line. Day 0 (Christmas Day) opens on "It's Christmas!"."""
+    DOOR_W, DOOR_H = 620, 760
+    OPEN_AT, OPEN_FOR = 0.55, 0.7
+    DOORS = {"post": (C.post, C.post_deep), "pine": (C.pine, hex_rgb("#163f31")),
+             "night": (C.night_raised, C.night_deep), "gold": (C.gold, C.gold_ink)}
+
+    def __init__(self, seg, voice_len=None, **kw):
+        self.base = 3.4 + _read(seg.line) * 0.8
+        super().__init__(seg, voice_len)
+        face, edge = self.DOORS[seg.door]
+        n = seg.days
+        w, h = self.DOOR_W, self.DOOR_H
+        # the door: a panel with a gold frame, its number painted on, a brass knob
+        door = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        d = ImageDraw.Draw(door)
+        d.rounded_rectangle((0, 0, w - 1, h - 1), radius=26, fill=face + (255,), outline=C.gold + (255,), width=10)
+        d.rounded_rectangle((34, 34, w - 35, h - 35), radius=16, outline=edge + (255,), width=6)
+        label = seg.label or str(n)
+        num = look.rich(label, DISPLAY, 190, C.label if seg.door != "gold" else C.ink, C.label, w)
+        door.alpha_composite(num, ((w - num.width) // 2, (h - num.height) // 2 - 30))
+        d.ellipse((w - 90, h // 2 - 22, w - 46, h // 2 + 22), fill=C.gold_soft + (255,), outline=C.gold_ink + (255,), width=4)
+        self.door = door
+        # behind it: the sleeps left (or Christmas), on a cream panel
+        back = look.plain_card(w, h, fill=C.label, outline=C.gold, radius=26, border=10, shadow=12).copy()
+        if n == 0:
+            size = look.fit("It's Christmas!", DISPLAY, 110, w - 120, 2, 50)
+            big = look.rich("It's *Christmas!*", DISPLAY, size, C.post, C.gold_ink, w - 120)
+            back.alpha_composite(big, ((back.width - big.width) // 2, (back.height - big.height) // 2))
+        else:
+            big = look.rich(str(n), DISPLAY, 300, C.post, C.post, w)
+            sub = look.rich("sleep" if n == 1 else "sleeps", DISPLAY, 70, C.ink, C.ink, w)
+            top = (back.height - big.height - sub.height) // 2 - 10
+            back.alpha_composite(big, ((back.width - big.width) // 2, top))
+            back.alpha_composite(sub, ((back.width - sub.width) // 2, top + big.height - 20))
+        self.back = back
+        self.kicker = look.rich("CHRISTMAS COUNTDOWN" if n else "MERRY CHRISTMAS", SEMI, 40, C.gold, C.gold, SAFE_W)
+        self.until = look.rich("until *Christmas*" if n else "from raosanta.uk", DISPLAY, 64, C.label, C.gold, SAFE_W)
+        self.line = look.rich(seg.line, SEMI, look.fit(seg.line, SEMI, 46, SAFE_W, 3, 34), C.frost, C.gold, SAFE_W)
+
+    def sfx(self):
+        return [(0.05, "whoosh"), (self.OPEN_AT, "swipe"), (self.OPEN_AT + self.OPEN_FOR, "chime"),
+                (self.OPEN_AT + self.OPEN_FOR + 0.15, "shimmer")]
+
+    def render(self, fg, t):
+        k = _enter(t, 0.0)
+        blit(fg, self.kicker, SAFE_CX, TOP + 10, anchor="mt", alpha=k)
+        y = TOP + 90
+        p = ease_out_back(prog(t, 0.0, 0.45))
+        cx = SAFE_CX
+        blit(fg, self.back, cx, y + 40 * (1 - clamp(p)), anchor="mt", alpha=clamp(p * 2))
+        # the door swings open on its left hinge: narrower and darker as it turns
+        o = ease_out_cubic(prog(t, self.OPEN_AT, self.OPEN_FOR))
+        if o < 0.98:
+            f = math.cos(o * math.pi / 2)
+            dw = max(1, int(self.DOOR_W * f))
+            door = self.door.resize((dw, self.DOOR_H), Image.BILINEAR)
+            if o > 0:
+                shade = Image.new("RGBA", door.size, (0, 0, 0, int(120 * o)))
+                door = Image.composite(Image.alpha_composite(door, shade), door, door.getchannel("A"))
+            left = cx - self.DOOR_W / 2
+            blit(fg, door, left, y + 12 + 40 * (1 - clamp(p)), anchor="lt", alpha=clamp(p * 2))
+        y += self.back.height + 10
+        u = _enter(t, self.OPEN_AT + self.OPEN_FOR)
+        blit(fg, self.until, SAFE_CX, y + 30 * (1 - u), anchor="mt", alpha=u)
+        y += self.until.height + 30
+        r = _enter(t, self.OPEN_AT + self.OPEN_FOR + 0.4)
+        blit(fg, self.line, SAFE_CX, y + 20 * (1 - r), anchor="mt", alpha=r)
+
+
+SCENES = {"countdown": CountdownScene, "title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
           "question": QuestionScene, "kudos": KudosScene, "end": EndScene}
