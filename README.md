@@ -283,6 +283,9 @@ Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas
     `DELETE /santa/jobs/{id}`, `POST /santa/jobs/{id}/retry`.
 - **Posting:** 45 minutes before each slot the video is made (live figures, voice, render) and
   previewed in Discord; at the slot it goes out as an Instagram Reel and a YouTube Short.
+- **Screen-recorded tutorials:** a `clip` segment plays a recording of the real site
+  (`assets/santa/clips/*.mp4`, filmed by rast3's `scripts/promo-clips/record.mjs` with test data
+  only) in a phone frame under a caption.
 - **The midnight countdown** (`app/santa/countdown.py`, `app/render/santa/advent.py`): a second
   video every day at 00:00 UTC until Christmas Day, filmed on an advent calendar that fills up
   day by day. Wide shot, a pan past opened doors, a zoom into the day's door, which opens; its

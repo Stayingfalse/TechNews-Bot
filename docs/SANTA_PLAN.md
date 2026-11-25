@@ -151,7 +151,19 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      leaves out that figure, its segment, or a caption sentence; the Discord preview lists what was
      left out.
    - `GET /santa/stats` shows what the next video would quote.
-5. **Tutorial clips** (still to do): uploaded from rast3's recording script (`PUT /santa/clips/{name}`).
+5. ✅ **Screen-recorded tutorials** (25 Nov):
+   - **Recording:** rast3's `scripts/promo-clips/record.mjs` films the real site at Pixel 7 size
+     with the test login and the e2e seed, so no real member appears. Frames come from Chrome's
+     screencast at full pixel density (1080×2400), taps show as ripples, and the screens read
+     "elfworks.co.uk" and raosanta.uk.
+   - **The clips** (in `assets/santa/clips/`): `profile-wishlist`, `join-workplace`, `pick-up`,
+     `gifted`, `thank-you`, `friends-group`.
+   - **The `clip` segment** plays one in a phone frame under a caption, trimmed by `start`/`end`;
+     the last frame holds while the narrator finishes.
+   - **In the season plan:** seven tutorials now use them. Discord, Wall of Kindness, "who sees
+     what" and "it arrived" keep their step cards, because there's no clean flow to film for them.
+   - **Re-recording:** when the site's UI changes, run the script against dev (or a local copy)
+     and replace the files.
 6. ✅ **The season plan, not a routine** (owner, 24 Nov: "plan the season out, I'll update in the new
    year"). `santa_season/2026.json` has every video for the season (48: 43 days from 26 Nov to
    7 Jan, plus spares and fillers). Readable calendar: [SANTA_SEASON_2026.md](SANTA_SEASON_2026.md).

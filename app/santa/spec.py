@@ -9,6 +9,7 @@ credits. Text uses the site's face (Archivo), which has no emoji: they're refuse
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -163,6 +164,29 @@ class Kudos(_Seg):
     image: str | None = Field(default=None, pattern=r"^[\w.-]+\.(jpg|jpeg|png|webp)$")
 
 
+CLIPS = Path(__file__).resolve().parents[2] / "assets" / "santa" / "clips"
+
+
+class Clip(_Seg):
+    """A screen recording of the site (assets/santa/clips/<name>.mp4, made by rast3's
+    scripts/promo-clips/record.mjs) playing in a phone, under a caption. `start`/`end` trim it
+    (seconds); if the narrator's line runs longer, the last frame holds."""
+    type: Literal["clip"] = "clip"
+    name: str = Field(pattern=r"^[a-z0-9-]+$")
+    start: float = Field(default=0.0, ge=0)
+    end: float | None = Field(default=None, gt=0)
+    caption: str | None = Field(default=None, max_length=60)
+
+    @model_validator(mode="after")
+    def _exists(self):
+        if not (CLIPS / f"{self.name}.mp4").exists():
+            have = sorted(p.stem for p in CLIPS.glob("*.mp4"))
+            raise ValueError(f"no clip {self.name!r}: one of {have}")
+        if self.end is not None and self.end <= self.start:
+            raise ValueError("end must be after start")
+        return self
+
+
 class Countdown(_Seg):
     """The advent calendar on `date`: a wide shot of the whole board (earlier doors open with their
     treasures), a pan past two of them, then a zoom into the day's door, which opens and its
@@ -180,7 +204,7 @@ class End(_Seg):
     line: str = Field(default="Random Acts, not Secret Santa", max_length=70)
 
 
-Segment = Annotated[Union[Title, Points, Steps, Figures, Question, Kudos, Countdown, End], Field(discriminator="type")]
+Segment = Annotated[Union[Title, Points, Steps, Figures, Question, Kudos, Clip, Countdown, End], Field(discriminator="type")]
 
 
 class PromoSpec(BaseModel):

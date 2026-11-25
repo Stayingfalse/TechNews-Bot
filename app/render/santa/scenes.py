@@ -7,6 +7,7 @@ breath), so the words and the picture stay together.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import re
 
 from PIL import Image, ImageDraw
@@ -452,5 +453,85 @@ class AdventScene(Scene):
             blit(fg, self.line, SAFE_CX, ytxt + 20 * (1 - r), anchor="mt", alpha=r)
 
 
-SCENES = {"countdown": AdventScene, "title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
+def clip_frames(name: str) -> tuple[Path, float]:
+    """The clip's frames as JPEGs at 30 fps (made once, then shared by every render process), and
+    its length in seconds."""
+    import hashlib
+    import subprocess
+    import tempfile
+
+    from ...santa.spec import CLIPS
+
+    src = CLIPS / f"{name}.mp4"
+    key = hashlib.sha1(f"{src.stat().st_mtime_ns}-{src.stat().st_size}".encode()).hexdigest()[:12]
+    out = Path(tempfile.gettempdir()) / "santa-clips" / f"{name}-{key}"
+    if not out.exists():
+        part = out.with_name(out.name + f".part{__import__('os').getpid()}")
+        part.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(src), "-vf", f"fps=30,scale={ClipScene.SCREEN_W}:-2",
+                        "-q:v", "3", str(part / "%05d.jpg")], check=True)
+        try:
+            part.rename(out)
+        except OSError:  # another process made it first
+            import shutil
+
+            shutil.rmtree(part, ignore_errors=True)
+    n = len(list(out.glob("*.jpg")))
+    return out, n / 30.0
+
+
+class ClipScene(Scene):
+    """A screen recording of the site in a phone, under a caption. The phone rises in, the clip
+    plays from `start` to `end`, and the last frame holds while the narrator finishes."""
+    SCREEN_W = 560
+    BEZEL, RADIUS = 20, 62
+    PLAY_AT = 0.35
+
+    def __init__(self, seg, voice_len=None, **kw):
+        self.dir, length = clip_frames(seg.name)
+        self.start = seg.start
+        self.end = min(seg.end or length, length)
+        self.base = self.PLAY_AT + (self.end - self.start) + 0.5
+        super().__init__(seg, voice_len)
+        first = Image.open(self.dir / "00001.jpg")
+        self.sw, self.sh = first.size
+        self.caption = (look.rich(seg.caption, DISPLAY, look.fit(seg.caption, DISPLAY, 60, SAFE_W, 2, 40), C.label, C.gold, SAFE_W)
+                        if seg.caption else None)
+        b, r = self.BEZEL, self.RADIUS
+        phone = Image.new("RGBA", (self.sw + 2 * b, self.sh + 2 * b), (0, 0, 0, 0))
+        d = ImageDraw.Draw(phone)
+        d.rounded_rectangle((0, 0, phone.width - 1, phone.height - 1), radius=r + b, fill=C.ink + (255,),
+                            outline=C.gold_ink + (255,), width=3)
+        self.phone = phone
+        self.mask = Image.new("L", (self.sw, self.sh), 0)
+        ImageDraw.Draw(self.mask).rounded_rectangle((0, 0, self.sw - 1, self.sh - 1), radius=r, fill=255)
+        self._frame = (None, None)
+
+    def _screen(self, k: int) -> Image.Image:
+        if self._frame[0] != k:
+            path = self.dir / f"{k:05d}.jpg"
+            self._frame = (k, Image.open(path).convert("RGB") if path.exists() else self._frame[1])
+        return self._frame[1]
+
+    def sfx(self):
+        return [(0.02, "whoosh")]
+
+    def render(self, fg, t):
+        y = TOP + 10
+        if self.caption:
+            c = _enter(t, 0.0)
+            blit(fg, self.caption, SAFE_CX, y + 24 * (1 - c), anchor="mt", alpha=c)
+            y += self.caption.height + 30
+        p = ease_out_cubic(prog(t, 0.0, 0.45))
+        top = y + 260 * (1 - p)
+        clip_t = min(self.end, self.start + max(0.0, t - self.PLAY_AT))
+        k = min(int(clip_t * 30) + 1, int(self.end * 30))
+        phone = self.phone.copy()
+        phone.paste(self._screen(max(1, k)), (self.BEZEL, self.BEZEL), self.mask)
+        ImageDraw.Draw(phone).rounded_rectangle((phone.width / 2 - 60, self.BEZEL + 14, phone.width / 2 + 60, self.BEZEL + 34),
+                                                radius=10, fill=C.ink + (255,))
+        blit(fg, phone, SAFE_CX, top, anchor="mt", alpha=clamp(p * 1.4))
+
+
+SCENES = {"clip": ClipScene, "countdown": AdventScene, "title": TitleScene, "points": ListScene, "steps": ListScene, "figures": FiguresScene,
           "question": QuestionScene, "kudos": KudosScene, "end": EndScene}
