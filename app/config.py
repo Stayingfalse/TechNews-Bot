@@ -195,6 +195,10 @@ class Settings:
         self.santa_voices = {k.strip().lower(): v.strip() for k, v in (x.split("=", 1) for x in voices.split(",") if "=" in x)}
         self.santa_voice_model = os.environ.get("SANTA_VOICE_MODEL", "eleven_multilingual_v2")
         self.santa_voice_budget = int(os.environ.get("SANTA_VOICE_BUDGET", "7000"))
+        # The season plan (app/santa/season.py): booked this many days ahead, so edits to the file
+        # still reach later posts. SANTA_SEASON_FILE replaces santa_season/<year>.json.
+        self.santa_book_ahead_days = float(os.environ.get("SANTA_BOOK_AHEAD_DAYS", "3"))
+        self.santa_season_file = os.environ.get("SANTA_SEASON_FILE", "")
         # raosanta.uk's figures (rast3: GET /api/promo/stats), quoted in videos with {placeholders}.
         # The token is the site's PROMO_API_TOKEN; without it, segments that quote figures are left out.
         self.raosanta_api_url = os.environ.get("RAOSANTA_API_URL", "https://raosanta.uk").rstrip("/")

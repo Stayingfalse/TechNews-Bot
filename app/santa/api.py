@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from .. import channels, slots
 from ..config import settings
-from . import jobs, previews, schedule, source, spec as promo
+from . import jobs, previews, schedule, season, source, spec as promo
 
 router = APIRouter(tags=["santa"])
 
@@ -121,10 +121,25 @@ def _job_row(j: dict) -> dict:
         "local": jobs._local(j["publish_at"])}
 
 
-@router.post("/santa/week")
-def santa_week(body: dict = Body(...)):
-    """Book a batch of promos: {"items": [spec, ...], "replace": false}. Each takes the next free
-    slot of the pattern, in order. All or nothing: 409 lists every problem. `replace` first
+@router.get("/santa/season")
+def santa_season():
+    """The season plan (santa_season/<year>.json): every promo, with its date window and where it
+    stands (posted, booked and when, waiting, expired), plus any problems with the file."""
+    return season.report()
+
+
+@router.post("/santa/season/sync")
+def santa_season_sync():
+    """Book the season plan now (the server does this every 15 minutes while SANTA_ENABLED is on)."""
+    if not settings.santa_enabled:
+        raise HTTPException(409, "SANTA_ENABLED is off: nothing is booked")
+    return {"booked": [_job_row(j) for j in season.sync()]}
+
+
+@router.post("/santa/book")
+def santa_book(body: dict = Body(...)):
+    """Book one-off promos outside the season plan: {"items": [spec, ...], "replace": false}. Each
+    takes the next free slot, in order. All or nothing: 409 lists every problem. `replace` first
     cancels everything still only booked. Each is made SANTA_RENDER_LEAD_MINUTES before its slot
     (live figures, voice, render, a Discord preview) and posted at the slot."""
     items = body.get("items")

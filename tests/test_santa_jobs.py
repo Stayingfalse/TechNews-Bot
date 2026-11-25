@@ -115,7 +115,7 @@ def test_made_before_its_slot_then_posted_at_it(world, live, discord):
     title, caption = live["sent"][0][1], live["sent"][0][2]
     assert title == "Remote team? | raosanta.uk" and "#raosanta" in caption and "raosanta.uk" in caption
     assert not (settings.videos_dir / j["video"]).exists()  # every platform has it
-    assert "posted" in discord[-1][0]
+    assert any("raosanta.uk posted" in m for m, _ in discord)
 
 
 def test_nothing_goes_out_unless_publishing_is_on(world, discord, monkeypatch):
@@ -174,7 +174,7 @@ def test_cancel_and_recover(world, discord):
 def test_low_queue_warning_once_a_day(world, discord):
     jobs.tick()
     jobs.tick()
-    assert sum("only 0 promo(s) booked ahead" in m for m, _ in discord) == 1
+    assert sum("nothing is booked for the next 48 hours" in m for m, _ in discord) == 1
 
 
 def test_posts_reach_the_metrics(world, live):
@@ -193,10 +193,10 @@ def test_endpoints(world):
     from app.main import app
 
     c = TestClient(app)
-    assert c.post("/santa/week", json={"items": [promo("one")]}).status_code == 401
-    r = c.post("/santa/week", headers=H, json={"items": [promo("one"), promo("one")]})
+    assert c.post("/santa/book", json={"items": [promo("one")]}).status_code == 401
+    r = c.post("/santa/book", headers=H, json={"items": [promo("one"), promo("one")]})
     assert r.status_code == 409 and any("used twice" in p for p in r.json()["detail"])
-    r = c.post("/santa/week", headers=H, json={"items": [promo("one")]})
+    r = c.post("/santa/book", headers=H, json={"items": [promo("one")]})
     assert r.status_code == 200 and r.json()["booked"][0]["local"] == "Mon 23 Nov 21:30"
     jid = r.json()["booked"][0]["id"]
     slot = c.get("/santa/slots", headers=H, params={"count": 2}).json()["slots"][0]

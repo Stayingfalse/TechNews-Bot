@@ -1,0 +1,1798 @@
+{
+ "year": 2026,
+ "ends": "2027-01-07",
+ "about": "raosanta.uk's 2026 season, booked a few days ahead by app/santa/season.py. Each promo posts only within its from/until window (UK dates); items without one are fillers. Nothing is booked after `ends`. Edit freely: changes reach every promo not yet booked.",
+ "items": [
+  {
+   "until": "2026-11-26",
+   "spec": {
+    "id": "drive-opens-soon-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Gifting opens *{season.opensOn}*",
+      "sub": "Share your wishlist before it does"
+     },
+     {
+      "type": "figures",
+      "heading": "Already signed up",
+      "figures": [
+       {
+        "value": "{groups.workplaces}",
+        "label": "workplaces"
+       },
+       {
+        "value": "{groups.communities}",
+        "label": "communities"
+       },
+       {
+        "value": "{thisSeason.membersTakingPart}",
+        "label": "people ready for {season.year}"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "Gifting opens {season.opensOn}. Add your Amazon wishlist now and you're in from day one. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-11-29",
+   "spec": {
+    "id": "open-day-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Gifting is *open*",
+      "sub": "Until {season.closesOn}. Pick up a wishlist today"
+     },
+     {
+      "type": "figures",
+      "heading": "Taking part this year",
+      "figures": [
+       {
+        "value": "{thisSeason.membersTakingPart}",
+        "label": "people checked in"
+       },
+       {
+        "value": "{groups.workplaces}",
+        "label": "workplaces"
+       },
+       {
+        "value": "{groups.communities}",
+        "label": "communities"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "Gifting is open on raosanta.uk until {season.closesOn}. Pick up a random wishlist whenever you're ready. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "pitch-workplace-remote-2026",
+    "format": "pitch",
+    "audience": "workplace",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Remote team? *Nobody* needs a home address.",
+      "sub": "Christmas gifts for colleagues, from Amazon wishlists",
+      "say": "Remote team? Send Christmas gifts to colleagues without anyone sharing a home address."
+     },
+     {
+      "type": "points",
+      "heading": "How it works at work",
+      "items": [
+       "Join with your work email",
+       "Share your Amazon wishlist",
+       "Pick up a colleague's list when you're ready",
+       "Amazon delivers. Addresses stay private."
+      ],
+      "say": "Join with your work email, share your wishlist, and pick up a colleague's list whenever you're ready. Amazon delivers, so addresses stay private."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "No draw, no addresses, no awkwardness. Christmas gifting for remote and hybrid teams. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "tutorial-pick-up-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "How to be someone's *Santa*",
+      "say": "Here's how to be someone's Santa this Christmas."
+     },
+     {
+      "type": "steps",
+      "heading": "Your first gift",
+      "steps": [
+       "Open your group on raosanta.uk",
+       "Pick up a random wishlist",
+       "Buy something from it on Amazon",
+       "Mark it Gifted"
+      ],
+      "say": "Open your group, pick up a random wishlist, buy something from it on Amazon, then mark it gifted. They never find out it was you."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Pick up a random wishlist, gift something from it, mark it Gifted. You stay anonymous. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "pitch-friends-no-draw-2026",
+    "format": "pitch",
+    "audience": "friends",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Hate the Secret Santa *draw*?",
+      "sub": "Friends and family, minus the awkward bit",
+      "say": "Hate the Secret Santa draw? Try Random Acts instead."
+     },
+     {
+      "type": "points",
+      "heading": "Random Acts instead",
+      "items": [
+       "No draw and no fixed pairs",
+       "Invite friends with a link or code",
+       "Gift as many or as few as you like",
+       "Buy from their own wishlist: no guessing"
+      ],
+      "say": "There's no draw and no fixed pairs. Invite your friends with a link, and gift as many or as few as you like, straight from their own wishlists."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "No draw, no pairs, no guessing what to buy. Start a friends group on raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "quiz-films-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Only real Christmas film fans get *2 out of 2*"
+     },
+     {
+      "type": "question",
+      "question": "In Home Alone, where are the McCallisters flying to when Kevin is left behind?",
+      "options": [
+       "London",
+       "Paris",
+       "Rome",
+       "New York"
+      ],
+      "correct": 1,
+      "note": "They're off to *Paris*"
+     },
+     {
+      "type": "question",
+      "question": "In Elf, which city does Buddy travel to from the North Pole?",
+      "options": [
+       "Chicago",
+       "Boston",
+       "New York",
+       "Toronto"
+      ],
+      "correct": 2,
+      "note": "Buddy heads to *New York*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "How many did you get? Then go and make someone's Christmas: pick up a wishlist on raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "pitch-community-discord-2026",
+    "format": "pitch",
+    "audience": "community",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Run a *Discord* server?",
+      "sub": "Christmas gifts for your members, no addresses",
+      "say": "Run a Discord server? Here's Christmas for your whole community, and nobody shares an address."
+     },
+     {
+      "type": "points",
+      "heading": "Your server, but Santa",
+      "items": [
+       "Link your server to a community",
+       "Members join through Discord",
+       "They pick up each other's wishlists",
+       "Amazon delivers. Nobody shares an address."
+      ],
+      "say": "Link your server, members join through Discord, and they pick up each other's Amazon wishlists whenever they like."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Gifts between server members, with no addresses shared. Free on raosanta.uk. Link in bio.",
+    "voice_name": "archie"
+   }
+  },
+  {
+   "from": "2026-11-27",
+   "until": "2026-12-03",
+   "spec": {
+    "id": "tutorial-who-sees-what-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Who sees *what*?",
+      "say": "Worried about privacy? Here's who sees what."
+     },
+     {
+      "type": "steps",
+      "heading": "Anonymous by design",
+      "steps": [
+       "Your Santa is never shown to you",
+       "Amazon delivers: no addresses shared",
+       "Thank-yous use a festive name",
+       "Your real name stays private"
+      ],
+      "say": "Your Santa is never shown to you. Amazon delivers, so no addresses are shared. And thank-yous appear under a festive name, not your real one."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Anonymous gifts, private addresses, festive names. That's Random Acts of Santa. Link in bio."
+   }
+  },
+  {
+   "until": "2026-12-03",
+   "spec": {
+    "id": "tutorial-share-wishlist-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Get a gift *without* giving out your address",
+      "say": "Want a Christmas gift without giving anyone your address? Here's how."
+     },
+     {
+      "type": "steps",
+      "heading": "Takes two minutes",
+      "steps": [
+       "Sign in at raosanta.uk",
+       "Add your Amazon wishlist link",
+       "Join your work, server or friends group",
+       "Check in for the {season.year} season"
+      ],
+      "say": "Sign in, add your Amazon wishlist, join your group and check in for this season. Amazon delivers, so your address stays private."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Amazon wishlists deliver without showing your address. Add yours in two minutes. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "week-one-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Week one: *thank you*",
+      "sub": "Every gift so far was someone's random act"
+     },
+     {
+      "type": "figures",
+      "heading": "So far this season",
+      "figures": [
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent"
+       },
+       {
+        "value": "{thisSeason.giftsLast7Days}",
+        "label": "in the last 7 days"
+       },
+       {
+        "value": "{season.daysToClose}",
+        "label": "days of gifting left"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "{thisSeason.gifts} gifts sent so far this season. Want to send one? Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "tutorial-link-discord-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas for your *Discord* server",
+      "say": "Here's how to set up Christmas gifting for your Discord server."
+     },
+     {
+      "type": "steps",
+      "heading": "Set it up in minutes",
+      "steps": [
+       "Start a community on raosanta.uk",
+       "Link your Discord server",
+       "Members join through the server",
+       "Everyone picks up when they're ready"
+      ],
+      "say": "Start a community, link your Discord server, and members join through it. Then everyone picks up wishlists when they're ready."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Server owners and mods: link your Discord server and your members can gift each other. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "quiz-carol-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "A Christmas Carol: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Who wrote A Christmas Carol, first published in 1843?",
+      "options": [
+       "Charles Dickens",
+       "Jane Austen",
+       "Thomas Hardy",
+       "Lewis Carroll"
+      ],
+      "correct": 0,
+      "note": "*Charles Dickens*, in just six weeks"
+     },
+     {
+      "type": "question",
+      "question": "What's the name of Scrooge's dead business partner?",
+      "options": [
+       "Bob Cratchit",
+       "Jacob Marley",
+       "Tiny Tim",
+       "Fred"
+      ],
+      "correct": 1,
+      "note": "*Jacob Marley*, in his chains"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "How did you do? Be someone's Ghost of Christmas Present: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "pitch-workplace-teams-2026",
+    "format": "pitch",
+    "audience": "workplace",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas for a team that *never meets*?",
+      "sub": "Gifts that arrive at home, privately",
+      "say": "Christmas for a team that never meets in person? Here's how."
+     },
+     {
+      "type": "points",
+      "heading": "Built for work",
+      "items": [
+       "Colleagues join with their work email",
+       "Split into teams if you like",
+       "Gifts go straight to their home",
+       "Free this year"
+      ],
+      "say": "Colleagues join with their work email, you can split into teams, and gifts go straight to their homes without anyone sharing an address."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Organisers: set up your workplace in minutes. Free this year. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "tutorial-friends-code-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Start a *friends* group",
+      "say": "Want to do Christmas with your friends or family? Start a group."
+     },
+     {
+      "type": "steps",
+      "heading": "Family, flatmates, the group chat",
+      "steps": [
+       "Start a friends group",
+       "Share the invite link or code",
+       "Everyone adds their wishlist",
+       "Pick up each other's lists"
+      ],
+      "say": "Start a friends group, share the invite link, and once everyone's added a wishlist, you pick up each other's lists."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Family, flatmates or the group chat: one link and you're all in. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "quiz-songs-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas songs: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which song does Guinness World Records list as the best-selling single of all time?",
+      "options": [
+       "Last Christmas",
+       "White Christmas",
+       "Jingle Bell Rock",
+       "Silent Night"
+      ],
+      "correct": 1,
+      "note": "Bing Crosby's *White Christmas*"
+     },
+     {
+      "type": "question",
+      "question": "Which song plays as the boy and the Snowman fly in the 1982 film?",
+      "options": [
+       "Winter Wonderland",
+       "Let It Snow",
+       "Walking in the Air",
+       "Frosty the Snowman"
+      ],
+      "correct": 2,
+      "note": "*Walking in the Air*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Now it's stuck in your head. Send a gift while you hum: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "tutorial-gifted-arrived-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Sent a gift? *Tell us*",
+      "say": "Sent a gift? Here's what happens next."
+     },
+     {
+      "type": "steps",
+      "heading": "What happens next",
+      "steps": [
+       "Buy from their Amazon wishlist",
+       "Mark it Gifted on raosanta.uk",
+       "They're told a gift is on its way",
+       "They can tell you it arrived"
+      ],
+      "say": "Mark it gifted, and a few days later they're told a gift is on its way, never who it's from. When it arrives, they can let you know."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Mark your gift as Gifted and they'll hear one's coming. You stay anonymous. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-04",
+   "until": "2026-12-11",
+   "spec": {
+    "id": "quiz-food-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas food: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "On Stir-up Sunday, people traditionally make which Christmas food?",
+      "options": [
+       "Mince pies",
+       "Christmas pudding",
+       "Gingerbread",
+       "Trifle"
+      ],
+      "correct": 1,
+      "note": "*Christmas pudding*, stirred by everyone"
+     },
+     {
+      "type": "question",
+      "question": "What was traditionally hidden in a Christmas pudding for luck?",
+      "options": [
+       "A ring",
+       "A coin",
+       "A bean",
+       "A key"
+      ],
+      "correct": 1,
+      "note": "A *coin*, often a silver sixpence"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then pick up a wishlist: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-16",
+   "spec": {
+    "id": "last-orders-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Order by *{season.lastOrderOn}*",
+      "sub": "Amazon UK's last day for Christmas delivery"
+     },
+     {
+      "type": "figures",
+      "heading": "Still time",
+      "figures": [
+       {
+        "value": "{season.daysToLastOrder}",
+        "label": "days left to order"
+       },
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent so far"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "Amazon UK's last day for Christmas delivery is {season.lastOrderOn}. Pick up a wishlist today. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "pitch-nobody-left-out-2026",
+    "format": "pitch",
+    "audience": "everyone",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Some wishlists have *no gifts* yet",
+      "sub": "Want to change that?",
+      "say": "Some wishlists haven't had a single gift yet. Want to change that?"
+     },
+     {
+      "type": "points",
+      "heading": "Nobody left out",
+      "items": [
+       "The fewest-gifted lists come first",
+       "Pick one up tonight",
+       "Amazon can still deliver",
+       "Late gifts still count"
+      ],
+      "say": "When you pick up a wishlist, the ones with the fewest gifts come first. Pick one up tonight, and if it arrives late, it still counts."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "We hand out the fewest-gifted wishlists first, so nobody's left out. Pick one up tonight. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "quiz-carol-2-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Grinches and ghosts: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Not counting Marley, how many spirits visit Scrooge?",
+      "options": [
+       "Two",
+       "Three",
+       "Four",
+       "Five"
+      ],
+      "correct": 1,
+      "note": "*Three*: Past, Present and Yet to Come"
+     },
+     {
+      "type": "question",
+      "question": "What's the name of the Grinch's dog?",
+      "options": [
+       "Max",
+       "Rex",
+       "Buddy",
+       "Scout"
+      ],
+      "correct": 0,
+      "note": "*Max*, with one antler"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Don't be a Grinch: pick up a wishlist on raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "tutorial-thank-you-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Got a gift? Say *thanks*",
+      "say": "Got a gift from a mystery Santa? Here's how to say thank you."
+     },
+     {
+      "type": "steps",
+      "heading": "A postcard, not a name",
+      "steps": [
+       "Open raosanta.uk when it arrives",
+       "Post a thank-you postcard",
+       "Add a photo if you like",
+       "It shows your festive name"
+      ],
+      "say": "When it arrives, post a thank-you postcard, with a photo if you like. It shows your festive name, so your Santa sees the thanks without either of you being named."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Your Santa can't hear you say thanks, but they can read it. Post a thank-you postcard. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "quiz-plants-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas plants: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "The red 'petals' of a poinsettia are actually what?",
+      "options": [
+       "Flowers",
+       "Leaves",
+       "Berries",
+       "Seeds"
+      ],
+      "correct": 1,
+      "note": "*Leaves*, called bracts"
+     },
+     {
+      "type": "question",
+      "question": "What colour are mistletoe berries?",
+      "options": [
+       "Red",
+       "Black",
+       "White",
+       "Orange"
+      ],
+      "correct": 2,
+      "note": "*White*, and not for eating"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then send a gift: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "pitch-community-mods-2026",
+    "format": "pitch",
+    "audience": "community",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Mods: Christmas for the *whole server*",
+      "sub": "Even the people you've never met",
+      "say": "Mods, here's a Christmas the whole server can join, even people who've never met."
+     },
+     {
+      "type": "points",
+      "heading": "Why servers use it",
+      "items": [
+       "Members join through your server",
+       "Nobody shares an address",
+       "Anyone can gift, anyone can receive",
+       "Thank-yous use festive names"
+      ],
+      "say": "Members join through your server, nobody shares an address, and anyone can gift or receive. Thank-yous use festive names."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Link your Discord server to a community on raosanta.uk and your members can gift each other. Link in bio.",
+    "voice_name": "archie"
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "thank-yous-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "The thank-yous are *in*",
+      "sub": "Every one posted under a festive name"
+     },
+     {
+      "type": "figures",
+      "heading": "This season so far",
+      "figures": [
+       {
+        "value": "{thisSeason.thankYous}",
+        "label": "thank-you postcards"
+       },
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent"
+       },
+       {
+        "value": "{season.daysToLastOrder}",
+        "label": "days left to order"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "{thisSeason.thankYous} thank-you postcards so far this season. Add to the pile: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "quiz-reindeer-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Santa's reindeer: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which reindeer shares a name with the Roman god of love?",
+      "options": [
+       "Comet",
+       "Cupid",
+       "Vixen",
+       "Dasher"
+      ],
+      "correct": 1,
+      "note": "*Cupid*"
+     },
+     {
+      "type": "question",
+      "question": "Rudolph first appeared in 1939 in what?",
+      "options": [
+       "A film",
+       "A department store booklet",
+       "A newspaper comic",
+       "A song"
+      ],
+      "correct": 1,
+      "note": "A *department store* giveaway booklet"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "How did you do? Guide a gift through the fog: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-12",
+   "until": "2026-12-20",
+   "spec": {
+    "id": "tutorial-more-wishlists-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Gifted everyone you *picked up*?",
+      "say": "Gifted everyone you picked up? There's always another list."
+     },
+     {
+      "type": "steps",
+      "heading": "There's always another list",
+      "steps": [
+       "Ask for more wishlists",
+       "Pick up another random list",
+       "Gift whatever fits your budget",
+       "Mark it Gifted"
+      ],
+      "say": "Ask for more wishlists, pick up another random one, and gift whatever fits your budget. Then mark it gifted."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Done already? Pick up another wishlist and make one more person's Christmas. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-21",
+   "until": "2026-12-23",
+   "spec": {
+    "id": "quiz-films-2-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas films: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which film is about a magical train to the North Pole?",
+      "options": [
+       "Elf",
+       "The Polar Express",
+       "Arthur Christmas",
+       "Klaus"
+      ],
+      "correct": 1,
+      "note": "*The Polar Express*"
+     },
+     {
+      "type": "question",
+      "question": "In The Nightmare Before Christmas, who is the Pumpkin King?",
+      "options": [
+       "Oogie Boogie",
+       "Jack Skellington",
+       "Lock",
+       "Zero"
+      ],
+      "correct": 1,
+      "note": "*Jack Skellington*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! There's still time to send a gift: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-21",
+   "until": "2026-12-23",
+   "spec": {
+    "id": "pitch-late-gifts-2026",
+    "format": "pitch",
+    "audience": "everyone",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Missed the *last order day*?",
+      "sub": "It's not too late",
+      "say": "Missed the last order day? It's not too late."
+     },
+     {
+      "type": "points",
+      "heading": "Late gifts still count",
+      "items": [
+       "Gifting stays open until {season.closesOn}",
+       "A January gift is still a gift",
+       "Plenty of lists still need one",
+       "Pick one up tonight"
+      ],
+      "say": "Gifting stays open into January, and a gift that turns up after Christmas is still a gift. Plenty of lists are still waiting."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Gifting stays open until {season.closesOn}. A late gift still counts. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-24",
+   "until": "2026-12-24",
+   "spec": {
+    "id": "quiz-christmas-eve-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas Eve quiz: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "What do people in France call Father Christmas?",
+      "options": [
+       "Papa Noel",
+       "Père Noël",
+       "Saint Nicolas",
+       "Le Père Fouettard"
+      ],
+      "correct": 1,
+      "note": "*Père Noël*"
+     },
+     {
+      "type": "question",
+      "question": "Which country's children are visited by 13 Yule Lads?",
+      "options": [
+       "Iceland",
+       "Norway",
+       "Finland",
+       "Scotland"
+      ],
+      "correct": 0,
+      "note": "*Iceland*"
+     },
+     {
+      "type": "end",
+      "line": "Merry Christmas Eve"
+     }
+    ],
+    "caption": "Merry Christmas Eve from raosanta.uk. Comment your score!"
+   }
+  },
+  {
+   "from": "2026-12-25",
+   "until": "2026-12-25",
+   "spec": {
+    "id": "christmas-day-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Merry Christmas from *raosanta.uk*",
+      "sub": "To every Santa, and everyone they surprised"
+     },
+     {
+      "type": "figures",
+      "heading": "This season",
+      "figures": [
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent"
+       },
+       {
+        "value": "{thisSeason.thankYous}",
+        "label": "thank-you postcards"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Thank you, Santas"
+     }
+    ],
+    "caption": "Merry Christmas! Thank you to every Santa this year."
+   }
+  },
+  {
+   "from": "2026-12-26",
+   "until": "2026-12-26",
+   "spec": {
+    "id": "quiz-boxing-day-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Boxing Day quiz: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Krampus, Santa's scary companion, comes from folklore usually linked to which country?",
+      "options": [
+       "Spain",
+       "Austria",
+       "Ireland",
+       "Greece"
+      ],
+      "correct": 1,
+      "note": "Alpine folklore: *Austria* and Bavaria"
+     },
+     {
+      "type": "question",
+      "question": "A Christingle is traditionally made from which fruit?",
+      "options": [
+       "Apple",
+       "Orange",
+       "Lemon",
+       "Pear"
+      ],
+      "correct": 1,
+      "note": "An *orange*, with a candle"
+     },
+     {
+      "type": "end",
+      "line": "Got a gift? Post a thank-you"
+     }
+    ],
+    "caption": "Happy Boxing Day! Comment your score."
+   }
+  },
+  {
+   "from": "2026-12-21",
+   "until": "2026-12-27",
+   "spec": {
+    "id": "tutorial-wall-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Organisers: make a *Wall of Kindness*",
+      "say": "Organisers, here's how to show off your group's thank-yous."
+     },
+     {
+      "type": "steps",
+      "heading": "Your group's thank-yous, together",
+      "steps": [
+       "Open your organiser console",
+       "Make your group's Wall of Kindness",
+       "Share it with everyone",
+       "It shows festive names only"
+      ],
+      "say": "Open your organiser console and make your group's Wall of Kindness. Share it, and everyone sees the thank-yous, under festive names only."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Organisers: once your group has a few thank-yous, make a Wall of Kindness and share it. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-21",
+   "until": "2026-12-27",
+   "spec": {
+    "id": "quiz-films-3-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Is it a Christmas film? *2 out of 2*"
+     },
+     {
+      "type": "question",
+      "question": "In Die Hard, what's the name of the villain?",
+      "options": [
+       "Hans Gruber",
+       "Karl Vreski",
+       "Simon Gruber",
+       "Harry Ellis"
+      ],
+      "correct": 0,
+      "note": "*Hans Gruber*"
+     },
+     {
+      "type": "question",
+      "question": "In Love Actually, which character turns up with cue cards?",
+      "options": [
+       "Mark",
+       "Jamie",
+       "Harry",
+       "Billy"
+      ],
+      "correct": 0,
+      "note": "*Mark*, at the door"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "The debate continues. Comment your score."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2026-12-31",
+   "spec": {
+    "id": "season-so-far-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "What a *Christmas*",
+      "sub": "Here's what you all did"
+     },
+     {
+      "type": "figures",
+      "heading": "This season",
+      "figures": [
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent"
+       },
+       {
+        "value": "{thisSeason.thankYous}",
+        "label": "thank-you postcards"
+       },
+       {
+        "value": "{thisSeason.membersTakingPart}",
+        "label": "people taking part"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "Thank you to everyone who took part. Gifting is open until {season.closesOn}. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "quiz-saints-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Where did *Santa* come from?"
+     },
+     {
+      "type": "question",
+      "question": "Santa Claus is based on which saint?",
+      "options": [
+       "Saint Patrick",
+       "Saint Nicholas",
+       "Saint Christopher",
+       "Saint George"
+      ],
+      "correct": 1,
+      "note": "*Saint Nicholas*, a 4th-century bishop"
+     },
+     {
+      "type": "question",
+      "question": "In Germany, on which date do children leave out shoes for Saint Nicholas?",
+      "options": [
+       "6 December",
+       "24 December",
+       "1 January",
+       "6 January"
+      ],
+      "correct": 0,
+      "note": "The night before *6 December*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Gifting is open until {season.closesOn}."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "tutorial-say-thanks-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Still need to say *thank you*?",
+      "say": "Got a gift this Christmas? There's still time to say thank you."
+     },
+     {
+      "type": "steps",
+      "heading": "Before the season closes",
+      "steps": [
+       "Sign in at raosanta.uk",
+       "Find the gift that arrived",
+       "Post your thank-you postcard",
+       "Your Santa will see it"
+      ],
+      "say": "Sign in, find the gift that arrived, and post a thank-you postcard. Your Santa will see it, even though they stay anonymous."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "The season closes on {season.closesOn}. Make sure your Santa hears thanks. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "quiz-veg-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Leftovers quiz: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Brussels sprouts belong to which plant family?",
+      "options": [
+       "Cabbage",
+       "Onion",
+       "Potato",
+       "Pea"
+      ],
+      "correct": 0,
+      "note": "The *cabbage* family"
+     },
+     {
+      "type": "question",
+      "question": "In The Twelve Days of Christmas, what comes on the first day?",
+      "options": [
+       "Two turtle doves",
+       "A partridge in a pear tree",
+       "Five gold rings",
+       "Three French hens"
+      ],
+      "correct": 1,
+      "note": "*A partridge in a pear tree*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score!"
+   }
+  },
+  {
+   "from": "2027-01-01",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "days-left-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Gifting closes *{season.closesOn}*",
+      "sub": "A few days left"
+     },
+     {
+      "type": "figures",
+      "heading": "Last chance",
+      "figures": [
+       {
+        "value": "{season.daysToClose}",
+        "label": "days left"
+       },
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent this season"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa"
+     }
+    ],
+    "caption": "Gifting closes {season.closesOn}. One more random act? Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "quiz-films-4-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas classics: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which film has the line 'Every time a bell rings, an angel gets his wings'?",
+      "options": [
+       "Miracle on 34th Street",
+       "It's a Wonderful Life",
+       "White Christmas",
+       "Holiday Inn"
+      ],
+      "correct": 1,
+      "note": "*It's a Wonderful Life*"
+     },
+     {
+      "type": "question",
+      "question": "In Home Alone 2, which city does Kevin end up in?",
+      "options": [
+       "Miami",
+       "Chicago",
+       "New York",
+       "Los Angeles"
+      ],
+      "correct": 2,
+      "note": "*New York*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score!"
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "tutorial-it-arrived-2026",
+    "format": "tutorial",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Did your gift *arrive*?",
+      "say": "Did your gift arrive? Let your Santa know."
+     },
+     {
+      "type": "steps",
+      "heading": "Let your Santa know",
+      "steps": [
+       "Sign in at raosanta.uk",
+       "Find the gift you were told about",
+       "Tell us it arrived",
+       "Post a thank-you if you like"
+      ],
+      "say": "Sign in, find the gift you were told about, and tell us it arrived. Your Santa gets the good news, and you can post a thank-you too."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Your Santa is wondering if it arrived. Let them know. Link in bio."
+   }
+  },
+  {
+   "from": "2026-12-28",
+   "until": "2027-01-05",
+   "spec": {
+    "id": "pitch-friends-new-year-2026",
+    "format": "pitch",
+    "audience": "friends",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Next year, skip the *draw*",
+      "sub": "Random Acts of Santa is back every November",
+      "say": "Next Christmas, skip the Secret Santa draw."
+     },
+     {
+      "type": "points",
+      "heading": "Remember us",
+      "items": [
+       "No draw and no fixed pairs",
+       "Gifts from real wishlists",
+       "Nobody shares an address",
+       "Free to use"
+      ],
+      "say": "No draw, no pairs, gifts from real wishlists and no addresses shared. We're back every November."
+     },
+     {
+      "type": "end",
+      "line": "Random Acts, not Secret Santa",
+      "say": "Random Acts of Santa. Free at raosanta dot UK."
+     }
+    ],
+    "caption": "Follow for next season: raosanta.uk opens again in November. Link in bio."
+   }
+  },
+  {
+   "from": "2027-01-06",
+   "until": "2027-01-06",
+   "spec": {
+    "id": "last-day-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Last day of the *season*",
+      "sub": "Gifting closes tonight"
+     },
+     {
+      "type": "figures",
+      "heading": "This season",
+      "figures": [
+       {
+        "value": "{thisSeason.gifts}",
+        "label": "gifts sent"
+       },
+       {
+        "value": "{thisSeason.thankYous}",
+        "label": "thank-you postcards"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "See you in November"
+     }
+    ],
+    "caption": "Last day of the {season.year} season. Thank you, Santas."
+   }
+  },
+  {
+   "from": "2027-01-07",
+   "until": "2027-01-10",
+   "spec": {
+    "id": "wrap-2026",
+    "format": "update",
+    "segments": [
+     {
+      "type": "title",
+      "text": "That's a wrap for *{season.year}*",
+      "sub": "Thank you to every Santa"
+     },
+     {
+      "type": "figures",
+      "heading": "All time",
+      "figures": [
+       {
+        "value": "{allTime.gifts}",
+        "label": "gifts sent on raosanta.uk"
+       },
+       {
+        "value": "{allTime.thankYous}",
+        "label": "thank-you postcards"
+       }
+      ]
+     },
+     {
+      "type": "end",
+      "line": "Back next November"
+     }
+    ],
+    "caption": "That's a wrap. Thank you for every random act. Back next November."
+   }
+  },
+  {
+   "spec": {
+    "id": "quiz-traditions-1-2026",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas traditions: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which country is usually credited with bringing the Christmas tree indoors?",
+      "options": [
+       "England",
+       "Germany",
+       "Norway",
+       "USA"
+      ],
+      "correct": 1,
+      "note": "Usually traced to 16th-century *Germany*"
+     },
+     {
+      "type": "question",
+      "question": "Which country gives London the Trafalgar Square Christmas tree each year?",
+      "options": [
+       "Sweden",
+       "Denmark",
+       "Norway",
+       "Finland"
+      ],
+      "correct": 2,
+      "note": "A thank-you from *Norway*, every year since 1947"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then give a gift: raosanta.uk. Link in bio."
+   }
+  },
+  {
+   "spec": {
+    "id": "quiz-filler-carols",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Christmas carols: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which carol has the line 'Good tidings we bring'?",
+      "options": [
+       "Deck the Halls",
+       "We Wish You a Merry Christmas",
+       "Silent Night",
+       "Jingle Bells"
+      ],
+      "correct": 1,
+      "note": "*We Wish You a Merry Christmas*"
+     },
+     {
+      "type": "question",
+      "question": "On the fifth day of Christmas, what did my true love give to me?",
+      "options": [
+       "Four calling birds",
+       "Five gold rings",
+       "Six geese a-laying",
+       "Three French hens"
+      ],
+      "correct": 1,
+      "note": "*Five gold rings*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then give a gift: raosanta.uk."
+   }
+  },
+  {
+   "spec": {
+    "id": "quiz-filler-nativity",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Nativity quiz: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "Which of these was NOT one of the wise men's gifts?",
+      "options": [
+       "Gold",
+       "Frankincense",
+       "Silver",
+       "Myrrh"
+      ],
+      "correct": 2,
+      "note": "*Silver*: it was myrrh"
+     },
+     {
+      "type": "question",
+      "question": "How many reindeer pull the sleigh in 'A Visit from St. Nicholas'?",
+      "options": [
+       "Six",
+       "Eight",
+       "Nine",
+       "Twelve"
+      ],
+      "correct": 1,
+      "note": "*Eight*: Rudolph came later"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then give a gift: raosanta.uk."
+   }
+  },
+  {
+   "spec": {
+    "id": "quiz-filler-snow",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Snow and ice: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "How many sides does a snowflake usually have?",
+      "options": [
+       "Four",
+       "Five",
+       "Six",
+       "Eight"
+      ],
+      "correct": 2,
+      "note": "*Six*, every time"
+     },
+     {
+      "type": "question",
+      "question": "Christmas Island is in which ocean?",
+      "options": [
+       "Atlantic",
+       "Pacific",
+       "Indian",
+       "Arctic"
+      ],
+      "correct": 2,
+      "note": "The *Indian* Ocean"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then give a gift: raosanta.uk."
+   }
+  },
+  {
+   "spec": {
+    "id": "quiz-filler-twelve",
+    "format": "quiz",
+    "segments": [
+     {
+      "type": "title",
+      "text": "Twelve Days maths: *2 out of 2*?"
+     },
+     {
+      "type": "question",
+      "question": "How many gifts are given in total in The Twelve Days of Christmas?",
+      "options": [
+       "78",
+       "144",
+       "364",
+       "12"
+      ],
+      "correct": 2,
+      "note": "One a day for a year, almost: *364*"
+     },
+     {
+      "type": "question",
+      "question": "Which reindeer's name comes from the word for lightning?",
+      "options": [
+       "Donner",
+       "Blitzen",
+       "Dancer",
+       "Prancer"
+      ],
+      "correct": 1,
+      "note": "*Blitzen*"
+     },
+     {
+      "type": "end",
+      "line": "Give a gift, any day this season"
+     }
+    ],
+    "caption": "Comment your score! Then give a gift: raosanta.uk."
+   }
+  }
+ ]
+}

@@ -12,6 +12,7 @@ Friday in November), closing on 6 Jan. The site's figures give the current dates
 |---|---|
 | Account | **@raosanta.uk** on Instagram and YouTube (`SANTA_HANDLE`, `SANTA_PLATFORMS`) |
 | Cadence | **One post every 22 hours**, inside 07:00-22:30 UK: each post lands two hours earlier in the day than the one before (§2) |
+| Content | **Planned for the whole season up front** in `santa_season/2026.json`, no weekly routine (owner, 24 Nov); revisit in the new year |
 | Other channels | Never within 60 minutes of another channel's post, and never rendering while another channel renders (§2). The Santa channel always gives way. |
 | Voice-over | **Half the posts.** Tutorials and pitches have a voice-over; quizzes, season updates and kudos spotlights use music and on-screen text (§3). |
 | Kudos | Every kudos posted before the opt-in checkbox ships counts as consented (an older privacy policy covered it). New ones need the poster's tick. **Every one still needs a site admin's approval** before the bot can use it (§5). |
@@ -123,8 +124,8 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      Discord; nothing is posted. `GET /santa/previews[/{id}]`. Locally:
      `python render_santa.py examples/santa/quiz-christmas.json out/q.mp4`.
 3. ✅ **Booking and posting** (`app/santa/jobs.py`):
-   - `POST /santa/week` takes the routine's batch (all or nothing; ids never reused) and books
-     each promo into the next free slot, in order.
+   - Bookings come from the season plan (step 6); `POST /santa/book` adds one-offs (all or
+     nothing; ids never reused), each into the next free slot, in order.
    - `SANTA_RENDER_LEAD_MINUTES` (45) before a slot, the post is checked again against the other
      channels (nudged if something has appeared near it). Then the figures are filled, the voice
      made, the video rendered and the preview sent to Discord.
@@ -133,13 +134,12 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
    - One platform failing keeps the video for `POST /santa/jobs/{id}/retry`, which posts only to
      the platforms that don't have it.
    - A server restart mid-post marks it failed rather than risk posting twice.
-   - Discord gets a warning, once a day, when fewer than 3 posts are booked ahead.
+   - Discord gets a warning, once a day, when nothing is booked for the next 48 hours.
    - Posts reach the metrics and dashboard tagged by format, audience, voice, music, hour and
      length.
    - Endpoints: `GET /santa/jobs[/{id}]`, `DELETE /santa/jobs/{id}`. `GET /santa/slots` shows
      what's booked in each slot.
-   - The weekly routine: [SANTA_ROUTINE_PROMPT.md](SANTA_ROUTINE_PROMPT.md). Switching on:
-     [SANTA_LAUNCH.md](SANTA_LAUNCH.md).
+   - Switching on: [SANTA_LAUNCH.md](SANTA_LAUNCH.md).
 4. ✅ **Live figures** (`app/santa/source.py`):
    - A spec quotes the site's figures with placeholders such as `{allTime.gifts}`,
      `{season.opensOn}` or `{season.daysToClose}`; the full list is in `GET /santa/schema` →
@@ -152,9 +152,22 @@ December. `SANTA_VOICE_BUDGET` will cap it, and past the cap a video goes out wi
      left out.
    - `GET /santa/stats` shows what the next video would quote.
 5. **Tutorial clips** (still to do): uploaded from rast3's recording script (`PUT /santa/clips/{name}`).
-6. **The weekly routine** (prompt written: `docs/SANTA_ROUTINE_PROMPT.md`; the routine itself isn't created yet): picks the week's mix for the season
-   phase and last week's numbers, writes the scripts and quizzes, and checks quiz facts. The weekly
-   review covers this channel too.
+6. ✅ **The season plan, not a routine** (owner, 24 Nov: "plan the season out, I'll update in the new
+   year"). `santa_season/2026.json` has every video for the season (48: 43 days from 26 Nov to
+   7 Jan, plus spares and fillers). Readable calendar: [SANTA_SEASON_2026.md](SANTA_SEASON_2026.md).
+   - Each item can have a date window (`from`/`until`, UK dates). The server
+     (`app/santa/season.py`) books 3 days ahead (`SANTA_BOOK_AHEAD_DAYS`): each free slot takes the
+     first item, in file order, whose window includes that day; undated items are fillers.
+     Nothing is booked after `ends`.
+   - A window that passes unused expires, so a late start just drops the first few.
+   - A video whose figures can't be shown at render time (hidden under 10, or no last order date)
+     is swapped for the next one in the plan that needs no figures.
+   - `GET /santa/season` shows every item: posted, booked (when), waiting, expired.
+     `POST /santa/season/sync` books now.
+   - The mix, one a day: 15 quizzes, 10 tutorials, 8 pitches (workplace, community, friends and
+     "nobody left out"), 10 season updates with live figures. Tutorials and pitches are voiced;
+     Archie voices the Discord pitches.
+   - No kudos spotlights yet: they need the site's kudos opt-in and approval (§5.2).
 
 ## 5. rast3 (raosanta.uk)
 
@@ -180,6 +193,8 @@ Branch → `dev` → test on dev.raosanta.uk → PR into `main`; one fundamental
 5. **Prod:** the owner sets `PROMO_API_TOKEN` on `ras/raosanta-uk`.
 
 ## 6. Still open
+
+- Kudos spotlights (rast3 §5.2) and screen-recorded tutorials (§4 step 5): not built.
 
 - Where the extra ~7k ElevenLabs credits come from (§3).
 - Outside the season: pause the channel, or post a weekly countdown.

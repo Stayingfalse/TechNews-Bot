@@ -1,5 +1,6 @@
-"""raosanta.uk's bookings: the weekly routine sends a batch of promos (POST /santa/week), each
-takes the next free slot of the 22-hour pattern (schedule.py), and from then on the server runs it:
+"""raosanta.uk's bookings. The season plan (season.py: santa_season/<year>.json) books each promo
+into a free slot of the 22-hour pattern (schedule.py) a few days ahead; one-offs can be booked
+with POST /santa/book. From then on the server runs each one:
 
     booked ──(SANTA_RENDER_LEAD_MINUTES before)──► preparing: check the slot still keeps clear
       of the other channels (nudge it if not), fill in the site's live figures, voice, render,
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 ACTIVE = ("booked", "preparing", "scheduled", "publishing")
 MISSED_AFTER = timedelta(hours=2)
 STALE = timedelta(minutes=25)  # in progress this long untouched: the process doing it died
-LOW_QUEUE = 3  # warn (once a day) when fewer posts than this are booked ahead
+LOW_AHEAD = timedelta(hours=48)  # warn (once a day) when nothing is booked this far ahead
 _mine: set[str] = set()
 
 
@@ -127,15 +128,21 @@ def book(items: list, replace: bool = False) -> list[dict]:
     rows = free_slots(len(specs))
     if len(rows) < len(specs):
         raise ValueError([f"only {len(rows)} free slots found for {len(specs)} promos"])
+    return book_into(list(zip(specs, rows)), "by hand")
+
+
+def book_into(pairs: list[tuple[PromoSpec, dict]], source: str) -> list[dict]:
+    """Book each spec into its slot row (from free_slots), and say so in Discord."""
     out = []
-    for spec, row in zip(specs, rows):
+    for spec, row in pairs:
         job = {"id": f"santa-{datetime.fromisoformat(row['at']).astimezone(settings.tz):%Y%m%d-%H%M}-{secrets.token_hex(2)}",
-               "channel": channels.SANTA, "status": "booked", "created_at": store.now_iso(),
+               "channel": channels.SANTA, "status": "booked", "created_at": store.now_iso(), "booked_by": source,
                "planned": row["planned"], "publish_at": row["at"], "spec": spec.model_dump(), "results": {}}
         save(job)
         out.append(job)
-    lines = [f"`{_local(j['publish_at'])}` {j['spec']['format']}: {j['spec']['id']}" for j in out]
-    notify.send(f":santa: **raosanta.uk**: {len(out)} promo(s) booked\n" + "\n".join(lines))
+    if out:
+        lines = [f"`{_local(j['publish_at'])}` {j['spec']['format']}: {j['spec']['id']}" for j in out]
+        notify.send(f":santa: **raosanta.uk**: {len(out)} promo(s) booked ({source})\n" + "\n".join(lines))
     return out
 
 
@@ -179,7 +186,20 @@ def prepare(job: dict) -> None:
     try:
         spec = PromoSpec.model_validate(job["spec"])
         if source.uses_figures(spec):
-            spec, job["left_out"] = source.fill(spec, source.fetch())
+            try:
+                spec, job["left_out"] = source.fill(spec, source.fetch())
+            except ValueError as e:  # nothing left to show: play another promo from the plan instead
+                from . import season
+
+                day = datetime.fromisoformat(job["publish_at"]).astimezone(settings.tz).date()
+                other = season.substitute(day, exclude=spec.id)
+                if not other:
+                    raise
+                job.update(replaced=spec.id, replaced_why=str(e)[:300], spec=other.model_dump())
+                save(job)  # the first promo's id is free again, for a day its figures show
+                notify.send(f":santa: **raosanta.uk** `{job['id']}`: {spec.id} has no figures to show yet, so "
+                            f"{other.id} plays instead.")
+                spec = other
         job["filled"] = spec.model_dump()
         with previews._render_lock:
             lines, job["voice"] = voice.lines(spec)
@@ -318,16 +338,19 @@ def tick(t: datetime | None = None) -> None:
 
 
 def _warn_if_low(t: datetime) -> None:
-    ahead = [j for j in active() if datetime.fromisoformat(j["publish_at"]) > t]
-    if len(ahead) >= LOW_QUEUE:
+    from . import season
+
+    if any(t < datetime.fromisoformat(j["publish_at"]) <= t + LOW_AHEAD for j in active()):
+        return
+    if season.finished(t):  # the plan has nothing left to give: the season is over, not stuck
         return
     st = schedule.state()
     today = t.astimezone(settings.tz).date().isoformat()
     if st.get("low_warned") == today:
         return
     store._write(schedule.STATE, st | {"low_warned": today})
-    notify.send(f":warning: **raosanta.uk**: only {len(ahead)} promo(s) booked ahead. The weekly routine books the "
-                "next batch (POST /santa/week); is it running?")
+    notify.send(":warning: **raosanta.uk**: nothing is booked for the next 48 hours. The season plan has no promo "
+                "whose dates fit those slots (GET /santa/season), or it has problems.")
 
 
 def recover(stale: timedelta = STALE) -> None:
@@ -346,10 +369,16 @@ def recover(stale: timedelta = STALE) -> None:
 
 
 def _loop() -> None:
+    from . import season
+
+    last_sync = 0.0
     while True:
         try:
             if settings.santa_enabled and lease.held():
                 recover()
+                if time.time() - last_sync > 15 * 60:
+                    last_sync = time.time()
+                    season.sync()
                 tick()
         except Exception:
             log.exception("raosanta.uk tick failed")
