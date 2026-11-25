@@ -256,6 +256,49 @@ every 15 min   read new comments on the open race's post → reply to each bet (
 
 Fonts for the race videos: Inter (OFL) and JetBrains Mono, in `assets/fonts/racing`.
 
+## raosanta.uk channel (promo videos)
+
+A fifth channel, being built: short promo videos for [raosanta.uk](https://raosanta.uk) (Random
+Acts of Santa) on **@raosanta.uk**, Instagram and YouTube, through the Christmas season. Plan:
+[docs/SANTA_PLAN.md](docs/SANTA_PLAN.md).
+
+- **When:** one post every 22 hours inside 07:00-22:30, so each lands two hours earlier in the day
+  than the last; one that would land before 07:00 goes to 21:30 that evening.
+- **Clear of the other channels:** `app/slots.py` reads every running channel's posts and render
+  windows. A Santa post stays 60 minutes clear of their posts, and its render doesn't overlap
+  theirs; a clash is nudged, or the slot is skipped with the reason.
+- **Videos:** a promo is a list of segments (`title`, `points`, `steps`, `figures`, `question`,
+  `kudos`, `end`; `GET /santa/schema`). They're drawn in the site's own look (night sky and snow,
+  airmail postcards, the 2026 stamp, Archivo), over a carol made in code. Tutorials and pitches get
+  a narrator (ElevenLabs, within `SANTA_VOICE_BUDGET`); the rest are music and text. Examples in
+  `examples/santa/`; `python render_santa.py <spec.json> <out.mp4>` renders one locally.
+- **Endpoints (token):**
+  - `GET /santa/state`, `GET /santa/slots?count=`, `PUT /santa/anchor?at=YYYY-MM-DDTHH:MM`;
+  - `GET /slots/busy?hours=&channel=` (every channel's busy times);
+  - `POST /santa/preview` (render a spec and send it to Discord, never posted),
+    `GET /santa/previews[/{id}]`;
+  - `GET /santa/stats` (the site's live figures, as the next video would quote them);
+  - `GET /santa/season`, `POST /santa/season/sync` (the season plan and where each video stands);
+  - `POST /santa/book` (one-offs into the next free slots), `GET /santa/jobs[/{id}]`,
+    `DELETE /santa/jobs/{id}`, `POST /santa/jobs/{id}/retry`.
+- **Posting:** 45 minutes before each slot the video is made (live figures, voice, render) and
+  previewed in Discord; at the slot it goes out as an Instagram Reel and a YouTube Short.
+- **The season plan:** every video for the season is in `santa_season/2026.json`, each with a
+  date window; the server books it 3 days ahead, one a day, until the plan's `ends` (7 Jan).
+  Calendar: [docs/SANTA_SEASON_2026.md](docs/SANTA_SEASON_2026.md). To switch it on:
+  [docs/SANTA_LAUNCH.md](docs/SANTA_LAUNCH.md).
+- **Live figures:** a spec can quote raosanta.uk's rounded figures with placeholders
+  (`{allTime.gifts}`, `{season.opensOn}`, ...). They're fetched from the site's
+  `/api/promo/stats` at render time; a figure the site hides (under 10) leaves out what quotes it.
+- **Settings:** `SANTA_ENABLED` (off), `SANTA_HANDLE` (raosanta.uk),
+  `SANTA_PLATFORMS` (instagram,youtube), `SANTA_CADENCE_HOURS` (22), `SANTA_WINDOW` (07:00-22:30),
+  `SANTA_ANCHOR` (21:30), `SANTA_BUFFER_MINUTES` (60), `SANTA_NUDGE_MAX_MINUTES` (180),
+  `SANTA_RENDER_LEAD_MINUTES` (45), `SLOT_RENDER_MINUTES` (20, how long another channel's render
+  is assumed to take), `SANTA_VOICES` (lily=…,archie=…), `SANTA_VOICE_MODEL`
+  (eleven_multilingual_v2), `SANTA_VOICE_BUDGET` (7000 characters a month), `RAOSANTA_API_URL`
+  (https://raosanta.uk), `RAOSANTA_API_TOKEN` (the site's `PROMO_API_TOKEN`),
+  `SANTA_BOOK_AHEAD_DAYS` (3), `SANTA_SEASON_FILE` (default `santa_season/<year>.json`).
+
 ## Channels
 
 Built for one channel today (the quiz account) with the seams for several: jobs record their channel,

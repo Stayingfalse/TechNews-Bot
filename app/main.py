@@ -26,6 +26,7 @@ from .adventure import jobs as adventure_jobs
 from .adventure import voice as adventure_voice
 from .adventure import votes as adventure_votes_mod
 from .colony import api as colony_api
+from .santa import api as santa_api
 from .config import settings
 from .publish import LABELS, PUBLISHERS
 from .racing import jobs as racing_jobs
@@ -50,6 +51,9 @@ async def lifespan(_: FastAPI):
     from .colony import jobs as colony_jobs
 
     colony_jobs.start_background()
+    from .santa import jobs as santa_jobs
+
+    santa_jobs.start_background()
     yield
 
 
@@ -858,6 +862,11 @@ def theme_suggestions(days: int = Query(default=8, ge=1, le=30)):
 # ------------------------------------------------------------------ Farside (the colony): routine endpoints
 
 app.include_router(colony_api.router, dependencies=[Depends(require_token)])
+
+
+# ------------------------------------------------------------------ raosanta.uk (promo videos) and the shared busy list
+
+app.include_router(santa_api.router, dependencies=[Depends(require_token)])
 
 
 # ------------------------------------------------------------------ racing channel (Sixel Speedway)

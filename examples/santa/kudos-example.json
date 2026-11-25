@@ -1,0 +1,8 @@
+{
+  "id": "kudos-example",
+  "format": "kudos",
+  "segments": [
+    {"type": "kudos", "name": "Frosty Robin", "message": "Example message: the book I'd wanted all year turned up today. Whoever you are, thank you!"},
+    {"type": "end", "line": "Someone's waiting on a gift like this"}
+  ]
+}

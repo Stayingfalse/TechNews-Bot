@@ -1,7 +1,8 @@
 """Channels: one brand posting one kind of content to its own social accounts.
 
-Three channels: "main" (the quiz account, built from the existing settings), "adventure" (the
-dungeon crawl, docs/ADVENTURE_PLAN.md) and "racing" (Sixel Speedway, docs/RACING_PLAN.md). Every job records its channel, the worker runs each job
+The channels: "main" (the quiz account, built from the existing settings), "adventure" (the
+dungeon crawl, docs/ADVENTURE_PLAN.md), "racing" (Sixel Speedway, docs/RACING_PLAN.md), "colony"
+(Farside, docs/COLONY_PLAN.md) and "santa" (raosanta.uk promo videos, docs/SANTA_PLAN.md). Every job records its channel, the worker runs each job
 "as" its channel, OAuth tokens are stored per channel, and /oauth/{platform}/start?channel=…
 connects a channel's own accounts. See docs/MULTI_ACCOUNT.md for what's still to come.
 """
@@ -17,13 +18,14 @@ MAIN = "main"
 ADVENTURE = "adventure"
 RACING = "racing"
 COLONY = "colony"
+SANTA = "santa"
 
 
 @dataclass(frozen=True)
 class Channel:
     id: str
     name: str
-    kind: str  # the content it makes: "quiz", "adventure" or "racing"
+    kind: str  # the content it makes: "quiz", "adventure", "racing", "colony" or "promo"
     brand_handle: str
     post_time: str
     platforms: list[str] = field(default_factory=list)
@@ -37,13 +39,15 @@ def registry() -> dict[str, Channel]:
         RACING: Channel(RACING, "Sixel Speedway", "racing", settings.racing_handle, settings.racing_post_time,
                         list(settings.racing_platforms)),
         COLONY: Channel(COLONY, "Farside", "colony", settings.colony_handle, settings.colony_post_time, ["instagram"]),
+        # no fixed time: it moves round the day every SANTA_CADENCE_HOURS (app/santa/schedule.py)
+        SANTA: Channel(SANTA, "raosanta.uk", "promo", settings.santa_handle, "varies", list(settings.santa_platforms)),
     }
 
 
 def active() -> dict[str, Channel]:
-    """The channels that are running: a switched-off one (RACING_ENABLED, COLONY_ENABLED false) keeps
-    its posts and numbers, but its logins aren't watched."""
-    off = {RACING: not settings.racing_enabled, COLONY: not settings.colony_enabled}
+    """The channels that are running: a switched-off one (RACING_ENABLED, COLONY_ENABLED, SANTA_ENABLED
+    false) keeps its posts and numbers, but its logins aren't watched."""
+    off = {RACING: not settings.racing_enabled, COLONY: not settings.colony_enabled, SANTA: not settings.santa_enabled}
     return {cid: ch for cid, ch in registry().items() if not off.get(cid)}
 
 

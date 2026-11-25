@@ -1,0 +1,14 @@
+{
+  "id": "pitch-workplace-example",
+  "format": "pitch",
+  "audience": "workplace",
+  "segments": [
+    {"type": "title", "text": "Remote team? *Nobody* needs a home address.", "sub": "Christmas gifts for colleagues, from Amazon wishlists",
+     "say": "Remote team? Send Christmas gifts to your colleagues without anyone sharing a home address."},
+    {"type": "points", "heading": "How it works at work", "items": [
+      "Join with your work email", "Share your Amazon wishlist", "Pick up a colleague's list when you're ready", "Amazon delivers. Addresses stay private."],
+     "say": "Join with your work email, share your wishlist, and pick up a colleague's list whenever you're ready. Amazon delivers, so addresses stay private."},
+    {"type": "end", "line": "Random Acts, not Secret Santa", "say": "Random Acts of Santa. Free at raosanta dot UK."}
+  ],
+  "caption": "No draw, no addresses, no awkwardness. Christmas gifting for remote teams. Link in bio."
+}

@@ -216,10 +216,31 @@ def _colony_posts() -> list[dict]:
     return out
 
 
+def _santa_posts() -> list[dict]:
+    from .santa import jobs as sjobs
+
+    out = []
+    for job in sjobs.all_jobs():
+        if not job.get("published_at") or not any((r or {}).get("ok") for r in job.get("results", {}).values()):
+            continue
+        spec, when = job.get("filled") or job["spec"], _when(job)
+        dur = (job.get("render") or {}).get("duration") or 0
+        tags = {"format": spec["format"], "audience": spec.get("audience") or "everyone",
+                "voice": "on" if job.get("voice") == "on" else "off",
+                "music": (job.get("render") or {}).get("music") or "none",
+                "hour": f"{datetime.fromisoformat(job['publish_at']).astimezone(settings.tz):%H}:00",
+                "weekday": when.strftime("%a"), "length": _length(dur)}
+        hook = next((s.get("text") for s in spec["segments"] if s["type"] == "title"), None) or spec["id"]
+        out.append({"id": job["id"], "channel": channels.SANTA, "published_at": job["published_at"],
+                    "slot": job["publish_at"][:10], "title": hook.replace("*", ""), "duration": dur,
+                    "results": {k: v for k, v in job["results"].items() if v.get("ok")}, "tags": tags, "extra": {}})
+    return out
+
+
 def posts(channel: str | None = None) -> list[dict]:
     """Posts that went out to at least one platform, newest first; one channel's, or every channel's."""
     makers = {channels.MAIN: _quiz_posts, channels.ADVENTURE: _adventure_posts, channels.RACING: _racing_posts,
-              channels.COLONY: _colony_posts}
+              channels.COLONY: _colony_posts, channels.SANTA: _santa_posts}
     out = []
     for ch, make in makers.items():
         if channel in (None, ch):

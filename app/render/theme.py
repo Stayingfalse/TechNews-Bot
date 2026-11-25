@@ -78,6 +78,10 @@ _STYLES = {
     "bold": ("BricolageGrotesque-VF", (800, 100)),
     "semi": ("BricolageGrotesque-VF", (620, 100)),
     "medium": ("BricolageGrotesque-VF", (500, 100)),
+    # raosanta.uk's own face (app/render/santa): Archivo, as on the site
+    "santa-display": ("ArchivoExpanded-800", None),
+    "santa-semi": ("Archivo-600", None),
+    "santa-body": ("Archivo-400", None),
 }
 
 
