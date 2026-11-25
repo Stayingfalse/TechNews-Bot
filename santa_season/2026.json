@@ -125,15 +125,16 @@
       "say": "Here's how to be someone's Santa this Christmas."
      },
      {
-      "type": "steps",
-      "heading": "Your first gift",
-      "steps": [
-       "Open your group on raosanta.uk",
-       "Pick up a random wishlist",
-       "Buy something from it on Amazon",
-       "Mark it Gifted"
-      ],
-      "say": "Open your group, pick up a random wishlist, buy something from it on Amazon, then mark it gifted. They never find out it was you."
+      "type": "clip",
+      "name": "pick-up",
+      "caption": "Pick up *three* wishlists",
+      "say": "Open raosanta dot UK and pick up three random wishlists."
+     },
+     {
+      "type": "clip",
+      "name": "gifted",
+      "caption": "Buy one, then mark it *Gifted*",
+      "say": "Buy something from one on Amazon, then mark it gifted. They never find out it was you."
      },
      {
       "type": "end",
@@ -300,15 +301,16 @@
       "say": "Want a Christmas gift without giving anyone your address? Here's how."
      },
      {
-      "type": "steps",
-      "heading": "Takes two minutes",
-      "steps": [
-       "Sign in at raosanta.uk",
-       "Add your Amazon wishlist link",
-       "Join your work, server or friends group",
-       "Check in for the {season.year} season"
-      ],
-      "say": "Sign in, add your Amazon wishlist, join your group and check in for this season. Amazon delivers, so your address stays private."
+      "type": "clip",
+      "name": "profile-wishlist",
+      "caption": "Add your Amazon *wishlist*",
+      "say": "Sign in, add your name and your Amazon wishlist link. Amazon delivers, so your address stays private."
+     },
+     {
+      "type": "clip",
+      "name": "join-workplace",
+      "caption": "Join your *workplace* or group",
+      "say": "Then join your workplace with your work email, or a friends group with a code."
      },
      {
       "type": "end",
@@ -479,15 +481,10 @@
       "say": "Want to do Christmas with your friends or family? Start a group."
      },
      {
-      "type": "steps",
-      "heading": "Family, flatmates, the group chat",
-      "steps": [
-       "Start a friends group",
-       "Share the invite link or code",
-       "Everyone adds their wishlist",
-       "Pick up each other's lists"
-      ],
-      "say": "Start a friends group, share the invite link, and once everyone's added a wishlist, you pick up each other's lists."
+      "type": "clip",
+      "name": "friends-group",
+      "caption": "Start a group, share the *code*",
+      "say": "Start a friends group and you get an invite code. Share it, and once everyone has a wishlist, you pick up each other's lists."
      },
      {
       "type": "end",
@@ -554,15 +551,19 @@
       "say": "Sent a gift? Here's what happens next."
      },
      {
+      "type": "clip",
+      "name": "gifted",
+      "caption": "Mark it *Gifted*",
+      "say": "Bought something? Mark it gifted on raosanta dot UK."
+     },
+     {
       "type": "steps",
       "heading": "What happens next",
       "steps": [
-       "Buy from their Amazon wishlist",
-       "Mark it Gifted on raosanta.uk",
        "They're told a gift is on its way",
        "They can tell you it arrived"
       ],
-      "say": "Mark it gifted, and a few days later they're told a gift is on its way, never who it's from. When it arrives, they can let you know."
+      "say": "A few days later they're told a gift is coming, never who it's from. When it arrives, they can let you know."
      },
      {
       "type": "end",
@@ -740,15 +741,10 @@
       "say": "Got a gift from a mystery Santa? Here's how to say thank you."
      },
      {
-      "type": "steps",
-      "heading": "A postcard, not a name",
-      "steps": [
-       "Open raosanta.uk when it arrives",
-       "Post a thank-you postcard",
-       "Add a photo if you like",
-       "It shows your festive name"
-      ],
-      "say": "When it arrives, post a thank-you postcard, with a photo if you like. It shows your festive name, so your Santa sees the thanks without either of you being named."
+      "type": "clip",
+      "name": "thank-you",
+      "caption": "Say *thank you*",
+      "say": "When it arrives, post a thank-you postcard. It shows your festive name, and your Santa gets to read it."
      },
      {
       "type": "end",
@@ -931,15 +927,10 @@
       "say": "Gifted everyone you picked up? There's always another list."
      },
      {
-      "type": "steps",
-      "heading": "There's always another list",
-      "steps": [
-       "Ask for more wishlists",
-       "Pick up another random list",
-       "Gift whatever fits your budget",
-       "Mark it Gifted"
-      ],
-      "say": "Ask for more wishlists, pick up another random one, and gift whatever fits your budget. Then mark it gifted."
+      "type": "clip",
+      "name": "pick-up",
+      "caption": "Pick up *more* any time",
+      "say": "Pick up more wishlists whenever you like, and gift whatever fits your budget."
      },
      {
       "type": "end",
@@ -1316,15 +1307,10 @@
       "say": "Got a gift this Christmas? There's still time to say thank you."
      },
      {
-      "type": "steps",
-      "heading": "Before the season closes",
-      "steps": [
-       "Sign in at raosanta.uk",
-       "Find the gift that arrived",
-       "Post your thank-you postcard",
-       "Your Santa will see it"
-      ],
-      "say": "Sign in, find the gift that arrived, and post a thank-you postcard. Your Santa will see it, even though they stay anonymous."
+      "type": "clip",
+      "name": "thank-you",
+      "caption": "Post your *thank-you*",
+      "say": "Sign in and post a thank-you postcard. Your Santa will see it, even though they stay anonymous."
      },
      {
       "type": "end",
