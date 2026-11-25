@@ -135,3 +135,29 @@ def test_endpoints(monkeypatch, quiet):
     rows = c.get("/santa/slots", params={"count": 9}, headers=h).json()["slots"]
     assert [r["local"][-5:] for r in rows] == ["21:30", "19:30", "17:30", "15:30", "13:30", "11:30", "09:30", "07:30", "21:30"]
     assert c.get("/slots/busy", params={"channel": "nope"}, headers=h).status_code == 422
+
+
+def test_the_anchor_is_saved_so_the_pattern_never_restarts(monkeypatch):
+    from app.santa import schedule as sch
+
+    monkeypatch.setattr(slots, "busy", lambda *a, **k: [])
+    clock = {"t": local(2026, 11, 25, 1)}
+    monkeypatch.setattr(sch, "now", lambda: clock["t"])
+    first = [r["local"] for r in sch.upcoming(3)]
+    assert first == ["Wed 25 Nov 21:30", "Thu 26 Nov 19:30", "Fri 27 Nov 17:30"]
+    clock["t"] = local(2026, 11, 26, 1)  # after the first 21:30: the same pattern, not a new one from tonight
+    assert [r["local"] for r in sch.upcoming(2)] == ["Thu 26 Nov 19:30", "Fri 27 Nov 17:30"]
+    assert store._read(sch.STATE, {})["anchor_from"] == "default"
+
+
+def test_an_unsaved_anchor_follows_the_bookings_already_made(monkeypatch):
+    import json as _json
+
+    from app.santa import schedule as sch
+
+    d = settings.data_dir / "santa" / "jobs"
+    d.mkdir(parents=True)
+    (d / "a.json").write_text(_json.dumps({"planned": local(2026, 11, 25, 21, 30).isoformat()}))
+    monkeypatch.setattr(sch, "now", lambda: local(2026, 11, 26, 1))
+    assert sch.anchor() == local(2026, 11, 25, 21, 30)
+    assert store._read(sch.STATE, {})["anchor_from"] == "first booking"
